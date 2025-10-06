@@ -21,8 +21,14 @@ jobs:
         working-directory: flutter_application_1
         run: |
           flutter pub get
-          flutter build web --release --base-href /EDU-VICE-Attendance/
+          # ① PWA 끄기: SW 캐시를 제거해 최신 반영 지연을 줄임
+          flutter build web --release --base-href /EDU-VICE-Attendance/ --pwa-strategy=none
+          # ② 캐시버스터: main.dart.js 뒤에 배포 번호 쿼리 붙여 CDN/브라우저 캐시 우회
+          sed -i 's/main\.dart\.js/main.dart.js?v=${{ github.run_number }}/' build/web/index.html
+          # 404 대응 파일도 수정된 index로 복사
           cp build/web/index.html build/web/404.html
+          # (선택) Jekyll 비활성 파일 생성 - 언더스코어 자원 문제 방지
+          touch build/web/.nojekyll
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
@@ -30,3 +36,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: flutter_application_1/build/web
+          # ③ 이전 파일 흔적 없이 깔끔 배포(히스토리 분리) - 캐시 혼선 줄이기
+          force_orphan: true
+          # (선택) 커밋 메시지에 런번호 넣기
+          commit_message: "deploy: ${{ github.sha }} (#${{ github.run_number }})"
