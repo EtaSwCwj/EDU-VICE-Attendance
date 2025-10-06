@@ -1,0 +1,24 @@
+name: Deploy Flutter Web to Pages
+on:
+  push:
+    branches: [ main ]
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Build
+        working-directory: flutter_application_1
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /EDU-VICE-Attendance/
+          cp build/web/index.html build/web/404.html
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: flutter_application_1/build/web
+          publish_branch: gh-pages
