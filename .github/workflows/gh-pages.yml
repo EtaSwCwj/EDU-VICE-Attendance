@@ -1,9 +1,7 @@
 name: Deploy Flutter Web to Pages
-
 on:
   push:
     branches: [ main ]
-
 permissions:
   contents: write
 
@@ -11,32 +9,20 @@ jobs:
   build-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
         with:
           channel: stable
-
       - name: Build Flutter Web
         working-directory: flutter_application_1
         run: |
           flutter pub get
-          # PWA 비활성화 (SW 캐시 없음)
           flutter build web --release --base-href /EDU-VICE-Attendance/ --pwa-strategy=none
-
-          # ▼ 캐시버스터 적용
-          # 1) index.html에서 flutter.js 로더 자체에 쿼리 달기
+          # 캐시 우회: flutter.js & main.dart.js 둘 다
           sed -i 's|src="flutter\.js"|src="flutter.js?v=${{ github.run_number }}"|' build/web/index.html
-
-          # 2) flutter.js 내부에서 main.dart.js를 불러오는 부분에도 쿼리 달기
           sed -i 's|main\.dart\.js|main.dart.js?v=${{ github.run_number }}|' build/web/flutter.js
-
-          # 404 대응 및 jekyll 비활성
           cp build/web/index.html build/web/404.html
           touch build/web/.nojekyll
-
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
