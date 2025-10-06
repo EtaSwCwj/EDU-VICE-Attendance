@@ -65,7 +65,7 @@ class _MyHomePageState extends State<MyHomePage> {
       // called again, and so nothing would appear to happen.
       if(_counter > -10)
       {
-        _counter -= 2;
+        _counter += 2;
       }    
     });
   }
