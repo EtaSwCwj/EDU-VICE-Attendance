@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
         title: 'Namer App',
         theme: ThemeData(
           useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         ),
         debugShowCheckedModeBanner: false,
         home: MyHomePage(),
@@ -44,26 +44,65 @@ class MyHomePage extends StatelessWidget {
     // Provider가 제공하는 전역 상태를 읽어옴.
     // watch<T>()를 쓰면 T가 notifyListeners()될 때 이 위젯이 다시 build됨.
     var appState = context.watch<MyAppState>();  // ← 2
+    var pair = appState.current;
 
     return Scaffold(                             // ← 3: Material Design 기본 골격(페이지 틀).
-      body: Column(                              // ← 4: 세로로 위젯들을 나열하는 레이아웃.
-        children: [
-          // 고정 문자열을 그리는 텍스트 위젯. (핫 리로드로 즉시 문구 변경 확인 가능)
-          Text('A random AWESOME idea test:'),        // ← 5
+      body: Center(
+        child: Column(                              // ← 4: 세로로 위젯들을 나열하는 레이아웃.
+          mainAxisAlignment: MainAxisAlignment.center,  // ← Add this.
+          children: [
+            // 고정 문자열을 그리는 텍스트 위젯. (핫 리로드로 즉시 문구 변경 확인 가능)
+            Text('A random AWESOME idea test:'),        // ← 5
+        
+            // 상태에서 현재 단어쌍을 가져와 소문자 형식으로 표시.
+            // appState가 바뀌면(예: getNext() 호출) 이 Text도 새 값으로 다시 그림.
+            BigCard(pair: pair),    // ← 6
+            SizedBox(height: 10),
+        
+            // 버튼을 누르면 상태 객체의 getNext()를 호출하여
+            // 새로운 단어쌍을 만들고 notifyListeners()로 화면 갱신 트리거.
+            ElevatedButton(
+              onPressed: () {
+                appState.getNext();  // ← print 대신 실제 상태 변경을 호출.
+              },
+              child: Text('Next'),   // 버튼 라벨
+            ),
+          ],                                       // ← 7: Column의 children 리스트 끝.
+        ),
+      ),
+    );
+  }
+}
 
-          // 상태에서 현재 단어쌍을 가져와 소문자 형식으로 표시.
-          // appState가 바뀌면(예: getNext() 호출) 이 Text도 새 값으로 다시 그림.
-          Text(appState.current.asLowerCase),    // ← 6
+class BigCard extends StatelessWidget {
+  const BigCard({
+    super.key,
+    required this.pair,
+  });
 
-          // 버튼을 누르면 상태 객체의 getNext()를 호출하여
-          // 새로운 단어쌍을 만들고 notifyListeners()로 화면 갱신 트리거.
-          ElevatedButton(
-            onPressed: () {
-              appState.getNext();  // ← print 대신 실제 상태 변경을 호출.
-            },
-            child: Text('Next'),   // 버튼 라벨
-          ),
-        ],                                       // ← 7: Column의 children 리스트 끝.
+  final WordPair pair;
+
+  @override
+// ...
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.displayMedium!.copyWith(
+      color: theme.colorScheme.onPrimary,
+    );
+
+    return Card(
+      color: theme.colorScheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+
+        // ↓ Make the following change.
+        child: Text(
+          pair.asLowerCase,
+          style: style,
+          semanticsLabel: "${pair.first} ${pair.second}",
+        ),
       ),
     );
   }
