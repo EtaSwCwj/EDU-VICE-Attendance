@@ -29,6 +29,16 @@ class MyApp extends StatelessWidget {
 
 class MyAppState extends ChangeNotifier {     // 앱의 '전역 상태 모듈' 클래스. ChangeNotifier를 상속해 변경 알림 기능을 가짐.
   var current = WordPair.random();           // 현재 상태 값. english_words 패키지의 랜덤 '영단어 쌍(WordPair)'을 한 번 생성해 보관.
+  var favorites = <WordPair>[];
+
+  void toggleFavorite() {
+    if (favorites.contains(current)) {
+      favorites.remove(current);
+    } else {
+      favorites.add(current);
+    }
+    notifyListeners();
+  }
 
   // ↓ Add this.
   void getNext() {                           // 상태를 갱신하는 메서드(멤버 함수). 버튼 콜백 등에서 호출됨.
@@ -46,6 +56,13 @@ class MyHomePage extends StatelessWidget {
     var appState = context.watch<MyAppState>();  // ← 2
     var pair = appState.current;
 
+    IconData icon;
+    if (appState.favorites.contains(pair)) {
+      icon = Icons.favorite;
+    } else {
+      icon = Icons.favorite_border;
+    }
+
     return Scaffold(                             // ← 3: Material Design 기본 골격(페이지 틀).
       body: Center(
         child: Column(                              // ← 4: 세로로 위젯들을 나열하는 레이아웃.
@@ -61,11 +78,27 @@ class MyHomePage extends StatelessWidget {
         
             // 버튼을 누르면 상태 객체의 getNext()를 호출하여
             // 새로운 단어쌍을 만들고 notifyListeners()로 화면 갱신 트리거.
-            ElevatedButton(
-              onPressed: () {
-                appState.getNext();  // ← print 대신 실제 상태 변경을 호출.
-              },
-              child: Text('Next'),   // 버튼 라벨
+            Row(
+              mainAxisSize: MainAxisSize.min,   // ← Add this.
+              children: [
+
+                // ↓ And this.
+                ElevatedButton.icon(
+                  onPressed: () {
+                    appState.toggleFavorite();
+                  },
+                  icon: Icon(icon),
+                  label: Text('Like'),
+                ),
+                SizedBox(width: 10),
+
+                ElevatedButton(
+                  onPressed: () {
+                    appState.getNext();
+                  },
+                  child: Text('Next'),
+                ),
+              ],
             ),
           ],                                       // ← 7: Column의 children 리스트 끝.
         ),
