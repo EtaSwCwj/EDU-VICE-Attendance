@@ -1,0 +1,58 @@
+// 더미 로그인 UI: assets/mock/accounts.json 기반
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../shared/services/mock_auth.dart';
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _id = TextEditingController(text: 'teacher');   // 테스트 기본값
+  final _pw = TextEditingController(text: 'teach123');  // 테스트 기본값
+  bool _busy = false;
+
+  Future<void> _doLogin() async {
+    setState(() => _busy = true);
+    final user = await MockAuth.login(_id.text.trim(), _pw.text.trim());
+    setState(() => _busy = false);
+
+    if (user != null) {
+      if (!mounted) return;
+      context.go('/home'); // 성공 → 홈
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('로그인 실패: 아이디/비밀번호를 확인하세요')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('EDU-VICE 로그인', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              TextField(controller: _id, decoration: const InputDecoration(labelText: '아이디')),
+              const SizedBox(height: 8),
+              TextField(controller: _pw, decoration: const InputDecoration(labelText: '비밀번호'), obscureText: true),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _busy ? null : _doLogin,
+                child: _busy ? const CircularProgressIndicator() : const Text('로그인'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

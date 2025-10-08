@@ -1,0 +1,63 @@
+{
+  "academies": [
+    { "id": "acd-001", "name": "에듀바이스 1관" },
+    { "id": "acd-002", "name": "에듀바이스 2관" }
+  ],
+  "accounts": [
+    {
+      "id": "u-super",
+      "name": "최상위 관리자",
+      "username": "super",
+      "password": "super123",
+      "globalRole": "super_admin",
+      "memberships": []
+    },
+    {
+      "id": "u-owner1",
+      "name": "김원장",
+      "username": "owner1",
+      "password": "owner123",
+      "memberships": [
+        { "academyId": "acd-001", "role": "owner" },
+        { "academyId": "acd-002", "role": "owner" }
+      ]
+    },
+    {
+      "id": "u-teacher1",
+      "name": "홍길동 선생",
+      "username": "teacher",
+      "password": "teach123",
+      "memberships": [
+        { "academyId": "acd-001", "role": "teacher" }
+      ]
+    },
+    {
+      "id": "u-stu1",
+      "name": "학생1",
+      "username": "student1",
+      "password": "stu123",
+      "memberships": [
+        { "academyId": "acd-001", "role": "student" }
+      ]
+    },
+    {
+      "id": "u-stu2",
+      "name": "학생2",
+      "username": "student2",
+      "password": "stu123",
+      "memberships": [
+        { "academyId": "acd-001", "role": "student" },
+        { "academyId": "acd-002", "role": "student" }
+      ]
+    },
+    {
+      "id": "u-stu3",
+      "name": "학생3",
+      "username": "student3",
+      "password": "stu123",
+      "memberships": [
+        { "academyId": "acd-002", "role": "student" }
+      ]
+    }
+  ]
+}
