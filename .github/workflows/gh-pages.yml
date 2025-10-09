@@ -1,28 +1,65 @@
 name: Deploy Flutter Web to Pages
+
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]        # main 푸시 시 자동 배포
+  workflow_dispatch:           # (추가) 수동 실행 허용, 기존 기능에 영향 없음
+
 permissions:
   contents: write
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # (추가) pub 캐시로 CI 가속 (기존 동작 영향 없음)
+      - name: Cache pub
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
+
       - name: Build Flutter Web
         working-directory: flutter_application_1
         run: |
           flutter pub get
+          # base-href 유지 + PWA 비활성화(네 설정 그대로)
           flutter build web --release --base-href /EDU-VICE-Attendance/ --pwa-strategy=none
-          # 캐시 우회: flutter.js & main.dart.js 둘 다
+
+          # 캐시 우회(네 로직 유지): flutter.js & main.dart.js 버전 쿼리 추가
           sed -i 's|src="flutter\.js"|src="flutter.js?v=${{ github.run_number }}"|' build/web/index.html
           sed -i 's|main\.dart\.js|main.dart.js?v=${{ github.run_number }}|' build/web/flutter.js
+
+          # SPA 딥링크 대비(네 로직 유지): 404.html = index.html
           cp build/web/index.html build/web/404.html
+
+          # GitHub Pages용: Jekyll 무시
           touch build/web/.nojekyll
+
+      # (추가) base-href가 실제 반영됐는지 간단 검증 (실패 시 배포 중단)
+      - name: Verify base-href
+        working-directory: flutter_application_1/build/web
+        run: |
+          grep -q '/EDU-VICE-Attendance/' index.html && echo "base-href ok"
+
+      # (추가) 빌드 산출물 아티팩트 업로드 (문제 시 직접 내려받아 확인용)
+      - name: Upload Web Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: flutter_application_1/build/web
+
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
