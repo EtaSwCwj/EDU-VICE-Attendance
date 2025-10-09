@@ -48,4 +48,30 @@ class AuthState extends ChangeNotifier {
         );
     return a?.name ?? id;
   }
+
+  Future<void> reloadFromStorage() async {
+    _academies = await MockDb.loadAcademies();
+
+    if (_user != null) {
+      // 최신 accounts에서 동일 ID 사용자 찾아서 memberships 등 갱신
+      final all = await MockDb.loadAccounts();
+      final updated =
+          all.where((a) => a.id == _user!.id).cast<Account?>().firstWhere(
+                (a) => a != null,
+                orElse: () => null,
+              );
+      if (updated != null) {
+        _user = updated;
+        // 현재 선택이 사라졌다면 첫 membership으로 보정
+        if (_user!.memberships.isNotEmpty &&
+            (_current == null ||
+                !_user!.memberships.any((m) =>
+                    m.academyId == _current!.academyId &&
+                    m.role == _current!.role))) {
+          _current = _user!.memberships.first;
+        }
+      }
+    }
+    notifyListeners();
+  }
 }

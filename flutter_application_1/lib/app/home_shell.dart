@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../shared/services/auth_state.dart';
 import '../shared/models/account.dart';
+import '../shared/services/mock_storage.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -19,7 +20,6 @@ class _HomeShellState extends State<HomeShell> {
     final Membership? m = auth.currentMembership;
     final role = m?.role ?? 'guest';
 
-    // 역할별 탭 정의
     final tabs = _tabsForRole(role);
     final items = tabs.map((t) => NavigationDestination(icon: Icon(t.icon), label: t.label)).toList();
 
@@ -27,6 +27,28 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: Text('Home — ${auth.user?.name ?? ""}'),
         actions: [
+          IconButton(
+            tooltip: '데이터 새로고침',
+            icon: const Icon(Icons.refresh),
+            onPressed: () async {
+              await auth.reloadFromStorage();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('데이터를 다시 불러왔습니다')),
+              );
+            },
+          ),
+          IconButton(
+            tooltip: 'accounts.json 경로 보기',
+            icon: const Icon(Icons.folder_open),
+            onPressed: () async {
+              final path = await MockStorage.filePath();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('경로: $path')),
+              );
+            },
+          ),
           IconButton(
             onPressed: () => context.read<AuthState>().signOut(),
             icon: const Icon(Icons.logout),
@@ -36,7 +58,14 @@ class _HomeShellState extends State<HomeShell> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: tabs[_index].body,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 학원/역할 드롭다운 ... (기존 그대로)
+            // ...
+            Expanded(child: tabs[_index].body),
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

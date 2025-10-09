@@ -24,7 +24,7 @@
     },
     {
       "id": "u-teacher1",
-      "name": "홍길동 선생",
+      "name": "홍길 선생",
       "username": "teacher",
       "password": "teach123",
       "memberships": [
