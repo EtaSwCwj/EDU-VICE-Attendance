@@ -1,9 +1,6 @@
-// 설명: 임시 계정 모델 (AWS 도입 전까지 사용)
-// 주석: 한국어 / 로그: 영어
-
 class Membership {
-  final String academyId; // 학원 식별자
-  final String role;      // owner | teacher | student
+  final String academyId;
+  final String role; // owner | teacher | student
 
   const Membership({required this.academyId, required this.role});
 
@@ -11,14 +8,29 @@ class Membership {
       Membership(academyId: j['academyId'] as String, role: j['role'] as String);
 
   Map<String, dynamic> toJson() => {'academyId': academyId, 'role': role};
+
+  // ===== 값 비교 추가 =====
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Membership &&
+          runtimeType == other.runtimeType &&
+          academyId == other.academyId &&
+          role == other.role;
+
+  @override
+  int get hashCode => Object.hash(academyId, role);
+
+  @override
+  String toString() => 'Membership($academyId, $role)';
 }
 
 class Account {
   final String id;
   final String name;
   final String username;
-  final String password;   // 임시 환경이라 저장. (실서비스: 해시)
-  final String? globalRole; // super_admin 등 (없을 수 있음)
+  final String password;   // 임시 환경: 평문 (실서비스에선 해시)
+  final String? globalRole; // super_admin 등
   final List<Membership> memberships;
 
   const Account({

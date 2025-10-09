@@ -1,7 +1,7 @@
 {
   "academies": [
-    { "id": "acd-001", "name": "에듀바이스 1관" },
-    { "id": "acd-002", "name": "에듀바이스 2관" }
+    { "id": "acd-001", "name": "에듀바이스 1관", "lat": 37.5665, "lng": 126.9780, "radiusMeters": 200.0 },
+    { "id": "acd-002", "name": "에듀바이스 2관", "lat": 37.5700, "lng": 126.9820, "radiusMeters": 250.0 }
   ],
   "accounts": [
     {
@@ -24,7 +24,7 @@
     },
     {
       "id": "u-teacher1",
-      "name": "홍길 선생",
+      "name": "홍길동 선생",
       "username": "teacher",
       "password": "teach123",
       "memberships": [

@@ -3,7 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../shared/services/auth_state.dart';
 import '../shared/models/account.dart';
-import '../shared/services/mock_storage.dart';
+
+import '../shared/theme/app_theme.dart';
+import '../features/home/dashboard_pages.dart';
+import '../features/attendance/attendance_page.dart';
+import '../features/homework/homework_page.dart';
+import '../features/notifications/notifications_page.dart';
+import '../features/settings/settings_page.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -21,56 +27,73 @@ class _HomeShellState extends State<HomeShell> {
     final role = m?.role ?? 'guest';
 
     final tabs = _tabsForRole(role);
-    final items = tabs.map((t) => NavigationDestination(icon: Icon(t.icon), label: t.label)).toList();
+    final items = tabs
+        .map((t) => NavigationDestination(icon: Icon(t.icon), label: t.label))
+        .toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Home — ${auth.user?.name ?? ""}'),
-        actions: [
-          IconButton(
-            tooltip: '데이터 새로고침',
-            icon: const Icon(Icons.refresh),
-            onPressed: () async {
-              await auth.reloadFromStorage();
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('데이터를 다시 불러왔습니다')),
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'accounts.json 경로 보기',
-            icon: const Icon(Icons.folder_open),
-            onPressed: () async {
-              final path = await MockStorage.filePath();
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('경로: $path')),
-              );
-            },
-          ),
-          IconButton(
-            onPressed: () => context.read<AuthState>().signOut(),
-            icon: const Icon(Icons.logout),
-            tooltip: '로그아웃',
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 학원/역할 드롭다운 ... (기존 그대로)
-            // ...
-            Expanded(child: tabs[_index].body),
+    final memberships = auth.user?.memberships ?? const <Membership>[];
+    final current = auth.currentMembership;
+
+    return Theme(
+      data: AppTheme.light,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Home — ${auth.user?.name ?? ""}'),
+          actions: [
+            // 새로고침/경로 버튼은 Settings로 이동했으나 남기고 싶으면 여기에 복귀 가능
+            IconButton(
+              onPressed: () => context.read<AuthState>().signOut(),
+              icon: const Icon(Icons.logout),
+              tooltip: '로그아웃',
+            ),
           ],
         ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: items,
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (memberships.isNotEmpty)
+                Row(
+                  children: [
+                    const Text('소속:'),
+                    const SizedBox(width: 12),
+                    DropdownButton<Membership>(
+                      value: (() {
+                        // 현재 선택이 목록에 없으면 첫 항목으로 보정
+                        if (current != null && memberships.contains(current)) {
+                          return current;
+                        }
+                        return memberships.isNotEmpty
+                            ? memberships.first
+                            : null;
+                      })(),
+                      items: memberships
+                          .map<DropdownMenuItem<Membership>>((Membership m) {
+                        final name = auth.academyName(m.academyId);
+                        final label = '$name / ${m.role}';
+                        return DropdownMenuItem<Membership>(
+                          value: m,
+                          child: Text(label),
+                        );
+                      }).toList(),
+                      onChanged: (m) {
+                        if (m != null)
+                          context.read<AuthState>().selectMembership(m);
+                      },
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 16),
+              Expanded(child: tabs[_index].body),
+            ],
+          ),
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: items,
+        ),
       ),
     );
   }
@@ -78,31 +101,43 @@ class _HomeShellState extends State<HomeShell> {
   List<_TabDef> _tabsForRole(String role) {
     switch (role) {
       case 'owner':
-        return const [
-          _TabDef('대시보드', Icons.dashboard_outlined, _Stub('원장 대시보드')),
-          _TabDef('출석', Icons.how_to_reg_outlined, _Stub('출석(원장)')),
-          _TabDef('숙제', Icons.assignment_outlined, _Stub('숙제(원장)')),
-          _TabDef('알림', Icons.notifications_none, _Stub('알림(원장)')),
-          _TabDef('설정', Icons.settings_outlined, _Stub('설정(원장)')),
+        return [
+          _TabDef('대시보드', Icons.dashboard_outlined, const OwnerDashboardPage()),
+          _TabDef('출석', Icons.how_to_reg_outlined,
+              const AttendancePage(role: 'owner')),
+          _TabDef('숙제', Icons.assignment_outlined,
+              const HomeworkPage(role: 'owner')),
+          _TabDef('알림', Icons.notifications_none,
+              const NotificationsPage(role: 'owner')),
+          _TabDef('설정', Icons.settings_outlined, SettingsPage(role: role)),
         ];
       case 'teacher':
-        return const [
-          _TabDef('대시보드', Icons.dashboard_customize_outlined, _Stub('선생 대시보드')),
-          _TabDef('출석', Icons.fact_check_outlined, _Stub('출석(선생)')),
-          _TabDef('숙제', Icons.edit_note_outlined, _Stub('숙제(선생)')),
-          _TabDef('알림', Icons.notifications_none, _Stub('알림(선생)')),
-          _TabDef('설정', Icons.settings_outlined, _Stub('설정(선생)')),
+        return [
+          _TabDef('대시보드', Icons.dashboard_customize_outlined,
+              const TeacherDashboardPage()),
+          _TabDef('출석', Icons.fact_check_outlined,
+              const AttendancePage(role: 'teacher')),
+          _TabDef('숙제', Icons.edit_note_outlined,
+              const HomeworkPage(role: 'teacher')),
+          _TabDef('알림', Icons.notifications_none,
+              const NotificationsPage(role: 'teacher')),
+          _TabDef('설정', Icons.settings_outlined, SettingsPage(role: role)),
         ];
       case 'student':
-        return const [
-          _TabDef('홈', Icons.home_outlined, _Stub('학생 홈')),
-          _TabDef('출석', Icons.emoji_people_outlined, _Stub('출석(학생)')),
-          _TabDef('숙제', Icons.checklist_outlined, _Stub('숙제(학생)')),
-          _TabDef('알림', Icons.notifications_none, _Stub('알림(학생)')),
-          _TabDef('설정', Icons.settings_outlined, _Stub('설정(학생)')),
+        return [
+          _TabDef('홈', Icons.home_outlined, const StudentHomePage()),
+          _TabDef('출석', Icons.emoji_people_outlined,
+              const AttendancePage(role: 'student')),
+          _TabDef('숙제', Icons.checklist_outlined,
+              const HomeworkPage(role: 'student')),
+          _TabDef('알림', Icons.notifications_none,
+              const NotificationsPage(role: 'student')),
+          _TabDef('설정', Icons.settings_outlined, SettingsPage(role: role)),
         ];
       default:
-        return const [_TabDef('홈', Icons.home_outlined, _Stub('게스트'))];
+        return [
+          _TabDef('홈', Icons.home_outlined, const Center(child: Text('게스트')))
+        ];
     }
   }
 }
@@ -111,14 +146,5 @@ class _TabDef {
   final String label;
   final IconData icon;
   final Widget body;
-  const _TabDef(this.label, this.icon, this.body);
-}
-
-class _Stub extends StatelessWidget {
-  final String text;
-  const _Stub(this.text, {super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Center(child: Text(text, style: const TextStyle(fontSize: 18)));
-  }
+  _TabDef(this.label, this.icon, this.body);
 }
