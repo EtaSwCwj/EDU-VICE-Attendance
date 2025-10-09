@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../shared/services/mock_auth.dart';
+import 'package:provider/provider.dart';                 // ← read/watch 확장자
+import '../../shared/services/auth_state.dart';          // ← AuthState 타입
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,14 +18,15 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _doLogin() async {
     setState(() => _busy = true);
-    final user = await MockAuth.login(_id.text.trim(), _pw.text.trim());
+    final ok = await context
+        .read<AuthState>()
+        .signIn(_id.text.trim(), _pw.text.trim());
     setState(() => _busy = false);
 
-    if (user != null) {
-      if (!mounted) return;
-      context.go('/home'); // 성공 → 홈
+    if (!mounted) return;
+    if (ok) {
+      context.go('/home'); // 가드가 있으니 사실 생략해도 되지만 명시적으로 이동
     } else {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('로그인 실패: 아이디/비밀번호를 확인하세요')),
       );
