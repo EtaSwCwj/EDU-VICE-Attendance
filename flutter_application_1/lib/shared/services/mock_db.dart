@@ -1,20 +1,29 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../models/account.dart';
 import '../models/academy.dart';
-import 'mock_storage.dart'; // ← 문서 폴더 경로/시드용
+
+// 플랫폼별 MockStorage 구현 선택
+import 'storage/mock_storage_io.dart'
+  if (dart.library.html) 'storage/mock_storage_web.dart' as storage;
 
 class MockDb {
   static Future<String> _readJsonText() async {
-    // 1) 문서 폴더에 accounts.json 있으면 그걸 우선
-    final path = await MockStorage.filePath();
-    final f = File(path);
-    if (await f.exists()) {
-      return await f.readAsString();
+    if (kIsWeb) {
+      // 웹은 assets만
+      return await rootBundle.loadString('assets/mock/accounts.json');
     }
-    // 2) 없으면 assets로 fallback
+    // 모바일/데스크톱: 문서폴더 우선
+    try {
+      final path = await storage.MockStorage.filePath();
+      final f = File(path);
+      if (await f.exists()) {
+        return await f.readAsString();
+      }
+    } catch (_) {}
     return await rootBundle.loadString('assets/mock/accounts.json');
   }
 
