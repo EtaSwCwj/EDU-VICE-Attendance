@@ -34,8 +34,9 @@ GoRouter createRouter(AuthState auth) {
   );
 }
 
+// ignore: unused_element
 class _HomePage extends StatelessWidget {
-  const _HomePage({super.key});
+  const _HomePage();
 
   @override
   Widget build(BuildContext context) {

@@ -63,7 +63,7 @@ class _AttendancePageState extends State<AttendancePage> {
         const Divider(height: 24),
         Text(
           _academyConfigValid(academy)
-              ? '설명\n- 버튼을 누르면 위치 권한을 요청하고, 현재 좌표를 한 번 읽습니다.\n- ${academyName}의 지오펜스 반경 내면 “지오펜스 안”으로 표시합니다.'
+              ? '설명\n- 버튼을 누르면 위치 권한을 요청하고, 현재 좌표를 한 번 읽습니다.\n- $academyName의 지오펜스 반경 내면 “지오펜스 안”으로 표시합니다.'
               : '설명\n- 학원 좌표가 없어서 판정을 할 수 없습니다.',
         ),
         if (kIsWeb)
@@ -116,8 +116,14 @@ class _AttendancePageState extends State<AttendancePage> {
     // 현재 위치
     try {
       final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium, // 기존 medium을 그대로 반영
+          // 필요하면 아래 옵션도 사용 가능:
+          // timeLimit: Duration(seconds: 10),
+          // distanceFilter: 0,
+        ),
       );
+
       _pos = pos;
 
       // 판정

@@ -14,7 +14,7 @@ class SettingsPage extends StatelessWidget {
       children: [
         ListTile(
           title: const Text('현재 사용자'),
-          subtitle: Text('${auth.user?.name ?? ''} (${role})'),
+          subtitle: Text('${auth.user?.name ?? ''} ($role)'),
         ),
         const Divider(),
         ListTile(

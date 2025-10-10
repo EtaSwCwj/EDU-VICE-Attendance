@@ -1,7 +1,6 @@
 // 더미 로그인 UI: assets/mock/accounts.json 기반
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../shared/services/mock_auth.dart';
 import 'package:provider/provider.dart';                 // ← read/watch 확장자
 import '../../shared/services/auth_state.dart';          // ← AuthState 타입
 

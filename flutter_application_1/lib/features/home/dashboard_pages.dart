@@ -57,7 +57,12 @@ class _Section extends StatelessWidget {
   final String title;
   final String? subtitle;
   final List<String> bullets;
-  const _Section({required this.title, this.subtitle, required this.bullets, super.key});
+
+  const _Section({
+    required this.title,
+    this.subtitle,
+    required this.bullets,
+  });
 
   @override
   Widget build(BuildContext context) {

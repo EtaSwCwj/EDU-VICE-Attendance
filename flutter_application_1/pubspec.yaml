@@ -12,11 +12,17 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # 기존 의존성 (그대로 유지)
   english_words: ^4.0.0
   provider: ^6.1.5+1
   go_router: ^16.2.4
   path_provider: ^2.1.5
   geolocator: ^14.0.2
+
+  # --- [추가] 로컬 DB (플랫폼 공통) ---
+  sembast: ^3.6.0          # 로컬 문서형 DB (모바일/데스크톱 파일 기반)
+  sembast_web: ^2.4.0      # 웹(브라우저)에서 IndexedDB 사용
+  path: ^1.9.0             # 로컬 파일 경로 조합 유틸
 
 dev_dependencies:
   flutter_test:

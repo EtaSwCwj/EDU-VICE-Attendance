@@ -17,6 +17,7 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
+// ignore: unused_element
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
@@ -79,7 +80,9 @@ class _HomeShellState extends State<HomeShell> {
                       }).toList(),
                       onChanged: (m) {
                         if (m != null)
+                        {
                           context.read<AuthState>().selectMembership(m);
+                        }
                       },
                     ),
                   ],
