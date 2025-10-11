@@ -20,28 +20,6 @@
       "request": "launch",
       "type": "dart",
       "flutterMode": "release"
-    },
-
-    // ↓↓↓ 추가: app_2 디버그/프로파일/릴리스 ↓↓↓
-    {
-      "name": "flutter_application_2",
-      "cwd": "flutter_application_2",
-      "request": "launch",
-      "type": "dart"
-    },
-    {
-      "name": "flutter_application_2 (profile mode)",
-      "cwd": "flutter_application_2",
-      "request": "launch",
-      "type": "dart",
-      "flutterMode": "profile"
-    },
-    {
-      "name": "flutter_application_2 (release mode)",
-      "cwd": "flutter_application_2",
-      "request": "launch",
-      "type": "dart",
-      "flutterMode": "release"
     }
   ]
 }

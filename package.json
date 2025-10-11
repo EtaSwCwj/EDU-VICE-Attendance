@@ -1,4 +1,11 @@
 {
+  "name": "edu-vice-attendance",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "pack:flutter": "powershell -ExecutionPolicy Bypass -File ./scripts/pack_flutter_save.ps1",
+    "dev:scrcpy": "powershell -ExecutionPolicy Bypass -File ./scripts/scrcpy_dev.ps1"
+  },
   "devDependencies": {
     "gh-pages": "^6.3.0"
   }
