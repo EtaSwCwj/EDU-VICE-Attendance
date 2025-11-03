@@ -6,10 +6,10 @@ import '../shared/models/account.dart';
 
 import '../shared/theme/app_theme.dart';
 import '../features/home/dashboard_pages.dart';
-import '../features/attendance/attendance_page.dart';
 import '../features/homework/homework_page.dart';
 import '../features/notifications/notifications_page.dart';
 import '../features/settings/settings_page.dart';
+import '../features/attendance/attendance_page.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -107,7 +107,7 @@ class _HomeShellState extends State<HomeShell> {
         return [
           _TabDef('대시보드', Icons.dashboard_outlined, const OwnerDashboardPage()),
           _TabDef('출석', Icons.how_to_reg_outlined,
-              const AttendancePage(role: 'owner')),
+              const AttendancePage()),
           _TabDef('숙제', Icons.assignment_outlined,
               const HomeworkPage(role: 'owner')),
           _TabDef('알림', Icons.notifications_none,
@@ -119,7 +119,7 @@ class _HomeShellState extends State<HomeShell> {
           _TabDef('대시보드', Icons.dashboard_customize_outlined,
               const TeacherDashboardPage()),
           _TabDef('출석', Icons.fact_check_outlined,
-              const AttendancePage(role: 'teacher')),
+              const AttendancePage()),
           _TabDef('숙제', Icons.edit_note_outlined,
               const HomeworkPage(role: 'teacher')),
           _TabDef('알림', Icons.notifications_none,
@@ -130,7 +130,7 @@ class _HomeShellState extends State<HomeShell> {
         return [
           _TabDef('홈', Icons.home_outlined, const StudentHomePage()),
           _TabDef('출석', Icons.emoji_people_outlined,
-              const AttendancePage(role: 'student')),
+              const AttendancePage()),
           _TabDef('숙제', Icons.checklist_outlined,
               const HomeworkPage(role: 'student')),
           _TabDef('알림', Icons.notifications_none,

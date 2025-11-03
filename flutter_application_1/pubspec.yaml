@@ -18,6 +18,7 @@ dependencies:
   go_router: ^16.2.4
   path_provider: ^2.1.5
   geolocator: ^14.0.2
+  shared_preferences: ^2.3.3 
 
   # --- [추가] 로컬 DB (플랫폼 공통) ---
   sembast: ^3.6.0          # 로컬 문서형 DB (모바일/데스크톱 파일 기반)
