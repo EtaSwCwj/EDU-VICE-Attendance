@@ -1,9 +1,10 @@
 // lib/features/attendance/attendance_page.dart
 //
-// 과목/책 데이터소스 분리(Provider) 버전
+// 과목/책 데이터소스 분리(Provider) + 최근 저장 목록 로딩
 // - SubjectsProvider(LocalSubjectsRepository) 주입
 // - DropdownButtonFormField: initialValue 사용
-// - Consumer로 non-null VM 사용
+// - 앱 진입 시 로컬 저장소에서 최근 저장 목록 불러오기(listByClass)
+// - 저장 성공 시 최근 목록 맨 앞에 즉시 반영
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../domain/usecases/record_attendance.dart';
 import '../../domain/entities/attendance_record.dart';
+import '../../domain/repositories/attendance_repository.dart';
 
 // ▼ 과목/책 Provider & Repository
 import '../subjects/subjects_provider.dart';
@@ -28,7 +30,6 @@ class _AttendancePageState extends State<AttendancePage> {
   LocationPermission? _permission;
   bool _loading = false;
 
-  AttendanceRecord? _lastSaved;
   final List<AttendanceRecord> _recent = [];
 
   final _formKey = GlobalKey<FormState>();
@@ -38,6 +39,8 @@ class _AttendancePageState extends State<AttendancePage> {
   void initState() {
     super.initState();
     _initLocation();
+    // 최근 저장 목록 로드(재시작 후에도 표시)
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadRecent(context));
   }
 
   Future<void> _initLocation() async {
@@ -67,6 +70,25 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
+  // ▼ 로컬 저장소에서 최근 출석 기록 가져오기 (최신순 상위 20개)
+  Future<void> _loadRecent(BuildContext context) async {
+    try {
+      final repo = context.read<AttendanceRepository>();
+      final res = await repo.listByClass('class-dev');
+      if (res.isSuccess) {
+        final list = res.data ?? <AttendanceRecord>[];
+        list.sort((a, b) => b.recordedAt.compareTo(a.recordedAt)); // 최신순
+        setState(() {
+          _recent
+            ..clear()
+            ..addAll(list.take(20));
+        });
+      }
+    } catch (_) {
+      // 최근 목록은 보조 지표 — 실패해도 화면은 계속 동작
+    }
+  }
+
   Future<void> _saveAttendance(BuildContext context) async {
     if (_loading) return;
 
@@ -79,22 +101,31 @@ class _AttendancePageState extends State<AttendancePage> {
     final messenger = ScaffoldMessenger.of(context);
     final uc = context.read<RecordAttendanceUseCase>();
 
-    // TODO: 로그인/컨텍스트 연동
-    const String studentId = 'student-dev';
-
     final now = DateTime.now().toUtc();
-    final ts = now.millisecondsSinceEpoch.toString();
+    final ts = now.microsecondsSinceEpoch;
+
+    final canUseGeo = _position != null &&
+        _permission != LocationPermission.denied &&
+        _permission != LocationPermission.deniedForever;
 
     GeoMeta? geo;
-    if (_position != null) {
-      geo = GeoMeta(lat: _position!.latitude, lng: _position!.longitude);
+    if (canUseGeo) {
+      geo = GeoMeta(
+        lat: _position!.latitude,
+        lng: _position!.longitude,
+        accuracyMeters: _position!.accuracy,
+      );
     }
 
+    // 스켈레톤 값(이후 단계에서 실제 값 주입 예정)
+    const String studentId = 'student-dev';
     final String? subjectId = vm.selectedSubjectId;
     final String? bookId = vm.selectedBookId;
 
-    String notes = 'from attendance page';
-    if (bookId != null) notes = '$notes | book:$bookId';
+    String? notes = 'from attendance page';
+    if (bookId != null && bookId.isNotEmpty) {
+      notes = '$notes | book:$bookId';
+    }
 
     final record = AttendanceRecord(
       id: 'tap-$ts',
@@ -104,11 +135,11 @@ class _AttendancePageState extends State<AttendancePage> {
       subjectId: subjectId,
       status: AttendanceStatus.present,
       recordedAt: now,
+      recordedBy: 'attendance-page',
+      geo: geo,
+      notes: notes,
       createdAt: now,
       updatedAt: now,
-      notes: notes,
-      geo: geo,
-      recordedBy: 'attendance-page',
       source: 'ui',
     );
 
@@ -117,69 +148,59 @@ class _AttendancePageState extends State<AttendancePage> {
 
     if (ok) {
       setState(() {
-        _lastSaved = record;
         _recent.insert(0, record);
         if (_recent.length > 50) _recent.removeRange(50, _recent.length);
       });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('출석 저장 완료')),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(content: Text('출석 저장 실패: ${res.message ?? '알 수 없음'}')),
+      );
     }
 
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(ok ? '✅ 저장 성공(id: ${record.id})' : '❌ 저장 실패'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    if (mounted) setState(() => _loading = false);
+    setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    // 페이지 내부에서 Provider 주입: 외부(Main) 수정 불필요
-    return ChangeNotifierProvider<SubjectsProvider>(
-      create: (_) {
-        final p = SubjectsProvider(LocalSubjectsRepository());
-        // ignore: discarded_futures
-        p.load();
-        return p;
-      },
+    return ChangeNotifierProvider(
+      create: (_) => SubjectsProvider(LocalSubjectsRepository())..load(),
       child: Consumer<SubjectsProvider>(
         builder: (context, vm, _) {
-          final hasService = _position != null;
-          final permText = _permission?.toString() ?? 'unknown';
+          final hasService = !(_permission == LocationPermission.denied ||
+              _permission == LocationPermission.deniedForever);
+          final permText = _permission?.name ?? 'unknown';
 
-          final List<AttendanceRecord> recentView =
-              _filterBySelectedSubject && vm.selectedSubjectId != null
-                  ? _recent.where((r) => r.subjectId == vm.selectedSubjectId).toList()
-                  : _recent;
+          final recentView = (_filterBySelectedSubject && vm.selectedSubjectId != null)
+              ? _recent.where((r) => r.subjectId == vm.selectedSubjectId).toList()
+              : _recent;
 
           return Scaffold(
             appBar: AppBar(
               title: const Text('출석'),
               actions: [
+                // 선택 과목으로만 최근 목록 필터
                 Row(
                   children: [
-                    const Text('선택 과목만', style: TextStyle(fontSize: 12)),
-                    Switch(
+                    const Text('선택 과목만'),
+                    Switch.adaptive(
                       value: _filterBySelectedSubject,
                       onChanged: (v) => setState(() => _filterBySelectedSubject = v),
                     ),
+                    const SizedBox(width: 8),
                   ],
                 ),
-                const SizedBox(width: 8),
               ],
             ),
-            body: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_lastSaved != null) ...[
-                      _RecentSavedCard(record: _lastSaved!),
-                      const SizedBox(height: 12),
-                    ],
-
+                    // 위치 표시
                     Row(
                       children: [
                         const Icon(Icons.location_on_outlined),
@@ -215,46 +236,54 @@ class _AttendancePageState extends State<AttendancePage> {
                     ),
                     const SizedBox(height: 8),
 
-                    // 과목
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: '과목 (필수)',
-                        border: OutlineInputBorder(),
-                      ),
-                      initialValue: vm.selectedSubjectId,
-                      items: vm.subjects
-                          .map((s) => DropdownMenuItem<String>(
-                                value: s.id,
-                                child: Text(s.name),
-                              ))
-                          .toList(),
-                      onChanged: (v) {
-                        // ignore: discarded_futures
-                        vm.selectSubject(v);
-                      },
-                      validator: (v) =>
-                          (v == null || v.isEmpty) ? '과목을 선택하세요' : null,
-                    ),
-                    const SizedBox(height: 10),
+                    // ▼ 과목/책 선택 폼
+                    Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          // 과목
+                          DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: '과목 (필수)',
+                              border: OutlineInputBorder(),
+                            ),
+                            initialValue: vm.selectedSubjectId,
+                            items: vm.subjects
+                                .map((s) => DropdownMenuItem<String>(
+                                      value: s.id,
+                                      child: Text(s.name),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              // ignore: discarded_futures
+                              vm.selectSubject(v);
+                            },
+                            validator: (v) =>
+                                (v == null || v.isEmpty) ? '과목을 선택하세요' : null,
+                          ),
+                          const SizedBox(height: 10),
 
-                    // 책
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: '책 (선택)',
-                        border: OutlineInputBorder(),
+                          // 책
+                          DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: '책 (선택)',
+                              border: OutlineInputBorder(),
+                            ),
+                            initialValue: vm.selectedBookId,
+                            items: vm.books
+                                .map((b) => DropdownMenuItem<String>(
+                                      value: b.id,
+                                      child: Text(b.name),
+                                    ))
+                                .toList(),
+                            onChanged: (vm.selectedSubjectId == null)
+                                ? null
+                                : (v) => vm.selectBook(v),
+                          ),
+                        ],
                       ),
-                      initialValue: vm.selectedBookId,
-                      items: vm.books
-                          .map((b) => DropdownMenuItem<String>(
-                                value: b.id,
-                                child: Text(b.name),
-                              ))
-                          .toList(),
-                      onChanged: (vm.selectedSubjectId == null)
-                          ? null
-                          : (v) => vm.selectBook(v),
                     ),
 
                     const SizedBox(height: 16),
@@ -282,7 +311,8 @@ class _AttendancePageState extends State<AttendancePage> {
                         onPressed: _loading ? null : () => _saveAttendance(context),
                         icon: _loading
                             ? const SizedBox(
-                                width: 16, height: 16,
+                                width: 16,
+                                height: 16,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.check),
@@ -300,42 +330,7 @@ class _AttendancePageState extends State<AttendancePage> {
   }
 }
 
-// 최근 저장 카드
-class _RecentSavedCard extends StatelessWidget {
-  final AttendanceRecord record;
-  const _RecentSavedCard({required this.record});
-
-  String _fmt(DateTime dt) => dt.toIso8601String();
-
-  @override
-  Widget build(BuildContext context) {
-    final geo = record.geo;
-    final coord =
-        (geo != null) ? '${geo.lat.toStringAsFixed(6)}, ${geo.lng.toStringAsFixed(6)}' : 'N/A';
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('최근 저장', style: TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text('ID: ${record.id}'),
-            Text('시간(UTC): ${_fmt(record.recordedAt)}'),
-            Text('좌표: $coord'),
-            Text('상태: ${record.status.name}'),
-            if (record.subjectId != null) Text('과목: ${record.subjectId}'),
-            if ((record.notes ?? '').contains('book:'))
-              Text('책: ${(record.notes ?? '').split('book:').last}'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// 최근 목록 타일
+// 최근 저장 리스트 아이템
 class _RecentListTile extends StatelessWidget {
   final AttendanceRecord record;
   const _RecentListTile({required this.record});
@@ -344,20 +339,10 @@ class _RecentListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final geo = record.geo;
     final hasGeo = geo != null;
+
     return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      leading: CircleAvatar(
-        child: Text(
-          (record.subjectId ?? '-').toUpperCase().substring(0, 1),
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
-      title: Text(
-        'student:${record.studentId} • ${record.status.name}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      leading: const Icon(Icons.fact_check_outlined),
+      title: Text('student:${record.studentId} • status:${record.status.name}'),
       subtitle: Text(
         'time:${record.recordedAt.toIso8601String()}'
         '${hasGeo ? ' • geo:${geo.lat.toStringAsFixed(4)},${geo.lng.toStringAsFixed(4)}' : ''}'
@@ -366,7 +351,11 @@ class _RecentListTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: (record.subjectId != null)
-          ? Chip(label: Text(record.subjectId!), side: BorderSide.none, visualDensity: VisualDensity.compact)
+          ? Chip(
+              label: Text(record.subjectId!),
+              side: BorderSide.none,
+              visualDensity: VisualDensity.compact,
+            )
           : null,
     );
   }

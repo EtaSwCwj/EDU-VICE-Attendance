@@ -1,35 +1,42 @@
 // lib/features/subjects/local_subjects_repository.dart
-// 로컬 스텁 구현 (하드코딩). 이후 AWS로 구현 교체 가능.
+//
+// 로컬 목 데이터 소스(파일/네트워크 없이 앱 내 하드코딩)
+//
+// 유지 원칙
+// - id는 짧고 안정적으로: 'math','eng','sci'
+// - 책 id는 '<subject>-b##' 규칙
 
-import 'dart:async';
 import 'models.dart';
 import 'subjects_repository.dart';
 
 class LocalSubjectsRepository implements SubjectsRepository {
-  static const List<Subject> _subjects = [
+  static const _subjects = <Subject>[
     Subject(id: 'math', name: '수학'),
     Subject(id: 'eng',  name: '영어'),
     Subject(id: 'sci',  name: '과학'),
   ];
 
-  static const List<Book> _books = [
-    Book(id: 'm1', name: '개념수학 1', subjectId: 'math'),
-    Book(id: 'm2', name: '유형특강 수학', subjectId: 'math'),
-    Book(id: 'e1', name: 'Grammar Master', subjectId: 'eng'),
-    Book(id: 'e2', name: 'Reading Power', subjectId: 'eng'),
-    Book(id: 's1', name: '과학 개념노트', subjectId: 'sci'),
-    Book(id: 's2', name: '실험으로 배우는 과학', subjectId: 'sci'),
+  static const _books = <Book>[
+    Book(id: 'math-b01', subjectId: 'math', name: '유형특강 수학'),
+    Book(id: 'math-b02', subjectId: 'math', name: '기출 분석 수학'),
+    Book(id: 'eng-b01',  subjectId: 'eng',  name: 'VOCA 33000'),
+    Book(id: 'eng-b02',  subjectId: 'eng',  name: '구문 독해'),
+    Book(id: 'sci-b01',  subjectId: 'sci',  name: '과학 탐구 A'),
+    Book(id: 'sci-b02',  subjectId: 'sci',  name: '실험 노트 B'),
   ];
 
   @override
-  Future<List<Subject>> getSubjects() async {
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    return _subjects;
+  Future<List<Subject>> listSubjects() async {
+    // 알파벳 id 기준 정렬(표시명 정렬이 필요하면 name으로 변경)
+    final list = List<Subject>.from(_subjects)..sort((a, b) => a.id.compareTo(b.id));
+    return list;
   }
 
   @override
-  Future<List<Book>> getBooksBySubject(String subjectId) async {
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    return _books.where((b) => b.subjectId == subjectId).toList();
+  Future<List<Book>> listBooks(String subjectId) async {
+    final list = _books.where((b) => b.subjectId == subjectId).toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
+    return list;
+    // 없는 subjectId면 빈 배열 반환(예외 X)
   }
 }

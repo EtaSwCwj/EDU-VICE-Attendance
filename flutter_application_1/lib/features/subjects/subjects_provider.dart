@@ -1,5 +1,11 @@
 // lib/features/subjects/subjects_provider.dart
-// ChangeNotifier: 과목/책 목록 로딩 + 선택 상태 관리 + 로컬 영구 저장(shared_preferences)
+//
+// ChangeNotifier로 과목/책 상태 제공(출석/숙제 등에서 공용)
+// - load(): 과목 목록 로딩 + 저장된 선택 복원
+// - selectSubject(id), selectBook(id): 선택 변경 및 영속화(SharedPreferences)
+// - books: 현재 과목의 책 목록을 유지
+//
+// 주의: 비동기 순서 안전을 위해 로딩 중 중복 호출/경쟁상태 방지
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,63 +14,72 @@ import 'models.dart';
 import 'subjects_repository.dart';
 
 class SubjectsProvider extends ChangeNotifier {
-  final SubjectsRepository repository;
-  SubjectsProvider(this.repository);
+  final SubjectsRepository _repo;
 
-  // ---- 상태 ----
+  SubjectsProvider(this._repo);
+
+  // 로딩 상태
   bool _loading = false;
   bool get loading => _loading;
 
+  // 전체 과목 목록
   List<Subject> _subjects = const [];
   List<Subject> get subjects => _subjects;
 
-  List<Book> _books = const [];
-  List<Book> get books => _books;
-
+  // 현재 과목 선택
   String? _selectedSubjectId;
   String? get selectedSubjectId => _selectedSubjectId;
 
+  // 현재 과목의 책 목록
+  List<Book> _books = const [];
+  List<Book> get books => _books;
+
+  // 현재 책 선택
   String? _selectedBookId;
   String? get selectedBookId => _selectedBookId;
 
-  // ---- 저장 키 ----
-  static const _kKeySubject = 'selected_subject_id';
-  static const _kKeyBook = 'selected_book_id';
+  static const _kSubjectPref = 'selectedSubjectId';
+  static const _kBookPref = 'selectedBookId';
 
-  // ---- public API ----
-
-  /// 앱 시작/화면 진입 시 호출: 목록 로딩 + 저장된 subject/book 복원
+  /// 초기 로딩 + 저장된 선택 복원
   Future<void> load() async {
     if (_loading) return;
     _loading = true;
     notifyListeners();
 
     try {
-      // 1) 과목 목록 로딩
-      _subjects = await repository.getSubjects();
-
-      // 2) 저장된 선택 복원
       final prefs = await SharedPreferences.getInstance();
-      final savedSubject = prefs.getString(_kKeySubject);
-      final savedBook = prefs.getString(_kKeyBook);
 
-      // 저장된 과목이 현재 목록에 존재하면 복원
-      if (savedSubject != null && _subjects.any((s) => s.id == savedSubject)) {
-        _selectedSubjectId = savedSubject;
-        // 과목 변경에 맞춘 책 목록 로드
-        await _loadBooksFor(savedSubject);
+      // 1) 과목 목록
+      final subs = await _repo.listSubjects();
+      _subjects = subs;
 
-        // 저장된 책도 유효하면 복원
-        if (savedBook != null && _books.any((b) => b.id == savedBook)) {
-          _selectedBookId = savedBook;
+      // 2) 저장된 과목/책 선택 복원
+      final restoredSubject = prefs.getString(_kSubjectPref);
+      final restoredBook = prefs.getString(_kBookPref);
+
+      if (restoredSubject != null &&
+          _subjects.any((s) => s.id == restoredSubject)) {
+        _selectedSubjectId = restoredSubject;
+        _books = await _repo.listBooks(restoredSubject);
+
+        if (restoredBook != null &&
+            _books.any((b) => b.id == restoredBook)) {
+          _selectedBookId = restoredBook;
         } else {
           _selectedBookId = null;
         }
       } else {
-        // 저장된 과목이 없거나 유효하지 않으면 초기화
-        _selectedSubjectId = null;
-        _books = const [];
-        _selectedBookId = null;
+        // 저장된 값이 없거나/무효: 첫 과목으로 초기화(있다면)
+        if (_subjects.isNotEmpty) {
+          _selectedSubjectId = _subjects.first.id;
+          _books = await _repo.listBooks(_selectedSubjectId!);
+          _selectedBookId = null;
+        } else {
+          _selectedSubjectId = null;
+          _books = const [];
+          _selectedBookId = null;
+        }
       }
     } finally {
       _loading = false;
@@ -72,59 +87,43 @@ class SubjectsProvider extends ChangeNotifier {
     }
   }
 
-  /// 과목 선택(변경 시 책 목록 새로 로딩, 선택값 저장)
+  /// 과목 선택 변경(책 초기화 포함)
   Future<void> selectSubject(String? subjectId) async {
-    if (_selectedSubjectId == subjectId) {
-      // 동일 선택이면 무시해도 됨(그래도 저장은 해둔다)
-      await _saveSelected(subjectId: subjectId, bookId: _selectedBookId);
-      return;
-    }
+    if (_selectedSubjectId == subjectId) return;
 
     _selectedSubjectId = subjectId;
     _selectedBookId = null;
-    notifyListeners();
 
-    if (subjectId == null || subjectId.isEmpty) {
+    if (subjectId == null) {
       _books = const [];
-      await _saveSelected(subjectId: null, bookId: null);
-      notifyListeners();
-      return;
+    } else {
+      _books = await _repo.listBooks(subjectId);
     }
 
-    await _loadBooksFor(subjectId);
-    // 책 선택값은 null로 초기화된 상태
-    await _saveSelected(subjectId: subjectId, bookId: null);
+    // 영속화
+    final prefs = await SharedPreferences.getInstance();
+    if (subjectId == null) {
+      await prefs.remove(_kSubjectPref);
+      await prefs.remove(_kBookPref);
+    } else {
+      await prefs.setString(_kSubjectPref, subjectId);
+      await prefs.remove(_kBookPref);
+    }
+
     notifyListeners();
   }
 
-  /// 책 선택(선택값 저장)
+  /// 책 선택 변경
   Future<void> selectBook(String? bookId) async {
     _selectedBookId = bookId;
-    notifyListeners();
-    await _saveSelected(subjectId: _selectedSubjectId, bookId: _selectedBookId);
-  }
 
-  // ---- internal ----
-  Future<void> _loadBooksFor(String subjectId) async {
-    _books = await repository.getBooksBySubject(subjectId);
-    _selectedBookId = null;
-  }
-
-  Future<void> _saveSelected({
-    required String? subjectId,
-    required String? bookId,
-  }) async {
     final prefs = await SharedPreferences.getInstance();
-    if (subjectId == null || subjectId.isEmpty) {
-      await prefs.remove(_kKeySubject);
-      await prefs.remove(_kKeyBook);
-      return;
-    }
-    await prefs.setString(_kKeySubject, subjectId);
-    if (bookId == null || bookId.isEmpty) {
-      await prefs.remove(_kKeyBook);
+    if (bookId == null) {
+      await prefs.remove(_kBookPref);
     } else {
-      await prefs.setString(_kKeyBook, bookId);
+      await prefs.setString(_kBookPref, bookId);
     }
+
+    notifyListeners();
   }
 }
