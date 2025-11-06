@@ -1,90 +1,68 @@
 // lib/features/homework/local_homework_repository.dart
-//
-// DEV 목데이터용 과제 리포지토리
-// - 메모리 내부 리스트를 수정하여 반환
-// - 앱 재시작 시 초기화되는 스텁
-
-import 'dart:collection';
+import 'dart:async';
 import 'models.dart';
 import 'homework_repository.dart';
 
+/// 데모용 로컬 저장소(학생/교사용 공용 데이터 소스)
+///
+/// 학생 화면은 isDone(제출 표시)만 사용.
+/// 교사용 화면은 assignedTo / teacherCheckedAt / checkResult 사용.
 class LocalHomeworkRepository implements HomeworkRepository {
-  // bookId별 초기 과제 세트
-  static Map<String, List<HomeworkTask>> _seed(String studentId) {
-    final now = DateTime.now();
-    return {
-      'math-b01': [
-        HomeworkTask(
-          id: 'h1',
-          studentId: studentId,
-          bookId: 'math-b01',
-          title: '유형특강 4단원 복습',
-          range: 'p.121-128',
-          due: DateTime(now.year, now.month, now.day + 2),
-          completed: false,
-        ),
-        HomeworkTask(
-          id: 'h2',
-          studentId: studentId,
-          bookId: 'math-b01',
-          title: '오답노트 정리',
-          range: null,
-          due: DateTime(now.year, now.month, now.day + 4),
-          completed: false,
-        ),
-      ],
-      'eng-b01': [
-        HomeworkTask(
-          id: 'h3',
-          studentId: studentId,
-          bookId: 'eng-b01',
-          title: 'VOCA Day 21 테스트',
-          range: 'Day 21',
-          due: DateTime(now.year, now.month, now.day + 1),
-          completed: false,
-        ),
-      ],
-      'sci-b01': [
-        HomeworkTask(
-          id: 'h4',
-          studentId: studentId,
-          bookId: 'sci-b01',
-          title: '탐구A 1-2 개념 요약',
-          range: '단원 1-2',
-          due: null,
-          completed: false,
-        ),
-      ],
-    };
-  }
+  // 데모 학생
+  static const s1 = StudentRef(id: "STU-001", name: "홍길동");
+  static const s2 = StudentRef(id: "STU-002", name: "김하늘");
 
-  final Map<String, Map<String, List<HomeworkTask>>> _store = HashMap();
-  // _store[studentId] => { bookId: [tasks...] }
+  final List<Assignment> _store = [
+    Assignment(
+      id: "A-001",
+      subject: SubjectRef(id: "S-MATH", name: "수학"),
+      book: BookRef(id: "B-Calc1", name: "개념원리 수1"),
+      assignedTo: s1,
+      rangeLabel: "p.30–45",
+      dueDate: DateTime.now().add(const Duration(days: 1)),
+      isDone: false,
+    ),
+    Assignment(
+      id: "A-002",
+      subject: SubjectRef(id: "S-KOR", name: "국어"),
+      book: BookRef(id: "B-KOR-문법", name: "문법 개념서"),
+      assignedTo: s1,
+      rangeLabel: "문법 단원 2: 1~3번",
+      dueDate: DateTime.now().add(const Duration(days: 3)),
+      isDone: false,
+    ),
+    Assignment(
+      id: "A-003",
+      subject: SubjectRef(id: "S-ENG", name: "영어"),
+      book: BookRef(id: "B-ENG-VOCA", name: "VOCA 2200"),
+      assignedTo: s2,
+      rangeLabel: "Day 05",
+      dueDate: DateTime.now().subtract(const Duration(days: 1)), // 기한 지남
+      isDone: false,
+    ),
+    Assignment(
+      id: "A-004",
+      subject: SubjectRef(id: "S-MATH", name: "수학"),
+      book: BookRef(id: "B-Calc1", name: "개념원리 수1"),
+      assignedTo: s2,
+      rangeLabel: "p.46–60",
+      dueDate: DateTime.now(),
+      isDone: true,
+      teacherCheckedAt: null,
+      checkResult: null,
+    ),
+  ];
 
-  List<HomeworkTask> _getList(String studentId, String bookId) {
-    final byStudent = _store.putIfAbsent(studentId, () => _seed(studentId));
-    return byStudent.putIfAbsent(bookId, () => _seed(studentId)[bookId] ?? <HomeworkTask>[]);
+  @override
+  Future<List<Assignment>> fetchAssignments() async {
+    await Future.delayed(const Duration(milliseconds: 120));
+    return List<Assignment>.unmodifiable(_store);
   }
 
   @override
-  Future<List<HomeworkTask>> loadTasks({
-    required String studentId,
-    required String bookId,
-  }) async {
-    return List<HomeworkTask>.unmodifiable(_getList(studentId, bookId));
-  }
-
-  @override
-  Future<List<HomeworkTask>> toggleComplete({
-    required String studentId,
-    required String bookId,
-    required String taskId,
-  }) async {
-    final list = _getList(studentId, bookId);
-    final idx = list.indexWhere((e) => e.id == taskId);
-    if (idx >= 0) {
-      list[idx] = list[idx].copyWith(completed: !list[idx].completed);
-    }
-    return List<HomeworkTask>.unmodifiable(list);
+  Future<void> updateAssignment(Assignment assignment) async {
+    await Future.delayed(const Duration(milliseconds: 80));
+    final idx = _store.indexWhere((e) => e.id == assignment.id);
+    if (idx >= 0) _store[idx] = assignment;
   }
 }
