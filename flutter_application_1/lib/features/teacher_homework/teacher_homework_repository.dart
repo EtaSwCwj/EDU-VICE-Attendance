@@ -9,4 +9,12 @@ abstract class TeacherHomeworkRepository {
     required CheckResult result,
     required DateTime checkedAt,
   });
+
+  Future<void> createAssignment({
+    required StudentRef student,
+    required SubjectRef subject,
+    required BookRef book,
+    required String rangeLabel,
+    required DateTime dueDate,
+  });
 }

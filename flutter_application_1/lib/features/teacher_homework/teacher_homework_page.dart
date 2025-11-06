@@ -7,10 +7,6 @@ import '../homework/local_homework_repository.dart';
 import 'local_teacher_homework_repository.dart';
 import 'teacher_homework_provider.dart';
 
-/// 교사용 숙제 탭:
-/// - 항상 학생을 하나 선택해야 데이터가 보임
-/// - 학생 검색 + 과목 필터 제공
-/// - 항목별 검사 결과(완료/부분/미완료) 확정
 class TeacherHomeworkPage extends StatelessWidget {
   const TeacherHomeworkPage({super.key});
 
@@ -47,7 +43,7 @@ class _TeacherHomeworkView extends StatelessWidget {
                 builder: (_) => const _StudentSearchDialog(),
               );
               if (q != null) {
-                // ignore: use_build_context_synchronously
+                // provider는 상위에 있으므로 read 안전
                 await context.read<TeacherHomeworkProvider>().loadStudents(query: q);
               }
             },
@@ -60,9 +56,25 @@ class _TeacherHomeworkView extends StatelessWidget {
           const SizedBox(width: 4),
         ],
       ),
+      floatingActionButton: vm.selectedStudentId == null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () {
+                // ★ Provider 인스턴스를 직접 시트에 주입
+                final provider = context.read<TeacherHomeworkProvider>();
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  useSafeArea: true,
+                  useRootNavigator: false,
+                  builder: (_) => _NewAssignmentSheet(vm: provider),
+                );
+              },
+              icon: const Icon(Icons.add),
+              label: const Text("새 과제"),
+            ),
       body: Column(
         children: [
-          // 상단: 학생 선택 + 과목 필터 + 현황
           Material(
             color: surface,
             child: Padding(
@@ -87,10 +99,9 @@ class _TeacherHomeworkView extends StatelessWidget {
                     : (vm.items.isEmpty
                         ? const _EmptyAssignments()
                         : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
                             itemCount: vm.items.length,
-                            itemBuilder: (context, i) =>
-                                _TeacherAssignmentCard(a: vm.items[i]),
+                            itemBuilder: (context, i) => _TeacherAssignmentCard(a: vm.items[i]),
                           )),
           ),
         ],
@@ -244,7 +255,7 @@ class _TeacherAssignmentCard extends StatelessWidget {
             return cs.tertiary;
         }
       }
-      if (x.isDone) return cs.primary; // 제출됨(확인 대기)
+      if (x.isDone) return cs.primary;
       if (x.status == AssignmentStatus.overdue) return cs.error;
       if (x.isDueSoon) return cs.tertiary;
       return cs.onSurfaceVariant;
@@ -275,7 +286,6 @@ class _TeacherAssignmentCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 헤더: 과목/책 + 상태칩
             Row(
               children: [
                 Expanded(
@@ -302,7 +312,6 @@ class _TeacherAssignmentCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            // 범위/마감/학생
             Row(
               children: [
                 Expanded(
@@ -327,7 +336,6 @@ class _TeacherAssignmentCard extends StatelessWidget {
                   ),
             ),
             const SizedBox(height: 12),
-            // 검사 확정 버튼
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -396,7 +404,7 @@ class _EmptyAssignments extends StatelessWidget {
 }
 
 class _StudentSearchDialog extends StatefulWidget {
-  const _StudentSearchDialog(); // key 제거(경고 방지)
+  const _StudentSearchDialog();
 
   @override
   State<_StudentSearchDialog> createState() => _StudentSearchDialogState();
@@ -429,6 +437,137 @@ class _StudentSearchDialogState extends State<_StudentSearchDialog> {
           child: const Text("검색"),
         ),
       ],
+    );
+  }
+}
+
+/// 새 과제 배정 바텀시트 (Provider 인스턴스 직접 주입)
+class _NewAssignmentSheet extends StatefulWidget {
+  const _NewAssignmentSheet({required this.vm});
+  final TeacherHomeworkProvider vm;
+
+  @override
+  State<_NewAssignmentSheet> createState() => _NewAssignmentSheetState();
+}
+
+class _NewAssignmentSheetState extends State<_NewAssignmentSheet> {
+  String? _subjectId;
+  String? _bookId;
+  final _rangeCtrl = TextEditingController();
+  DateTime _dueDate = DateTime.now().add(const Duration(days: 2));
+
+  TeacherHomeworkProvider get vm => widget.vm;
+
+  @override
+  Widget build(BuildContext context) {
+    final subjects = vm.subjectOptions;
+    final books = vm.bookOptions;
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16, right: 16, top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(height: 4, width: 48, margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(999))),
+          Row(
+            children: [
+              Text("새 과제 배정", style: Theme.of(context).textTheme.titleLarge),
+              const Spacer(),
+              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Align(alignment: Alignment.centerLeft, child: Text("과목", style: Theme.of(context).textTheme.labelLarge)),
+          DropdownMenu<String>(
+            initialSelection: _subjectId,
+            onSelected: (v) => setState(() { _subjectId = v ?? ""; _bookId = null; }),
+            dropdownMenuEntries: [
+              ...subjects.map((s) => DropdownMenuEntry<String>(value: s.id, label: s.name)),
+            ],
+            expandedInsets: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 8),
+
+          Align(alignment: Alignment.centerLeft, child: Text("책", style: Theme.of(context).textTheme.labelLarge)),
+          DropdownMenu<String>(
+            initialSelection: _bookId,
+            onSelected: (v) => setState(() => _bookId = v ?? ""),
+            dropdownMenuEntries: [
+              ...books.where((b) => _subjectId == null || _subjectId!.isEmpty
+                    ? true
+                    : vm.items.any((a) => a.book.id == b.id && a.subject.id == _subjectId))
+                  .map((b) => DropdownMenuEntry<String>(value: b.id, label: b.name)),
+            ],
+            expandedInsets: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 8),
+
+          TextField(
+            controller: _rangeCtrl,
+            decoration: const InputDecoration(
+              labelText: "범위 (예: p.10–20 / Day 3 / 1과 1~5번)",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              Expanded(child: Text("마감일: ${ymd(_dueDate)}", style: Theme.of(context).textTheme.bodyLarge)),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _dueDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (picked != null) setState(() => _dueDate = picked);
+                },
+                icon: const Icon(Icons.event),
+                label: const Text("날짜 선택"),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () async {
+                final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+
+                if ((_subjectId ?? "").isEmpty) { messenger.showSnackBar(const SnackBar(content: Text("과목을 선택하세요."))); return; }
+                if ((_bookId ?? "").isEmpty) { messenger.showSnackBar(const SnackBar(content: Text("책을 선택하세요."))); return; }
+                if (_rangeCtrl.text.trim().isEmpty) { messenger.showSnackBar(const SnackBar(content: Text("범위를 입력하세요."))); return; }
+
+                final err = await vm.createNewAssignment(
+                  subjectId: _subjectId!,
+                  bookId: _bookId!,
+                  rangeLabel: _rangeCtrl.text,
+                  dueDate: _dueDate,
+                );
+                if (err != null) {
+                  messenger.showSnackBar(SnackBar(content: Text(err)));
+                  return;
+                }
+                nav.pop();
+                messenger.showSnackBar(const SnackBar(content: Text("새 과제를 배정했습니다.")));
+              },
+              icon: const Icon(Icons.save),
+              label: const Text("저장"),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 }

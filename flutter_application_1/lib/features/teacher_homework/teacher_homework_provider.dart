@@ -21,26 +21,23 @@ class TeacherHomeworkProvider extends ChangeNotifier {
   List<StudentRef> get students => _students;
   String? get selectedStudentId => _selectedStudentId;
 
-  // 선택 학생의 과제 중 과목 필터가 적용된 목록
+  // 화면에 보여줄 리스트(과목 필터 적용 + 정렬)
   List<Assignment> get items {
     Iterable<Assignment> out = _items;
     if (_selectedSubjectId != null && _selectedSubjectId!.isNotEmpty) {
       out = out.where((a) => a.subject.id == _selectedSubjectId);
     }
-    // 기본 정렬: 확인대기 → 제출대기(지남/임박/기타) → 확정(완료/부분/미완료), 마감일 오름차순
     final list = out.toList()
       ..sort((a, b) {
         int rank(Assignment x) {
           final checked = x.teacherCheckedAt != null && x.checkResult != null;
-          if (!checked && x.isDone) return 0; // 확인 대기(학생 제출됨)
-          // 제출 대기
+          if (!checked && x.isDone) return 0; // 확인 대기
           final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
           final due = DateTime(x.dueDate.year, x.dueDate.month, x.dueDate.day);
           if (!x.isDone && due.isBefore(today)) return 1; // 지남
           if (!x.isDone && x.isDueSoon) return 2;         // 임박
-          if (!x.isDone) return 3;                        // 기타 진행중
-          // 확정
-          return 4;
+          if (!x.isDone) return 3;                        // 진행중
+          return 4;                                       // 확정
         }
         final r = rank(a).compareTo(rank(b));
         if (r != 0) return r;
@@ -50,10 +47,23 @@ class TeacherHomeworkProvider extends ChangeNotifier {
   }
 
   String? get selectedSubjectId => _selectedSubjectId;
+
   List<SubjectRef> get subjectOptions {
     final map = <String, SubjectRef>{};
     for (final a in _items) {
       map[a.subject.id] = a.subject;
+    }
+    final out = map.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+    return out;
+  }
+
+  /// 선택된 과목 기준으로 책 옵션 생성
+  List<BookRef> get bookOptions {
+    final map = <String, BookRef>{};
+    for (final a in _items) {
+      if (_selectedSubjectId == null || _selectedSubjectId!.isEmpty || a.subject.id == _selectedSubjectId) {
+        map[a.book.id] = a.book;
+      }
     }
     final out = map.values.toList()..sort((a, b) => a.name.compareTo(b.name));
     return out;
@@ -66,7 +76,6 @@ class TeacherHomeworkProvider extends ChangeNotifier {
     try {
       _studentQuery = (query ?? "").trim();
       _students = await _repo.fetchStudents(query: _studentQuery.isEmpty ? null : _studentQuery);
-      // 기존 선택 유지, 없으면 첫 학생 자동 선택
       if (_selectedStudentId == null || !_students.any((s) => s.id == _selectedStudentId)) {
         _selectedStudentId = _students.isNotEmpty ? _students.first.id : null;
       }
@@ -123,7 +132,6 @@ class TeacherHomeworkProvider extends ChangeNotifier {
       result: result,
       checkedAt: DateTime.now(),
     );
-    // 로컬 반영
     final idx = _items.indexWhere((e) => e.id == assignment.id);
     if (idx >= 0) {
       _items[idx] = _items[idx].copyWith(
@@ -132,5 +140,43 @@ class TeacherHomeworkProvider extends ChangeNotifier {
       );
       notifyListeners();
     }
+  }
+
+  // ---------- 새 과제 배정 ----------
+  Future<String?> createNewAssignment({
+    required String subjectId,
+    required String bookId,
+    required String rangeLabel,
+    required DateTime dueDate,
+  }) async {
+    if (_selectedStudentId == null) return "학생이 선택되지 않았습니다.";
+
+    final subj = subjectOptions.firstWhere(
+      (s) => s.id == subjectId,
+      orElse: () => SubjectRef(id: subjectId, name: subjectId),
+    );
+    final book = bookOptions.firstWhere(
+      (b) => b.id == bookId,
+      orElse: () => BookRef(id: bookId, name: bookId),
+    );
+    final student = _students.firstWhere((s) => s.id == _selectedStudentId);
+
+    // 유효성
+    if (rangeLabel.trim().isEmpty) return "범위를 입력하세요.";
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final due = DateTime(dueDate.year, dueDate.month, dueDate.day);
+    if (due.isBefore(today)) return "마감일은 오늘 이전일 수 없습니다.";
+
+    await _repo.createAssignment(
+      student: student,
+      subject: subj,
+      book: book,
+      rangeLabel: rangeLabel.trim(),
+      dueDate: dueDate,
+    );
+
+    // 리스트 갱신
+    await _loadAssignmentsFor(_selectedStudentId!);
+    return null; // ok
   }
 }

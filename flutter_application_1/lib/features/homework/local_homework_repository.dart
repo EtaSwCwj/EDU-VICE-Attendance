@@ -4,9 +4,6 @@ import 'models.dart';
 import 'homework_repository.dart';
 
 /// 데모용 로컬 저장소(학생/교사용 공용 데이터 소스)
-///
-/// 학생 화면은 isDone(제출 표시)만 사용.
-/// 교사용 화면은 assignedTo / teacherCheckedAt / checkResult 사용.
 class LocalHomeworkRepository implements HomeworkRepository {
   // 데모 학생
   static const s1 = StudentRef(id: "STU-001", name: "홍길동");
@@ -37,7 +34,7 @@ class LocalHomeworkRepository implements HomeworkRepository {
       book: BookRef(id: "B-ENG-VOCA", name: "VOCA 2200"),
       assignedTo: s2,
       rangeLabel: "Day 05",
-      dueDate: DateTime.now().subtract(const Duration(days: 1)), // 기한 지남
+      dueDate: DateTime.now().subtract(const Duration(days: 1)),
       isDone: false,
     ),
     Assignment(
@@ -64,5 +61,11 @@ class LocalHomeworkRepository implements HomeworkRepository {
     await Future.delayed(const Duration(milliseconds: 80));
     final idx = _store.indexWhere((e) => e.id == assignment.id);
     if (idx >= 0) _store[idx] = assignment;
+  }
+
+  /// 새 과제 추가(교사용 배정)
+  Future<void> createAssignment(Assignment a) async {
+    await Future.delayed(const Duration(milliseconds: 120));
+    _store.add(a);
   }
 }
