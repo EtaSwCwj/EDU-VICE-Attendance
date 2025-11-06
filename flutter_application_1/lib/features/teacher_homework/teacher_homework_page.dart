@@ -38,13 +38,14 @@ class _TeacherHomeworkView extends StatelessWidget {
             tooltip: "학생 검색",
             icon: const Icon(Icons.search),
             onPressed: () async {
+              // ❗ await 이전에 provider를 확보해서 lint 제거
+              final provider = context.read<TeacherHomeworkProvider>();
               final q = await showDialog<String>(
                 context: context,
                 builder: (_) => const _StudentSearchDialog(),
               );
               if (q != null) {
-                // provider는 상위에 있으므로 read 안전
-                await context.read<TeacherHomeworkProvider>().loadStudents(query: q);
+                await provider.loadStudents(query: q);
               }
             },
           ),
@@ -60,7 +61,7 @@ class _TeacherHomeworkView extends StatelessWidget {
           ? null
           : FloatingActionButton.extended(
               onPressed: () {
-                // ★ Provider 인스턴스를 직접 시트에 주입
+                // Provider 인스턴스를 직접 시트에 주입
                 final provider = context.read<TeacherHomeworkProvider>();
                 showModalBottomSheet(
                   context: context,
