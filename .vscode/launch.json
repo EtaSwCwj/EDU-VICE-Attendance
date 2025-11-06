@@ -2,24 +2,28 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "flutter_application_1",
-      "cwd": "flutter_application_1",
+      "name": "Flutter (dev, stable debug)",
+      "type": "dart",
       "request": "launch",
-      "type": "dart"
+      "cwd": "flutter_application_1",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "args": [
+        "--dart-define=APP_FLAVOR=dev",
+        "--disable-dds"
+      ]
     },
     {
-      "name": "flutter_application_1 (profile mode)",
-      "cwd": "flutter_application_1",
-      "request": "launch",
+      "name": "Flutter (profile, dev)",
       "type": "dart",
-      "flutterMode": "profile"
-    },
-    {
-      "name": "flutter_application_1 (release mode)",
-      "cwd": "flutter_application_1",
       "request": "launch",
-      "type": "dart",
-      "flutterMode": "release"
+      "cwd": "flutter_application_1",
+      "program": "lib/main.dart",
+      "flutterMode": "profile",
+      "args": [
+        "--dart-define=APP_FLAVOR=dev",
+        "--disable-dds"
+      ]
     }
   ]
 }

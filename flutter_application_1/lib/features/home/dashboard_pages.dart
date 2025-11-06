@@ -1,22 +1,20 @@
 // lib/features/home/dashboard_pages.dart
 //
 // 역할별 홈/대시보드 페이지 모음
-// - OwnerDashboardPage: 기존처럼 간단 스텁
-// - TeacherDashboardPage: 기존처럼 간단 스텁
-// - StudentHomePage: 오늘 수업 카드 + 주간 달력 + 알림 요약 + [출석하기] CTA
-//
-// 의존:
-//   provider
-//   lib/features/assignments/*  (학생 배정 기반 표시)
-//   lib/features/attendance/attendance_page.dart (출석 화면으로 이동)
+// - StudentHomePage: LessonsProvider 기반(오늘 수업 카드 + 주간 달력 + 알림 요약)
+// - Owner/Teacher: 스텁 유지
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../assignments/assignments_provider.dart';
 import '../assignments/local_assignments_repository.dart';
-import '../assignments/models.dart';
+
 import '../attendance/attendance_page.dart';
+
+import '../lessons/lessons_provider.dart';
+import '../lessons/local_lessons_repository.dart';
+import '../lessons/models.dart';
 
 /// ------------------------------
 /// 원장 대시보드 (간단 스텁)
@@ -71,17 +69,25 @@ class StudentHomePage extends StatefulWidget {
 class _StudentHomePageState extends State<StudentHomePage> {
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) =>
-          AssignmentsProvider(LocalAssignmentsRepository())..load(studentId: 'student-dev'),
-      child: Consumer<AssignmentsProvider>(
-        builder: (context, vm, _) {
+    return MultiProvider(
+      providers: [
+        // 배정(과목/책) – 상단 라벨 등에서 활용 가능
+        ChangeNotifierProvider(
+          create: (_) => AssignmentsProvider(LocalAssignmentsRepository())..load(studentId: 'student-dev'),
+        ),
+        // 레슨(회차) – 오늘 수업/달력 점의 근거
+        ChangeNotifierProvider(
+          create: (_) => LessonsProvider(LocalLessonsRepository())..loadWeek(studentId: 'student-dev'),
+        ),
+      ],
+      child: Consumer2<AssignmentsProvider, LessonsProvider>(
+        builder: (context, assign, lessons, _) {
           return Scaffold(
             appBar: AppBar(title: const Text('학생 홈')),
             body: SafeArea(
-              child: vm.loading
+              child: (assign.loading || lessons.loading)
                   ? const Center(child: CircularProgressIndicator())
-                  : _StudentHomeBody(vm: vm),
+                  : _StudentHomeBody(assign: assign, lessons: lessons),
             ),
           );
         },
@@ -91,18 +97,17 @@ class _StudentHomePageState extends State<StudentHomePage> {
 }
 
 class _StudentHomeBody extends StatelessWidget {
-  final AssignmentsProvider vm;
-  const _StudentHomeBody({required this.vm});
+  final AssignmentsProvider assign;
+  final LessonsProvider lessons;
+  const _StudentHomeBody({required this.assign, required this.lessons});
 
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
-    final week = _buildWeek(today);
+    final weekDates = lessons.weekDatesLocal();
+    final todayLessons = lessons.todayLessons();
 
-    // 간단한 '오늘 수업' 목데이터: 배정된 과목 기준으로 시간 붙여서 보여줌
-    final todayLessons = _mockTodayLessons(vm.subjects);
-
-    // 간단 알림 요약 (향후 서버/로컬 연동)
+    // 간단 알림 요약 (스텁)
     final notifications = <String>[
       '과제 마감 D-2: 영어 VOCA Day 21',
       '출석 미체크: 지난주 수학 1회',
@@ -114,12 +119,10 @@ class _StudentHomeBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 학원/학생 안내(DEV 고정값)
-          Text('학원: 에듀바이스 1관',
-              style: Theme.of(context).textTheme.titleMedium),
-
+          Text('학원: 에듀바이스 1관', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
 
-          // 오늘 수업 카드
+          // 오늘 수업 카드 (Lesson 기반)
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -146,14 +149,16 @@ class _StudentHomeBody extends StatelessWidget {
                     child: FilledButton.icon(
                       icon: const Icon(Icons.how_to_reg_outlined),
                       label: const Text('출석하기'),
-                      onPressed: () {
-                        // 출석 페이지로 이동 (학생은 홈에서 접근)
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const AttendancePage(),
-                          ),
-                        );
-                      },
+                      onPressed: todayLessons.isEmpty
+                          ? null
+                          : () {
+                              // 출석 페이지로 이동 (추후: 해당 Lesson ID와 함께 이동)
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const AttendancePage(),
+                                ),
+                              );
+                            },
                     ),
                   ),
                 ],
@@ -163,7 +168,7 @@ class _StudentHomeBody extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // 주간 달력 (간단 점표시)
+          // 주간 달력 (Lesson 유무 점표시)
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -176,12 +181,12 @@ class _StudentHomeBody extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: week
+                    children: weekDates
                         .map(
                           (d) => _DayChip(
                             date: d,
                             isToday: _isSameDate(d, today),
-                            hasLesson: todayLessons.any((l) => _isSameDate(l.date, d)),
+                            hasLesson: lessons.lessonsForDate(d).isNotEmpty,
                           ),
                         )
                         .toList(),
@@ -193,7 +198,7 @@ class _StudentHomeBody extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // 알림 요약
+          // 알림 요약(스텁)
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -229,58 +234,10 @@ class _StudentHomeBody extends StatelessWidget {
     );
   }
 
-  // 오늘 수업(목) 생성 — 배정된 과목 일부를 시간과 함께 보여줌
-  List<_Lesson> _mockTodayLessons(List<AssignedSubject> subjects) {
-    if (subjects.isEmpty) return const [];
-    // 최대 2개만 노출(예시)
-    final pool = subjects.take(2).toList();
-    final now = DateTime.now();
-    final base = DateTime(now.year, now.month, now.day);
-
-    final times = <Duration>[
-      const Duration(hours: 16, minutes: 0),
-      const Duration(hours: 19, minutes: 0),
-    ];
-
-    final result = <_Lesson>[];
-    for (int i = 0; i < pool.length && i < times.length; i++) {
-      result.add(
-        _Lesson(
-          subjectName: pool[i].name,
-          teacherName: '담당 선생님',
-          room: 'A-${i + 1}',
-          date: base.add(times[i]),
-        ),
-      );
-    }
-    return result;
-  }
-
-  List<DateTime> _buildWeek(DateTime anchor) {
-    final weekday = anchor.weekday; // Mon=1..Sun=7
-    final monday = anchor.subtract(Duration(days: weekday - 1));
-    return List.generate(7, (i) => DateTime(monday.year, monday.month, monday.day + i));
-  }
-
   bool _isSameDate(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   String _two(int v) => v.toString().padLeft(2, '0');
-}
-
-/// 내부 모델: 오늘 수업 표시용
-class _Lesson {
-  final String subjectName;
-  final String teacherName;
-  final String room;
-  final DateTime date;
-
-  _Lesson({
-    required this.subjectName,
-    required this.teacherName,
-    required this.room,
-    required this.date,
-  });
 }
 
 /// 섹션 헤더 위젯
@@ -301,15 +258,24 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// 오늘 수업 리스트 타일
+/// 오늘 수업 리스트 타일 (Lesson 기반)
 class _LessonTile extends StatelessWidget {
-  final _Lesson lesson;
+  final Lesson lesson;
   const _LessonTile(this.lesson);
 
   @override
   Widget build(BuildContext context) {
-    final t = lesson.date;
-    final time = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    final tLocal = lesson.startUtc.toLocal();
+    final time = '${tLocal.hour.toString().padLeft(2, '0')}:${tLocal.minute.toString().padLeft(2, '0')}';
+
+    // 과목 라벨: assignments의 표시명과 매칭 시도
+    String subjectLabel = lesson.subjectId;
+    final assign = context.read<AssignmentsProvider?>();
+    if (assign != null) {
+      final m = assign.subjects.where((s) => s.id == lesson.subjectId);
+      if (m.isNotEmpty) subjectLabel = m.first.name;
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -317,7 +283,7 @@ class _LessonTile extends StatelessWidget {
           const Icon(Icons.menu_book_outlined, size: 18),
           const SizedBox(width: 8),
           Expanded(
-            child: Text('${lesson.subjectName} • $time • ${lesson.room} • ${lesson.teacherName}'),
+            child: Text('$subjectLabel • $time • ${lesson.room} • ${lesson.teacherId}'),
           ),
         ],
       ),
@@ -327,7 +293,7 @@ class _LessonTile extends StatelessWidget {
 
 /// 주간 달력 칩
 class _DayChip extends StatelessWidget {
-  final DateTime date;
+  final DateTime date;   // 로컬 날짜(연-월-일)
   final bool isToday;
   final bool hasLesson;
   const _DayChip({required this.date, required this.isToday, required this.hasLesson});
@@ -336,9 +302,8 @@ class _DayChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = '${_w3(date.weekday)}\n${date.day}';
     final primary = Theme.of(context).colorScheme.primary;
-    // withOpacity → withValues 로 대체(Flutter 권장)
     final bg = isToday
-        ? primary.withValues(alpha: 0.12)
+        ? primary.withValues(alpha: 0.12) // withOpacity deprecated 대체
         : Theme.of(context).colorScheme.surface;
     final bd = isToday ? primary : Theme.of(context).dividerColor;
 
