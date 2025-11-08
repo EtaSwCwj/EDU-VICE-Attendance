@@ -1,0 +1,50 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Flutter Analyze",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["analyze"],
+      "options": { "cwd": "${workspaceFolder}/flutter_application_1" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "scrcpy (screen-off)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}\\scripts\\scrcpy_dev.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: run web (Chrome)",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}\\flutter_application_1" },
+      "command": "flutter",
+      "args": [
+        "run", "-d", "chrome"
+      ],
+      "problemMatcher": [],
+      "detail": "개발용: Chrome에서 웹 실행 (Hot Reload 가능)"
+    },
+    {
+      "label": "Flutter: build web (Pages)",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}\\flutter_application_1" },
+      "command": "flutter",
+      "args": [
+        "build", "web",
+        "--release",
+        "--base-href", "/EDU-VICE-Attendance/"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "릴리스용 웹 빌드 (GitHub Pages 경로 맞춰 base-href 적용)"
+    }
+  ]
+}

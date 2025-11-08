@@ -1,9 +1,5 @@
 include: package:flutter_lints/flutter.yaml
 
-analyzer:
-  exclude:
-    - lib/models/**   # Amplify codegen 산출물 린트 제외
-
 linter:
   rules:
     prefer_const_constructors: false
