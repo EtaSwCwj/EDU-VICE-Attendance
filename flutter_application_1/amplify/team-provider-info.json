@@ -1,0 +1,23 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-evattendance-dev-5bc13-authRole",
+      "UnauthRoleArn": "arn:aws:iam::163059304400:role/amplify-evattendance-dev-5bc13-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::163059304400:role/amplify-evattendance-dev-5bc13-authRole",
+      "Region": "ap-northeast-2",
+      "DeploymentBucketName": "amplify-evattendance-dev-5bc13-deployment",
+      "UnauthRoleName": "amplify-evattendance-dev-5bc13-unauthRole",
+      "StackName": "amplify-evattendance-dev-5bc13",
+      "StackId": "arn:aws:cloudformation:ap-northeast-2:163059304400:stack/amplify-evattendance-dev-5bc13/b3de00c0-bc03-11f0-a1c1-0a4e75d4f24b",
+      "AmplifyAppId": "d23wztbnid7cnq"
+    },
+    "categories": {
+      "auth": {
+        "evattendance256b9879": {}
+      },
+      "api": {
+        "evattendance": {}
+      }
+    }
+  }
+}
