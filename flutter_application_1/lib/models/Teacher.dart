@@ -199,17 +199,9 @@ class Teacher extends amplify_core.Model {
         provider: amplify_core.AuthRuleProvider.USERPOOLS,
         operations: const [
           amplify_core.ModelOperation.CREATE,
+          amplify_core.ModelOperation.READ,
           amplify_core.ModelOperation.UPDATE,
-          amplify_core.ModelOperation.DELETE,
-          amplify_core.ModelOperation.READ
-        ]),
-      amplify_core.AuthRule(
-        authStrategy: amplify_core.AuthStrategy.GROUPS,
-        groupClaim: "cognito:groups",
-        groups: [ "teachers" ],
-        provider: amplify_core.AuthRuleProvider.USERPOOLS,
-        operations: const [
-          amplify_core.ModelOperation.READ
+          amplify_core.ModelOperation.DELETE
         ]),
       amplify_core.AuthRule(
         authStrategy: amplify_core.AuthStrategy.OWNER,
@@ -219,7 +211,19 @@ class Teacher extends amplify_core.Model {
         operations: const [
           amplify_core.ModelOperation.READ,
           amplify_core.ModelOperation.UPDATE
+        ]),
+      amplify_core.AuthRule(
+        authStrategy: amplify_core.AuthStrategy.GROUPS,
+        groupClaim: "cognito:groups",
+        groups: [ "teachers" ],
+        provider: amplify_core.AuthRuleProvider.USERPOOLS,
+        operations: const [
+          amplify_core.ModelOperation.READ
         ])
+    ];
+    
+    modelSchemaDefinition.indexes = [
+      amplify_core.ModelIndex(fields: const ["username"], name: "byTeacherUsernameV3")
     ];
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.id());

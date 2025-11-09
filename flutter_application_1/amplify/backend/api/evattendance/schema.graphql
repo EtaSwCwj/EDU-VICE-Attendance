@@ -1,23 +1,27 @@
-# EDU-VICE Attendance — v22-3 (stable, no @index)
-# 그룹: owners / teachers / students
+enum AssignmentStatus { ASSIGNED IN_PROGRESS DONE }
 
-enum AssignmentStatus {
-  ASSIGNED
-  IN_PROGRESS
-  DONE
-}
-
-type Teacher
+type Assignment
   @model
   @auth(rules: [
-    { allow: groups, groups: ["owners"] },                            # 원장: 전체 CRUD
-    { allow: groups, groups: ["teachers"], operations: [read] },      # 교사: 읽기
-    { allow: owner, ownerField: "username", identityClaim: "cognito:username", operations: [read, update] } # 본인 정보
-  ]) {
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "teacherUsername", operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "studentUsername", operations: [read, update] }
+  ])
+{
   id: ID!
-  username: String!   # Cognito username (예: teacher1)
-  name: String!
-  subjects: [String]
+  title: String!
+  description: String
+  status: AssignmentStatus!
+
+  teacherUsername: String!
+    @index(name: "byTeacherV3", queryField: "assignmentsByTeacherV3", sortKeyFields: ["dueDate"])
+
+  studentUsername: String!
+    @index(name: "byStudentV3", queryField: "assignmentsByStudentV3", sortKeyFields: ["dueDate"])
+
+  book: String
+  range: String
+  dueDate: AWSDateTime
   createdAt: AWSDateTime
   updatedAt: AWSDateTime
 }
@@ -25,36 +29,33 @@ type Teacher
 type Student
   @model
   @auth(rules: [
-    { allow: groups, groups: ["owners"] },
-    { allow: groups, groups: ["teachers"], operations: [read] },
-    { allow: owner, ownerField: "username", identityClaim: "cognito:username", operations: [read, update] }
-  ]) {
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "username", operations: [read, update] },
+    { allow: groups, groups: ["teachers"], operations: [read] }
+  ])
+{
   id: ID!
-  username: String!   # Cognito username (예: student1)
+  username: String!
+    @index(name: "byStudentUsernameV3", queryField: "getStudentByUsernameV3")
   name: String!
   grade: String
   createdAt: AWSDateTime
   updatedAt: AWSDateTime
 }
 
-type Assignment
+type Teacher
   @model
   @auth(rules: [
-    { allow: groups, groups: ["owners"] },  # 원장: 전체 CRUD
-    # 교사: 본인이 배정한 과제만 CRUD (teacherUsername == 본인)
-    { allow: owner, ownerField: "teacherUsername", identityClaim: "cognito:username", operations: [create, read, update, delete] },
-    # 학생: 본인에게 배정된 과제 읽기/상태 업데이트 허용
-    { allow: owner, ownerField: "studentUsername", identityClaim: "cognito:username", operations: [read, update] }
-  ]) {
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "username", operations: [read, update] },
+    { allow: groups, groups: ["teachers"], operations: [read] }
+  ])
+{
   id: ID!
-  title: String!
-  description: String
-  status: AssignmentStatus!  # 기본값은 클라이언트에서 ASSIGNED로 세팅
-  studentUsername: String!   # 대상 학생 (Cognito username)
-  teacherUsername: String!   # 배정 교사 (Cognito username)
-  book: String
-  range: String
-  dueDate: AWSDateTime
+  username: String!
+    @index(name: "byTeacherUsernameV3", queryField: "getTeacherByUsernameV3")
+  name: String!
+  subjects: [String]
   createdAt: AWSDateTime
   updatedAt: AWSDateTime
 }

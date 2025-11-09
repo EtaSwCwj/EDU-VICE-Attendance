@@ -25,6 +25,7 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
   // 조회 결과
   List<Map<String, dynamic>> _teacherItems = [];
   List<Map<String, dynamic>> _studentItems = [];
+  List<Map<String, dynamic>> _ownerItems = []; // 서버 owner 필터만 적용한 결과
 
   @override
   void initState() {
@@ -96,6 +97,21 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
     );
   }
 
+  // ★ 필터 없이 서버의 owner @auth만으로 보기
+  GraphQLRequest<String> _listAssignmentsOwnerOnlyReq() {
+    const doc = r'''
+      query ListAssignmentsOwner {
+        listAssignments(limit: 50) {
+          items { id title description status studentUsername teacherUsername dueDate createdAt }
+        }
+      }
+    ''';
+    return GraphQLRequest<String>(
+      document: doc,
+      authorizationMode: APIAuthorizationType.userPools,
+    );
+  }
+
   GraphQLRequest<String> _createAssignmentReq({
     required String title,
     String? description,
@@ -142,6 +158,26 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
     );
   }
 
+  // --------- helpers ---------
+
+  List<Map<String, dynamic>> _parseItems(String? dataStr) {
+    if (dataStr == null) return [];
+    final map = jsonDecode(dataStr) as Map<String, dynamic>;
+    final items = (map.values.first?['items'] as List? ?? [])
+        .cast<Map>()
+        .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+        .toList();
+    return items.cast<Map<String, dynamic>>();
+  }
+
+  String _formatErrors(List<GraphQLResponseError> errors) {
+    if (errors.isEmpty) return '';
+    final arr = errors
+        .map((e) => '{ message: ${e.message}, path: ${e.path}, locations: ${e.locations} }')
+        .join(' | ');
+    return arr;
+  }
+
   // -------- Actions --------
 
   Future<void> _listMineAsTeacher() async {
@@ -151,17 +187,17 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
       final resp = await Amplify.API.query(
         request: _listAssignmentsByTeacherReq(_username),
       ).response;
-      final data = jsonDecode(resp.data ?? '{}') as Map<String, dynamic>;
-      final items = (data['listAssignments']?['items'] as List? ?? [])
-          .cast<Map>()
-          .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
-          .toList();
-      setState(() => _teacherItems = items.cast<Map<String, dynamic>>());
+
+      _appendLog('[Teacher] list errors: ${_formatErrors(resp.errors)}');
+      _appendLog('[Teacher] list raw: ${resp.data}');
+
+      final items = _parseItems(resp.data);
+      setState(() => _teacherItems = items);
       _appendLog('[Teacher] list ${_teacherItems.length} items');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Teacher list 성공')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Teacher list 완료')));
     } on ApiException catch (e) {
-      _appendLog('[Teacher] list error: ${e.message}');
+      _appendLog('[Teacher] list ApiException: ${e.message}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Teacher list 실패: ${e.message}')));
     } finally {
@@ -176,19 +212,44 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
       final resp = await Amplify.API.query(
         request: _listAssignmentsByStudentReq(_username),
       ).response;
-      final data = jsonDecode(resp.data ?? '{}') as Map<String, dynamic>;
-      final items = (data['listAssignments']?['items'] as List? ?? [])
-          .cast<Map>()
-          .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
-          .toList();
-      setState(() => _studentItems = items.cast<Map<String, dynamic>>());
+
+      _appendLog('[Student] list errors: ${_formatErrors(resp.errors)}');
+      _appendLog('[Student] list raw: ${resp.data}');
+
+      final items = _parseItems(resp.data);
+      setState(() => _studentItems = items);
       _appendLog('[Student] list ${_studentItems.length} items');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student list 성공')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student list 완료')));
     } on ApiException catch (e) {
-      _appendLog('[Student] list error: ${e.message}');
+      _appendLog('[Student] list ApiException: ${e.message}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Student list 실패: ${e.message}')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _listOwnerOnly() async {
+    if (!mounted) return;
+    setState(() => _busy = true);
+    try {
+      final resp = await Amplify.API.query(
+        request: _listAssignmentsOwnerOnlyReq(),
+      ).response;
+
+      _appendLog('[OwnerOnly] list errors: ${_formatErrors(resp.errors)}');
+      _appendLog('[OwnerOnly] list raw: ${resp.data}');
+
+      final items = _parseItems(resp.data);
+      setState(() => _ownerItems = items);
+      _appendLog('[OwnerOnly] list ${_ownerItems.length} items');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OwnerOnly list 완료')));
+    } on ApiException catch (e) {
+      _appendLog('[OwnerOnly] list ApiException: ${e.message}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('OwnerOnly list 실패: ${e.message}')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -213,12 +274,18 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
           teacherUsername: _username,
         ),
       ).response;
+
+      _appendLog('[Teacher] create errors: ${_formatErrors(resp.errors)}');
       _appendLog('[Teacher] create raw: ${resp.data}');
+
+      // 바로 서버 재조회(필터 & owner-only 둘 다)
       await _listMineAsTeacher();
+      await _listOwnerOnly();
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Create 성공')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Create 호출 완료')));
     } on ApiException catch (e) {
-      _appendLog('[Teacher] create error: ${e.message}');
+      _appendLog('[Teacher] create ApiException: ${e.message}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Create 실패: ${e.message}')));
     } finally {
@@ -233,12 +300,15 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
       final resp = await Amplify.API.mutate(
         request: _updateAssignmentStatusReq(id: id, status: 'DONE'),
       ).response;
+
+      _appendLog('[Student] update errors: ${_formatErrors(resp.errors)}');
       _appendLog('[Student] update raw: ${resp.data}');
+
       await _listMineAsStudent();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('상태 갱신 성공')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('상태 갱신 호출 완료')));
     } on ApiException catch (e) {
-      _appendLog('[Student] update error: ${e.message}');
+      _appendLog('[Student] update ApiException: ${e.message}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('상태 갱신 실패: ${e.message}')));
     } finally {
@@ -293,14 +363,24 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
                     descCtrl: _descCtrl,
                     onCreate: _createAsTeacher,
                     onList: _listMineAsTeacher,
+                    onListOwnerOnly: _listOwnerOnly,
                   ),
 
                 if (_asTeacher) const SizedBox(height: 16),
 
                 if (_asTeacher)
                   _ListBlock(
-                    title: '내가 배정한 과제',
+                    title: '내가 배정한 과제 (filter=teacherUsername)',
                     items: _teacherItems,
+                    trailingBuilder: (_) => const SizedBox.shrink(),
+                  ),
+
+                if (_asTeacher) const SizedBox(height: 12),
+
+                if (_asTeacher)
+                  _ListBlock(
+                    title: '내 과제 (owner-only server filter)',
+                    items: _ownerItems,
                     trailingBuilder: (_) => const SizedBox.shrink(),
                   ),
 
@@ -333,7 +413,7 @@ class _AssignmentsDevPageState extends State<AssignmentsDevPage> {
                 const SizedBox(height: 6),
                 Container(
                   width: double.infinity,
-                  height: 180,
+                  height: 240,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Theme.of(context)
@@ -384,6 +464,7 @@ class _TeacherPanel extends StatelessWidget {
     required this.descCtrl,
     required this.onCreate,
     required this.onList,
+    required this.onListOwnerOnly,
   });
 
   final bool busy;
@@ -392,6 +473,7 @@ class _TeacherPanel extends StatelessWidget {
   final TextEditingController descCtrl;
   final VoidCallback onCreate;
   final VoidCallback onList;
+  final VoidCallback onListOwnerOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -440,6 +522,11 @@ class _TeacherPanel extends StatelessWidget {
                   onPressed: busy ? null : onList,
                   icon: const Icon(Icons.list),
                   label: const Text('내가 배정한 과제 조회'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : onListOwnerOnly,
+                  icon: const Icon(Icons.lock_person),
+                  label: const Text('OwnerOnly 조회'),
                 ),
               ],
             )

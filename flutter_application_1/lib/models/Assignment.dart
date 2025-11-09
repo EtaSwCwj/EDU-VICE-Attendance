@@ -30,8 +30,8 @@ class Assignment extends amplify_core.Model {
   final String? _title;
   final String? _description;
   final AssignmentStatus? _status;
-  final String? _studentUsername;
   final String? _teacherUsername;
+  final String? _studentUsername;
   final String? _book;
   final String? _range;
   final amplify_core.TemporalDateTime? _dueDate;
@@ -81,9 +81,9 @@ class Assignment extends amplify_core.Model {
     }
   }
   
-  String get studentUsername {
+  String get teacherUsername {
     try {
-      return _studentUsername!;
+      return _teacherUsername!;
     } catch(e) {
       throw amplify_core.AmplifyCodeGenModelException(
           amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
@@ -94,9 +94,9 @@ class Assignment extends amplify_core.Model {
     }
   }
   
-  String get teacherUsername {
+  String get studentUsername {
     try {
-      return _teacherUsername!;
+      return _studentUsername!;
     } catch(e) {
       throw amplify_core.AmplifyCodeGenModelException(
           amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
@@ -127,16 +127,16 @@ class Assignment extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const Assignment._internal({required this.id, required title, description, required status, required studentUsername, required teacherUsername, book, range, dueDate, createdAt, updatedAt}): _title = title, _description = description, _status = status, _studentUsername = studentUsername, _teacherUsername = teacherUsername, _book = book, _range = range, _dueDate = dueDate, _createdAt = createdAt, _updatedAt = updatedAt;
+  const Assignment._internal({required this.id, required title, description, required status, required teacherUsername, required studentUsername, book, range, dueDate, createdAt, updatedAt}): _title = title, _description = description, _status = status, _teacherUsername = teacherUsername, _studentUsername = studentUsername, _book = book, _range = range, _dueDate = dueDate, _createdAt = createdAt, _updatedAt = updatedAt;
   
-  factory Assignment({String? id, required String title, String? description, required AssignmentStatus status, required String studentUsername, required String teacherUsername, String? book, String? range, amplify_core.TemporalDateTime? dueDate, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
+  factory Assignment({String? id, required String title, String? description, required AssignmentStatus status, required String teacherUsername, required String studentUsername, String? book, String? range, amplify_core.TemporalDateTime? dueDate, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
     return Assignment._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
       title: title,
       description: description,
       status: status,
-      studentUsername: studentUsername,
       teacherUsername: teacherUsername,
+      studentUsername: studentUsername,
       book: book,
       range: range,
       dueDate: dueDate,
@@ -156,8 +156,8 @@ class Assignment extends amplify_core.Model {
       _title == other._title &&
       _description == other._description &&
       _status == other._status &&
-      _studentUsername == other._studentUsername &&
       _teacherUsername == other._teacherUsername &&
+      _studentUsername == other._studentUsername &&
       _book == other._book &&
       _range == other._range &&
       _dueDate == other._dueDate &&
@@ -177,8 +177,8 @@ class Assignment extends amplify_core.Model {
     buffer.write("title=" + "$_title" + ", ");
     buffer.write("description=" + "$_description" + ", ");
     buffer.write("status=" + (_status != null ? amplify_core.enumToString(_status)! : "null") + ", ");
-    buffer.write("studentUsername=" + "$_studentUsername" + ", ");
     buffer.write("teacherUsername=" + "$_teacherUsername" + ", ");
+    buffer.write("studentUsername=" + "$_studentUsername" + ", ");
     buffer.write("book=" + "$_book" + ", ");
     buffer.write("range=" + "$_range" + ", ");
     buffer.write("dueDate=" + (_dueDate != null ? _dueDate!.format() : "null") + ", ");
@@ -189,14 +189,14 @@ class Assignment extends amplify_core.Model {
     return buffer.toString();
   }
   
-  Assignment copyWith({String? title, String? description, AssignmentStatus? status, String? studentUsername, String? teacherUsername, String? book, String? range, amplify_core.TemporalDateTime? dueDate, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
+  Assignment copyWith({String? title, String? description, AssignmentStatus? status, String? teacherUsername, String? studentUsername, String? book, String? range, amplify_core.TemporalDateTime? dueDate, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
     return Assignment._internal(
       id: id,
       title: title ?? this.title,
       description: description ?? this.description,
       status: status ?? this.status,
-      studentUsername: studentUsername ?? this.studentUsername,
       teacherUsername: teacherUsername ?? this.teacherUsername,
+      studentUsername: studentUsername ?? this.studentUsername,
       book: book ?? this.book,
       range: range ?? this.range,
       dueDate: dueDate ?? this.dueDate,
@@ -208,8 +208,8 @@ class Assignment extends amplify_core.Model {
     ModelFieldValue<String>? title,
     ModelFieldValue<String?>? description,
     ModelFieldValue<AssignmentStatus>? status,
-    ModelFieldValue<String>? studentUsername,
     ModelFieldValue<String>? teacherUsername,
+    ModelFieldValue<String>? studentUsername,
     ModelFieldValue<String?>? book,
     ModelFieldValue<String?>? range,
     ModelFieldValue<amplify_core.TemporalDateTime?>? dueDate,
@@ -221,8 +221,8 @@ class Assignment extends amplify_core.Model {
       title: title == null ? this.title : title.value,
       description: description == null ? this.description : description.value,
       status: status == null ? this.status : status.value,
-      studentUsername: studentUsername == null ? this.studentUsername : studentUsername.value,
       teacherUsername: teacherUsername == null ? this.teacherUsername : teacherUsername.value,
+      studentUsername: studentUsername == null ? this.studentUsername : studentUsername.value,
       book: book == null ? this.book : book.value,
       range: range == null ? this.range : range.value,
       dueDate: dueDate == null ? this.dueDate : dueDate.value,
@@ -236,8 +236,8 @@ class Assignment extends amplify_core.Model {
       _title = json['title'],
       _description = json['description'],
       _status = amplify_core.enumFromString<AssignmentStatus>(json['status'], AssignmentStatus.values),
-      _studentUsername = json['studentUsername'],
       _teacherUsername = json['teacherUsername'],
+      _studentUsername = json['studentUsername'],
       _book = json['book'],
       _range = json['range'],
       _dueDate = json['dueDate'] != null ? amplify_core.TemporalDateTime.fromString(json['dueDate']) : null,
@@ -245,7 +245,7 @@ class Assignment extends amplify_core.Model {
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'title': _title, 'description': _description, 'status': amplify_core.enumToString(_status), 'studentUsername': _studentUsername, 'teacherUsername': _teacherUsername, 'book': _book, 'range': _range, 'dueDate': _dueDate?.format(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'title': _title, 'description': _description, 'status': amplify_core.enumToString(_status), 'teacherUsername': _teacherUsername, 'studentUsername': _studentUsername, 'book': _book, 'range': _range, 'dueDate': _dueDate?.format(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
   };
   
   Map<String, Object?> toMap() => {
@@ -253,8 +253,8 @@ class Assignment extends amplify_core.Model {
     'title': _title,
     'description': _description,
     'status': _status,
-    'studentUsername': _studentUsername,
     'teacherUsername': _teacherUsername,
+    'studentUsername': _studentUsername,
     'book': _book,
     'range': _range,
     'dueDate': _dueDate,
@@ -267,8 +267,8 @@ class Assignment extends amplify_core.Model {
   static final TITLE = amplify_core.QueryField(fieldName: "title");
   static final DESCRIPTION = amplify_core.QueryField(fieldName: "description");
   static final STATUS = amplify_core.QueryField(fieldName: "status");
-  static final STUDENTUSERNAME = amplify_core.QueryField(fieldName: "studentUsername");
   static final TEACHERUSERNAME = amplify_core.QueryField(fieldName: "teacherUsername");
+  static final STUDENTUSERNAME = amplify_core.QueryField(fieldName: "studentUsername");
   static final BOOK = amplify_core.QueryField(fieldName: "book");
   static final RANGE = amplify_core.QueryField(fieldName: "range");
   static final DUEDATE = amplify_core.QueryField(fieldName: "dueDate");
@@ -286,9 +286,9 @@ class Assignment extends amplify_core.Model {
         provider: amplify_core.AuthRuleProvider.USERPOOLS,
         operations: const [
           amplify_core.ModelOperation.CREATE,
+          amplify_core.ModelOperation.READ,
           amplify_core.ModelOperation.UPDATE,
-          amplify_core.ModelOperation.DELETE,
-          amplify_core.ModelOperation.READ
+          amplify_core.ModelOperation.DELETE
         ]),
       amplify_core.AuthRule(
         authStrategy: amplify_core.AuthStrategy.OWNER,
@@ -312,6 +312,11 @@ class Assignment extends amplify_core.Model {
         ])
     ];
     
+    modelSchemaDefinition.indexes = [
+      amplify_core.ModelIndex(fields: const ["teacherUsername", "dueDate"], name: "byTeacherV3"),
+      amplify_core.ModelIndex(fields: const ["studentUsername", "dueDate"], name: "byStudentV3")
+    ];
+    
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.id());
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
@@ -333,13 +338,13 @@ class Assignment extends amplify_core.Model {
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Assignment.STUDENTUSERNAME,
+      key: Assignment.TEACHERUSERNAME,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Assignment.TEACHERUSERNAME,
+      key: Assignment.STUDENTUSERNAME,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
