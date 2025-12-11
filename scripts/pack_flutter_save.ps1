@@ -1,95 +1,80 @@
-# =========================
-# EDU-VICE — GraphQL Schema
-# 22-3: 도메인 확정 + 권한 강화 + 인덱스
-# =========================
+# scripts/pack_flutter_save.ps1
+# ZIP 루트: .vscode (리포 루트)
+# ZIP 루트: flutter_application_1/  -> 그 안에 lib/ + flutter_application_1 루트의 *.yaml
+# ZIP 저장 위치: flutter_application_1의 상위 폴더(같은 위치)
 
-enum AssignmentStatus {
-  ASSIGNED
-  DONE
+param(
+  [string]$ProjectPath = (Join-Path $PSScriptRoot "..\flutter_application_1")
+)
+
+$ErrorActionPreference = "Stop"
+
+# ---- 콘솔/출력 인코딩 UTF-8 고정 (한글 깨짐 방지) ----
+try {
+  [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+  $env:DOTNET_CLI_UI_LANGUAGE = "ko"
+} catch {}
+
+if (-not (Test-Path $ProjectPath)) {
+  Write-Host "❌ Project not found: $ProjectPath" -ForegroundColor Red
+  exit 1
 }
 
-type Assignment
-  @model
-  @auth(rules: [
-    # 원장(owners 그룹): 전체 CRUD
-    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+# 경로 계산
+$RepoRoot = (Split-Path -Parent (Resolve-Path $ProjectPath))
+$OutDir   = $RepoRoot
+$Stamp    = Get-Date -Format "yyyyMMdd_HHmmss"
+$ZipPath  = Join-Path $OutDir ("flutter_application_1_{0}.zip" -f $Stamp)
 
-    # 교사 소유: 생성/조회/수정/삭제
-    { allow: owner, ownerField: "teacherUsername", operations: [create, read, update, delete] },
+# 임시 작업 폴더
+$TempRoot    = Join-Path $OutDir "__pack_tmp_$Stamp"
+$ZipRootDir  = $TempRoot                         # ZIP의 루트 역할
+$InnerAppDir = Join-Path $ZipRootDir "flutter_application_1"
 
-    # 학생 소유: 조회/상태 갱신(수정)
-    { allow: owner, ownerField: "studentUsername", operations: [read, update] }
-  ])
-  # 교사별 과제 조회/정렬(기본: dueDate 정렬)
-  @index(name: "byTeacher", queryField: "assignmentsByTeacher", fields: ["teacherUsername", "dueDate"])
-  # 학생별 과제 조회/정렬(기본: dueDate 정렬)
-  @index(name: "byStudent", queryField: "assignmentsByStudent", fields: ["studentUsername", "dueDate"])
-{
-  id: ID!
-  title: String!
-  description: String
-  status: AssignmentStatus!
+# 깨끗이 시작
+if (Test-Path $TempRoot) { Remove-Item $TempRoot -Recurse -Force }
+New-Item -ItemType Directory -Path $InnerAppDir -Force | Out-Null
 
-  # 소유자 필드(권한 기준)
-  teacherUsername: String!
-  studentUsername: String!
-
-  # 정렬/검색 키(옵션)
-  dueDate: AWSDateTime
-
-  # @model 기본 타임스탬프
-  createdAt: AWSDateTime
-  updatedAt: AWSDateTime
+# 1) ZIP 루트에 .vscode (리포 루트의 것) 추가
+$RootVscode = Join-Path $RepoRoot ".vscode"
+if (Test-Path $RootVscode) {
+  Copy-Item -Path $RootVscode -Destination $ZipRootDir -Recurse -Force
+  Write-Host "Copy: .vscode" -ForegroundColor Cyan
 }
 
-type Student
-  @model
-  @auth(rules: [
-    # 원장 전체 CRUD
-    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
-
-    # 본인(학생)만 자신의 프로필 read/update
-    { allow: owner, ownerField: "username", operations: [read, update] },
-
-    # 교사는 학생 프로필 read 허용
-    { allow: groups, groups: ["teachers"], operations: [read] }
-  ])
-  # username 단건 조회/중복 방지
-  @index(name: "byUsername", queryField: "getStudentByUsername", fields: ["username"])
-{
-  id: ID!
-  username: String!   # Cognito username(고유)
-  name: String
-  grade: String
-  classId: String
-  phone: String
-  note: String
-
-  createdAt: AWSDateTime
-  updatedAt: AWSDateTime
+# 2) flutter_application_1/lib 전체 복사
+$SrcLib = Join-Path $ProjectPath "lib"
+if (Test-Path $SrcLib) {
+  Copy-Item -Path $SrcLib -Destination $InnerAppDir -Recurse -Force
+  Write-Host "Copy: flutter_application_1\lib" -ForegroundColor Cyan
+} else {
+  Write-Host "⚠ lib 폴더가 없습니다: $SrcLib" -ForegroundColor Yellow
 }
 
-type Teacher
-  @model
-  @auth(rules: [
-    # 원장 전체 CRUD
-    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+# 3) flutter_application_1 루트의 *.yaml만 복사
+Get-ChildItem -Path $ProjectPath -File -Filter *.yaml | ForEach-Object {
+  Copy-Item -Path $_.FullName -Destination $InnerAppDir -Force
+  Write-Host ("Copy yaml: {0}" -f $_.Name) -ForegroundColor Cyan
+}
 
-    # 본인(교사) 프로필 read/update
-    { allow: owner, ownerField: "username", operations: [read, update] },
+# ❌ 복사하지 않을 것들 (우리는 위에서 명시적으로 필요한 것만 복사하므로 별도 제외 절차 불필요)
+#   amplify/, android/, ios/, web/, windows/, macos/, linux/, build/, .dart_tool/ 등은 복사 안 함
 
-    # 교사끼리 서로 read 허용(운영 편의)
-    { allow: groups, groups: ["teachers"], operations: [read] }
-  ])
-  @index(name: "byUsername", queryField: "getTeacherByUsername", fields: ["username"])
-{
-  id: ID!
-  username: String!   # Cognito username(고유)
-  name: String
-  subject: String
-  phone: String
-  note: String
+# 4) 압축 생성
+if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
 
-  createdAt: AWSDateTime
-  updatedAt: AWSDateTime
+Push-Location $TempRoot
+try {
+  Compress-Archive -Path * -DestinationPath $ZipPath -Force
+} finally {
+  Pop-Location
+}
+
+# 5) 정리
+if (Test-Path $ZipPath) {
+  Remove-Item $TempRoot -Recurse -Force
+  Write-Host ("📦 Created: {0}" -f $ZipPath) -ForegroundColor Green
+} else {
+  Write-Host "❌ Compression failed. Temp folder kept: $TempRoot" -ForegroundColor Red
+  exit 1
 }
