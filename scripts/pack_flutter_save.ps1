@@ -70,10 +70,43 @@ try {
   Pop-Location
 }
 
+# --- 압축 성공 후: 탐색기에서 압축파일 선택(기존 창 재사용) ---
+function Show-ZipInExplorer {
+    param([Parameter(Mandatory)][string]$ZipPath)
+
+    $full  = (Resolve-Path $ZipPath).Path
+    $dir   = Split-Path $full
+    $leaf  = Split-Path $full -Leaf
+
+    $shell = New-Object -ComObject Shell.Application
+    $explorers = @($shell.Windows()) | Where-Object { $_.FullName -like '*explorer.exe' }
+
+    if ($explorers.Count -gt 0) {
+        # 기존 탐색기 창 재사용: 폴더로 이동 → 파일 선택
+        $wnd = $explorers[0]
+        $wnd.Navigate2($dir)
+        Start-Sleep -Milliseconds 300  # 폴더 전환 대기
+
+        $doc = $wnd.Document
+        if ($doc -and $doc.Folder) {
+            $item = $doc.Folder.ParseName($leaf)
+            if ($item) {
+                # SVSI_SELECT(1) + DESELECTOTHERS(4) + ENSUREVISIBLE(8) + FOCUSED(16) = 29
+                $doc.SelectItem($item, 29)
+            }
+        }
+    }
+    else {
+        # 탐색기 창이 없으면 새 창으로 해당 파일 선택
+        Start-Process explorer.exe "/select,`"$full`""
+    }
+}
+
 # 5) 정리
 if (Test-Path $ZipPath) {
   Remove-Item $TempRoot -Recurse -Force
   Write-Host ("📦 Created: {0}" -f $ZipPath) -ForegroundColor Green
+  try { Show-ZipInExplorer -Path $ZipPath } catch { Start-Process explorer.exe "/select,`"$ZipPath`"" }
 } else {
   Write-Host "❌ Compression failed. Temp folder kept: $TempRoot" -ForegroundColor Red
   exit 1
