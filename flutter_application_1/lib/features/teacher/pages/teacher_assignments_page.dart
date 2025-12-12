@@ -1,10 +1,15 @@
+import 'dart:async';
+
+import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:amplify_flutter/amplify_flutter.dart';
 
 import '../../../models/ModelProvider.dart';
 import '../data/assignment_repository.dart';
 import '../widgets/assignment_action_sheet.dart';
+
+enum _StatusFilter { all, assigned, done }
+enum _SortMode { newest, dueDate, title }
 
 class TeacherAssignmentsPage extends StatefulWidget {
   const TeacherAssignmentsPage({super.key});
@@ -15,308 +20,666 @@ class TeacherAssignmentsPage extends StatefulWidget {
 
 class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
   final _repo = AssignmentRepository();
-  String _username = '';
-  bool _isLoading = false;
 
-  final _teacherList = <Assignment>[];
-  final _ownerOnlyList = <Assignment>[];
+  bool _booting = true;
+  bool _creating = false;
 
-  final _studentController = TextEditingController();
-  final _titleController = TextEditingController();
-  final _descController = TextEditingController();
+  String? _teacherUsername;
+
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  String _searchText = '';
+  _StatusFilter _statusFilter = _StatusFilter.all;
+  _SortMode _sortMode = _SortMode.newest;
+
+  final TextEditingController _studentUsernameController = TextEditingController();
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+
+  final ScrollController _myScroll = ScrollController();
+  bool _myLoading = false;
+  bool _myRefreshing = false;
+  bool _myHasMore = true;
+  String? _myNextToken;
+  final List<Assignment> _myItems = [];
+
+  final ScrollController _ownerScroll = ScrollController();
+  bool _ownerLoading = false;
+  bool _ownerRefreshing = false;
+  bool _ownerHasMore = true;
+  String? _ownerNextToken;
+  final List<Assignment> _ownerItems = [];
+
+  int _tabIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _init();
+
+    _myScroll.addListener(() {
+      if (_tabIndex != 0) return;
+      if (!_myHasMore || _myLoading || _myRefreshing) return;
+      if (_myScroll.position.pixels >= _myScroll.position.maxScrollExtent - 240) {
+        unawaited(_loadMoreMy());
+      }
+    });
+
+    _ownerScroll.addListener(() {
+      if (_tabIndex != 1) return;
+      if (!_ownerHasMore || _ownerLoading || _ownerRefreshing) return;
+      if (_ownerScroll.position.pixels >= _ownerScroll.position.maxScrollExtent - 240) {
+        unawaited(_loadMoreOwner());
+      }
+    });
+
+    _searchController.addListener(() {
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 220), () {
+        final v = _searchController.text.trim();
+        if (v == _searchText) return;
+        setState(() => _searchText = v);
+      });
+    });
+
+    unawaited(_boot());
   }
 
   @override
   void dispose() {
-    _studentController.dispose();
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+
+    _studentUsernameController.dispose();
     _titleController.dispose();
-    _descController.dispose();
+    _descriptionController.dispose();
+
+    _myScroll.dispose();
+    _ownerScroll.dispose();
+
     super.dispose();
   }
 
-  Future<void> _init() async {
-    setState(() => _isLoading = true);
+  Future<void> _boot() async {
+    setState(() => _booting = true);
+
     try {
       final user = await Amplify.Auth.getCurrentUser();
-      if (!mounted) return;
-      _username = user.username; // non-null
-      await _refreshLists();
-    } catch (e) {
-      safePrint(e);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('세션 확인 실패')),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
+      final username = user.username;
 
-  Future<void> _refreshLists() async {
-    setState(() => _isLoading = true);
-    try {
-      final byTeacher = await _repo.listAssignmentsByTeacher(
-        teacherUsername: _username,
-      );
-      final ownerOnly = await _repo.listAssignmentsOwnerOnly();
       if (!mounted) return;
       setState(() {
-        _teacherList
-          ..clear()
-          ..addAll(byTeacher);
-        _ownerOnlyList
-          ..clear()
-          ..addAll(ownerOnly);
+        _teacherUsername = username;
       });
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+
+      await Future.wait([
+        _refreshMy(),
+        _refreshOwner(),
+      ]);
+
+      if (!mounted) return;
+      setState(() => _booting = false);
+    } catch (e, st) {
+      safePrint('TeacherAssignmentsPage boot failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _booting = false);
+      _showError('로그인 세션 확인 필요: $e');
     }
   }
 
-  Future<void> _create() async {
-    final student = _studentController.text.trim();
-    final title = _titleController.text.trim();
-    final descText = _descController.text.trim();
-    final String? desc = descText.isEmpty ? null : descText;
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 
-    if (student.isEmpty || title.isEmpty) {
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('studentUsername, title은 필수입니다')),
+  bool _matchesSearch(Assignment a) {
+    if (_searchText.isEmpty) return true;
+    final q = _searchText.toLowerCase();
+
+    final title = a.title.toLowerCase();
+    final student = a.studentUsername.toLowerCase();
+    final desc = (a.description ?? '').toLowerCase();
+
+    return title.contains(q) || student.contains(q) || desc.contains(q);
+  }
+
+  bool _matchesStatus(Assignment a) {
+    switch (_statusFilter) {
+      case _StatusFilter.all:
+        return true;
+      case _StatusFilter.assigned:
+        return a.status == AssignmentStatus.ASSIGNED;
+      case _StatusFilter.done:
+        return a.status == AssignmentStatus.DONE;
+    }
+  }
+
+  int _compareSort(Assignment a, Assignment b) {
+    switch (_sortMode) {
+      case _SortMode.newest:
+        final at = a.createdAt?.getDateTimeInUtc();
+        final bt = b.createdAt?.getDateTimeInUtc();
+        if (at != null && bt != null) return bt.compareTo(at);
+        if (at != null) return -1;
+        if (bt != null) return 1;
+        return 0;
+
+      case _SortMode.dueDate:
+        final ad = a.dueDate?.getDateTimeInUtc();
+        final bd = b.dueDate?.getDateTimeInUtc();
+        if (ad != null && bd != null) return ad.compareTo(bd);
+        if (ad != null) return -1;
+        if (bd != null) return 1;
+        return 0;
+
+      case _SortMode.title:
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    }
+  }
+
+  List<Assignment> _applyViewTransform(List<Assignment> src) {
+    final out = src.where(_matchesSearch).where(_matchesStatus).toList();
+    out.sort(_compareSort);
+    return out;
+  }
+
+  Future<void> _refreshMy() async {
+    final username = _teacherUsername;
+    if (username == null || username.isEmpty) return;
+
+    setState(() {
+      _myRefreshing = true;
+      _myHasMore = true;
+      _myNextToken = null;
+      _myItems.clear();
+    });
+
+    try {
+      final page = await _repo.listAssignmentsByTeacherPaged(
+        teacherUsername: username,
+        limit: 25,
+        nextToken: null,
       );
+
+      if (!mounted) return;
+      setState(() {
+        _myItems.addAll(page.items);
+        _myNextToken = page.nextToken;
+        _myHasMore = page.nextToken != null && page.nextToken!.isNotEmpty;
+        _myRefreshing = false;
+      });
+    } catch (e, st) {
+      safePrint('refreshMy failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _myRefreshing = false);
+      _showError('내 과제 새로고침 실패: $e');
+    }
+  }
+
+  Future<void> _loadMoreMy() async {
+    final username = _teacherUsername;
+    if (username == null || username.isEmpty) return;
+    if (!_myHasMore) return;
+
+    final token = _myNextToken;
+    if (token == null || token.isEmpty) {
+      setState(() => _myHasMore = false);
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _myLoading = true);
+
+    try {
+      final page = await _repo.listAssignmentsByTeacherPaged(
+        teacherUsername: username,
+        limit: 25,
+        nextToken: token,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _myItems.addAll(page.items);
+        _myNextToken = page.nextToken;
+        _myHasMore = page.nextToken != null && page.nextToken!.isNotEmpty;
+        _myLoading = false;
+      });
+    } catch (e, st) {
+      safePrint('loadMoreMy failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _myLoading = false);
+      _showError('추가 로드 실패: $e');
+    }
+  }
+
+  Future<void> _refreshOwner() async {
+    setState(() {
+      _ownerRefreshing = true;
+      _ownerHasMore = true;
+      _ownerNextToken = null;
+      _ownerItems.clear();
+    });
+
+    try {
+      final page = await _repo.listAssignmentsOwnerOnlyPaged(
+        limit: 25,
+        nextToken: null,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _ownerItems.addAll(page.items);
+        _ownerNextToken = page.nextToken;
+        _ownerHasMore = page.nextToken != null && page.nextToken!.isNotEmpty;
+        _ownerRefreshing = false;
+      });
+    } catch (e, st) {
+      safePrint('refreshOwner failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _ownerRefreshing = false);
+      _showError('Owner 목록 새로고침 실패: $e');
+    }
+  }
+
+  Future<void> _loadMoreOwner() async {
+    if (!_ownerHasMore) return;
+
+    final token = _ownerNextToken;
+    if (token == null || token.isEmpty) {
+      setState(() => _ownerHasMore = false);
+      return;
+    }
+
+    setState(() => _ownerLoading = true);
+
+    try {
+      final page = await _repo.listAssignmentsOwnerOnlyPaged(
+        limit: 25,
+        nextToken: token,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _ownerItems.addAll(page.items);
+        _ownerNextToken = page.nextToken;
+        _ownerHasMore = page.nextToken != null && page.nextToken!.isNotEmpty;
+        _ownerLoading = false;
+      });
+    } catch (e, st) {
+      safePrint('loadMoreOwner failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _ownerLoading = false);
+      _showError('추가 로드 실패: $e');
+    }
+  }
+
+  Future<void> _createAssignment() async {
+    final teacherUsername = _teacherUsername;
+    if (teacherUsername == null || teacherUsername.isEmpty) {
+      _showError('교사 계정 상태 확인 필요');
+      return;
+    }
+
+    final student = _studentUsernameController.text.trim();
+    final title = _titleController.text.trim();
+    final desc = _descriptionController.text.trim();
+
+    if (student.isEmpty || title.isEmpty) {
+      _showError('studentUsername / title 필수');
+      return;
+    }
+
+    setState(() => _creating = true);
+
     try {
       await _repo.createAssignment(
-        teacherUsername: _username,
+        teacherUsername: teacherUsername,
         studentUsername: student,
         title: title,
-        description: desc,
+        description: desc.isEmpty ? null : desc,
       );
-      _studentController.clear();
+
+      if (!mounted) return;
+
+      _studentUsernameController.clear();
       _titleController.clear();
-      _descController.clear();
-      await _refreshLists();
-    } catch (e) {
-      safePrint(e);
+      _descriptionController.clear();
+
+      if (_tabIndex == 0) {
+        await _refreshMy();
+      } else {
+        await _refreshOwner();
+      }
+    } catch (e, st) {
+      safePrint('createAssignment failed: $e\n$st');
       if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(SnackBar(content: Text('생성 실패: $e')));
+      _showError('생성 실패: $e');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _creating = false);
     }
   }
 
-  Future<void> _confirmDelete(Assignment a) async {
-    final messenger = ScaffoldMessenger.of(context);
-
-    final ok = await showDialog<bool>(
+  Future<void> _openActionSheet(Assignment a) async {
+    await showAssignmentActionSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('과제 삭제'),
-        content: Text('정말 삭제할까요?\n\n${a.title}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('삭제')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    setState(() => _isLoading = true);
-    try {
-      await _repo.deleteAssignment(a.id);
-      await _refreshLists();
-    } catch (e) {
-      safePrint(e);
-      if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('삭제 실패: $e')));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Widget _section(String title, List<Assignment> items) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          children: [
-            ListTile(
-              title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-              trailing: Text('${items.length}개'),
-            ),
-            if (items.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('항목 없음'),
-              )
-            else
-              ...items.map(_assignmentTile),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _assignmentTile(Assignment a) {
-    // a.title: non-null, a.status: non-null enum, a.description: nullable
-    final desc = a.description;
-    final subtitleParts = <String>[
-      'by ${a.teacherUsername} → ${a.studentUsername}',
-      a.status.name,
-      if (desc != null && desc.isNotEmpty) desc,
-    ];
-    final subtitle = subtitleParts.join(' · ');
-
-    return ListTile(
-      leading: const Icon(Icons.assignment_outlined),
-      title: Text(a.title),
-      subtitle: Text(subtitle),
-      trailing: PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert, color: Colors.black87),
-        onSelected: (v) async {
-          switch (v) {
-            case 'sheet':
-              await showAssignmentActionSheet(
-                context: context,
-                assignment: a,
-                onChanged: _refreshLists,
-                onDeleted: _refreshLists,
-              );
-              break;
-            case 'copyId':
-              await Clipboard.setData(ClipboardData(text: a.id));
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('ID 복사됨')),
-              );
-              break;
-            case 'delete':
-              await _confirmDelete(a);
-              break;
-          }
-        },
-        itemBuilder: (ctx) => const [
-          PopupMenuItem(value: 'sheet', child: Text('액션 시트')),
-          PopupMenuItem(value: 'copyId', child: Text('ID 복사')),
-          PopupMenuItem(
-            value: 'delete',
-            child: Text('삭제', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-      onLongPress: () async {
-        await showAssignmentActionSheet(
-          context: context,
-          assignment: a,
-          onChanged: _refreshLists,
-          onDeleted: _refreshLists,
-        );
+      assignment: a,
+      onChanged: () {
+        if (!mounted) return;
+        if (_tabIndex == 0) {
+          unawaited(_refreshMy());
+        } else {
+          unawaited(_refreshOwner());
+        }
+      },
+      onDeleted: () {
+        if (!mounted) return;
+        if (_tabIndex == 0) {
+          unawaited(_refreshMy());
+        } else {
+          unawaited(_refreshOwner());
+        }
       },
     );
   }
 
+  Future<void> _deleteDirect(Assignment a) async {
+    final id = a.id;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('삭제'),
+        content: Text('정말 삭제할까?\n\n$id'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제')),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (ok != true) return;
+
+    try {
+      await _repo.deleteAssignment(id);
+      if (!mounted) return;
+      if (_tabIndex == 0) {
+        await _refreshMy();
+      } else {
+        await _refreshOwner();
+      }
+    } catch (e, st) {
+      safePrint('delete failed: $e\n$st');
+      if (!mounted) return;
+      _showError('삭제 실패: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final displayName = _username.isEmpty ? '(알 수 없음)' : _username;
+    final myView = _applyViewTransform(_myItems);
+    final ownerView = _applyViewTransform(_ownerItems);
 
     return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refreshLists,
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: 24),
+      appBar: AppBar(
+        title: const Text('Teacher · Assignments'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Row(
             children: [
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.person, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      displayName,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    if (_isLoading) ...[
-                      const SizedBox(width: 12),
-                      const SizedBox(
-                        width: 16, height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ],
+              Expanded(
+                child: SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 0, label: Text('내 과제')),
+                    ButtonSegment(value: 1, label: Text('OwnerOnly')),
                   ],
+                  selected: {_tabIndex},
+                  onSelectionChanged: (s) => setState(() => _tabIndex = s.first),
                 ),
               ),
-              const SizedBox(height: 12),
-              // 간단 생성 패널
-              Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+              const SizedBox(width: 12),
+            ],
+          ),
+        ),
+      ),
+      body: _booting
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildCreatePanel(),
+                _buildToolbar(),
+                const Divider(height: 1),
+                Expanded(
+                  child: IndexedStack(
+                    index: _tabIndex,
                     children: [
-                      const Text('교사 패널', style: TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _studentController,
-                              decoration: const InputDecoration(
-                                labelText: 'studentUsername (필수)',
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _titleController,
-                              decoration: const InputDecoration(
-                                labelText: 'title (필수)',
-                              ),
-                            ),
-                          ),
-                        ],
+                      _buildList(
+                        controller: _myScroll,
+                        refreshing: _myRefreshing,
+                        loadingMore: _myLoading,
+                        hasMore: _myHasMore,
+                        items: myView,
+                        onRefresh: _refreshMy,
                       ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _descController,
-                        decoration: const InputDecoration(
-                          labelText: 'description (선택)',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: _isLoading ? null : _create,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Create Assignment'),
-                      ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: _isLoading ? null : _refreshLists,
-                        icon: const Icon(Icons.list_alt),
-                        label: const Text('내가 배정한 과제 조회'),
+                      _buildList(
+                        controller: _ownerScroll,
+                        refreshing: _ownerRefreshing,
+                        loadingMore: _ownerLoading,
+                        hasMore: _ownerHasMore,
+                        items: ownerView,
+                        onRefresh: _refreshOwner,
                       ),
                     ],
                   ),
                 ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildCreatePanel() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Create (teacher=${_teacherUsername ?? "-"})',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: _creating ? null : _createAssignment,
+                    child: _creating
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Create'),
+                  ),
+                ],
               ),
-              _section('내가 배정한 과제 (filter=teacherUsername)', _teacherList),
-              _section('내 과제 (owner-only server filter)', _ownerOnlyList),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _studentUsernameController,
+                decoration: const InputDecoration(
+                  labelText: 'studentUsername',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: 'title',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _descriptionController,
+                minLines: 1,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'description (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildToolbar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
+              hintText: '검색: title / studentUsername / description',
+              border: const OutlineInputBorder(),
+              suffixIcon: _searchText.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchText = '');
+                      },
+                      icon: const Icon(Icons.clear),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownMenu<_StatusFilter>(
+                  label: const Text('Status'),
+                  initialSelection: _statusFilter,
+                  dropdownMenuEntries: const [
+                    DropdownMenuEntry(value: _StatusFilter.all, label: 'ALL'),
+                    DropdownMenuEntry(value: _StatusFilter.assigned, label: 'ASSIGNED'),
+                    DropdownMenuEntry(value: _StatusFilter.done, label: 'DONE'),
+                  ],
+                  onSelected: (v) => setState(() => _statusFilter = v ?? _StatusFilter.all),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownMenu<_SortMode>(
+                  label: const Text('Sort'),
+                  initialSelection: _sortMode,
+                  dropdownMenuEntries: const [
+                    DropdownMenuEntry(value: _SortMode.newest, label: 'Newest'),
+                    DropdownMenuEntry(value: _SortMode.dueDate, label: 'Due date'),
+                    DropdownMenuEntry(value: _SortMode.title, label: 'Title'),
+                  ],
+                  onSelected: (v) => setState(() => _sortMode = v ?? _SortMode.newest),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildList({
+    required ScrollController controller,
+    required bool refreshing,
+    required bool loadingMore,
+    required bool hasMore,
+    required List<Assignment> items,
+    required Future<void> Function() onRefresh,
+  }) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.separated(
+        controller: controller,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+        itemCount: items.length + 1,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, i) {
+          if (i == items.length) {
+            if (refreshing) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (loadingMore) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (!hasMore) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: Text('끝')),
+              );
+            }
+            return const SizedBox(height: 16);
+          }
+
+          final a = items[i];
+          final status = a.status.name;
+          final due = a.dueDate?.getDateTimeInUtc();
+          final dueText = due == null ? '-' : due.toLocal().toString().split('.').first;
+
+          return Card(
+            child: ListTile(
+              title: Text(a.title),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  Text('student: ${a.studentUsername}'),
+                  Text('status: $status'),
+                  Text('due: $dueText'),
+                  if ((a.description ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(a.description!.trim()),
+                  ],
+                ],
+              ),
+              trailing: PopupMenuButton<String>(
+                onSelected: (k) async {
+                  if (k == 'sheet') {
+                    await _openActionSheet(a);
+                    return;
+                  }
+                  if (k == 'copy') {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await Clipboard.setData(ClipboardData(text: a.id));
+                    if (!mounted) return;
+                    messenger.showSnackBar(const SnackBar(content: Text('ID copied')));
+                    return;
+                  }
+                  if (k == 'delete') {
+                    await _deleteDirect(a);
+                    return;
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'sheet', child: Text('Actions')),
+                  PopupMenuItem(value: 'copy', child: Text('Copy ID')),
+                  PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

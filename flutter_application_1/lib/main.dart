@@ -11,8 +11,9 @@ import 'amplifyconfiguration.dart';
 
 // 기존 테스트 페이지
 import 'features/dev/aws_smoketest_page.dart';
-// 신규: 과제 도메인 스모크
-import 'features/dev/assignments_dev_page.dart';
+
+// ✅ 실제 교사용 Assignments 페이지(우리가 작업한 화면)
+import 'features/teacher/pages/teacher_assignments_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,9 +50,10 @@ class EVAttendanceApp extends StatefulWidget {
 
 class _EVAttendanceAppState extends State<EVAttendanceApp> {
   int _index = 0;
+
   final _pages = const [
     AwsSmokeTestPage(),
-    AssignmentsDevPage(),
+    TeacherAssignmentsPage(), // ✅ 여기로 교체
   ];
 
   @override
