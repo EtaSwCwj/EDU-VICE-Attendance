@@ -4,6 +4,7 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 
 import '../../../models/ModelProvider.dart';
 import '../data/assignment_repository.dart';
+import '../widgets/assignment_action_sheet.dart';
 
 class TeacherAssignmentsPage extends StatefulWidget {
   const TeacherAssignmentsPage({super.key});
@@ -42,15 +43,15 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     setState(() => _isLoading = true);
     try {
       final user = await Amplify.Auth.getCurrentUser();
-      _username = user.username;
+      if (!mounted) return;
+      _username = user.username; // non-null
       await _refreshLists();
     } catch (e) {
       safePrint(e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('세션 확인 실패')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('세션 확인 실패')),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -80,10 +81,12 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
   Future<void> _create() async {
     final student = _studentController.text.trim();
     final title = _titleController.text.trim();
-    final desc = _descController.text.trim().isEmpty ? null : _descController.text.trim();
+    final descText = _descController.text.trim();
+    final String? desc = descText.isEmpty ? null : descText;
 
     if (student.isEmpty || title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
         const SnackBar(content: Text('studentUsername, title은 필수입니다')),
       );
       return;
@@ -103,22 +106,22 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       await _refreshLists();
     } catch (e) {
       safePrint(e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('생성 실패: $e')),
-        );
-      }
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(SnackBar(content: Text('생성 실패: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _confirmDelete(Assignment a) async {
+    final messenger = ScaffoldMessenger.of(context);
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('과제 삭제'),
-        content: Text('정말 삭제할까요?\n\n${a.title ?? '(제목 없음)'}'),
+        content: Text('정말 삭제할까요?\n\n${a.title}'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('삭제')),
@@ -133,11 +136,8 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       await _refreshLists();
     } catch (e) {
       safePrint(e);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('삭제 실패: $e')),
-        );
-      }
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('삭제 실패: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -168,28 +168,37 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
   }
 
   Widget _assignmentTile(Assignment a) {
-    final subtitle = [
+    // a.title: non-null, a.status: non-null enum, a.description: nullable
+    final desc = a.description;
+    final subtitleParts = <String>[
       'by ${a.teacherUsername} → ${a.studentUsername}',
-      if (a.status != null) a.status!.name,
-      if (a.description != null) a.description!,
-    ].join(' · ');
+      a.status.name,
+      if (desc != null && desc.isNotEmpty) desc,
+    ];
+    final subtitle = subtitleParts.join(' · ');
 
     return ListTile(
       leading: const Icon(Icons.assignment_outlined),
-      title: Text(a.title ?? '(제목 없음)'),
+      title: Text(a.title),
       subtitle: Text(subtitle),
-      // ✨ 우측 메뉴: 삭제 / ID 복사
       trailing: PopupMenuButton<String>(
         icon: const Icon(Icons.more_vert, color: Colors.black87),
         onSelected: (v) async {
           switch (v) {
-            case 'copy':
+            case 'sheet':
+              await showAssignmentActionSheet(
+                context: context,
+                assignment: a,
+                onChanged: _refreshLists,
+                onDeleted: _refreshLists,
+              );
+              break;
+            case 'copyId':
               await Clipboard.setData(ClipboardData(text: a.id));
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('ID가 클립보드에 복사되었습니다')),
-                );
-              }
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('ID 복사됨')),
+              );
               break;
             case 'delete':
               await _confirmDelete(a);
@@ -197,18 +206,29 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
           }
         },
         itemBuilder: (ctx) => const [
-          PopupMenuItem(value: 'copy', child: Text('ID 복사')),
+          PopupMenuItem(value: 'sheet', child: Text('액션 시트')),
+          PopupMenuItem(value: 'copyId', child: Text('ID 복사')),
           PopupMenuItem(
             value: 'delete',
             child: Text('삭제', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
+      onLongPress: () async {
+        await showAssignmentActionSheet(
+          context: context,
+          assignment: a,
+          onChanged: _refreshLists,
+          onDeleted: _refreshLists,
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final displayName = _username.isEmpty ? '(알 수 없음)' : _username;
+
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -223,8 +243,10 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                   children: [
                     const Icon(Icons.person, size: 20),
                     const SizedBox(width: 8),
-                    Text(_username.isEmpty ? '(알 수 없음)' : _username,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      displayName,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     if (_isLoading) ...[
                       const SizedBox(width: 12),
                       const SizedBox(
