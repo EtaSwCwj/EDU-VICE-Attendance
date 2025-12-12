@@ -1,41 +1,31 @@
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:amplify_api/amplify_api.dart'; // ModelQueries / ModelMutations
+import 'package:amplify_api/amplify_api.dart'; // <-- ModelQueries, ModelMutations 여기에 있음
 import '../../../models/ModelProvider.dart';
 
-/// 교사용 과제 CRUD + 목록
 class AssignmentRepository {
-  /// 교사가 배정한 과제 목록 (페이징 미포함: 필요 시 이후 단계에서 확장)
-  Future<List<Assignment>> listByTeacher({
+  /// 교사가 배정한 과제 목록 (teacherUsername 필터)
+  Future<List<Assignment>> listAssignmentsByTeacher({
     required String teacherUsername,
-    int limit = 20,
   }) async {
-    final req = ModelQueries.list<Assignment>(
+    final req = ModelQueries.list(
       Assignment.classType,
       where: Assignment.TEACHERUSERNAME.eq(teacherUsername),
-      limit: limit,
     );
     final res = await Amplify.API.query(request: req).response;
-    _throwIfError(res);
-    return res.data?.items.whereType<Assignment>().toList() ?? <Assignment>[];
+    if (res.data == null) return [];
+    return res.data!.items.whereType<Assignment>().toList();
   }
 
-  /// 학생 기준 목록 (다음 단계에서 사용, 페이징 미포함)
-  Future<List<Assignment>> listByStudent({
-    required String studentUsername,
-    int limit = 20,
-  }) async {
-    final req = ModelQueries.list<Assignment>(
-      Assignment.classType,
-      where: Assignment.STUDENTUSERNAME.eq(studentUsername),
-      limit: limit,
-    );
+  /// owner-only 규칙으로 서버에서 필터된 "내 과제" 목록
+  Future<List<Assignment>> listAssignmentsOwnerOnly() async {
+    final req = ModelQueries.list(Assignment.classType);
     final res = await Amplify.API.query(request: req).response;
-    _throwIfError(res);
-    return res.data?.items.whereType<Assignment>().toList() ?? <Assignment>[];
+    if (res.data == null) return [];
+    return res.data!.items.whereType<Assignment>().toList();
   }
 
-  /// 생성
-  Future<Assignment> create({
+  /// 과제 생성
+  Future<void> createAssignment({
     required String teacherUsername,
     required String studentUsername,
     required String title,
@@ -49,34 +39,16 @@ class AssignmentRepository {
       status: AssignmentStatus.ASSIGNED,
     );
     final req = ModelMutations.create(item);
-    final res = await Amplify.API.mutate(request: req).response;
-    _throwIfError(res);
-    return res.data!;
+    await Amplify.API.mutate(request: req).response;
   }
 
-  /// 상태 변경
-  Future<Assignment> updateStatus({
-    required Assignment assignment,
-    required AssignmentStatus status,
-  }) async {
-    final updated = assignment.copyWith(status: status);
-    final req = ModelMutations.update(updated);
-    final res = await Amplify.API.mutate(request: req).response;
-    _throwIfError(res);
-    return res.data!;
-  }
-
-  /// 삭제
-  Future<void> delete({required Assignment assignment}) async {
-    final req = ModelMutations.delete(assignment);
-    final res = await Amplify.API.mutate(request: req).response;
-    _throwIfError(res);
-  }
-
-  void _throwIfError(GraphQLResponse<dynamic> res) {
-    if (res.errors.isNotEmpty) {
-      final msg = res.errors.map((e) => e.message).join('; ');
-      throw Exception(msg);
-    }
+  /// 과제 삭제(id만으로)
+  Future<void> deleteAssignment(String id) async {
+    // 필수 필드 있는 모델은 인스턴스 생성 대신 deleteById 사용
+    final req = ModelMutations.deleteById(
+      Assignment.classType,
+      AssignmentModelIdentifier(id: id),
+    );
+    await Amplify.API.mutate(request: req).response;
   }
 }
