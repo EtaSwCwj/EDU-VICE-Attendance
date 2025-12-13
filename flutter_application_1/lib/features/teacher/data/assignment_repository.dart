@@ -52,7 +52,9 @@ class AssignmentRepository {
     final resp = await Amplify.API.query(request: req).response;
     _throwIfHasErrors(resp);
 
-    if (resp.data == null) return const AssignmentPage(items: [], nextToken: null);
+    if (resp.data == null) {
+      return const AssignmentPage(items: [], nextToken: null);
+    }
 
     final map = jsonDecode(resp.data!) as Map<String, dynamic>;
     final data = (map['data'] ?? map) as Map<String, dynamic>;
@@ -72,8 +74,6 @@ class AssignmentRepository {
     required int limit,
     required String? nextToken,
   }) async {
-    // OwnerOnly은 서버 @auth로 판정. 클라는 listAssignments 호출만.
-    // ✅ ModelQueries.list 쓰지 말 것(_version/_deleted/_lastChangedAt 메타필드 이슈 회피)
     const doc = r'''
       query ListAssignmentsOwnerOnly($limit: Int, $nextToken: String) {
         listAssignments(limit: $limit, nextToken: $nextToken) {
@@ -93,7 +93,9 @@ class AssignmentRepository {
     final resp = await Amplify.API.query(request: req).response;
     _throwIfHasErrors(resp);
 
-    if (resp.data == null) return const AssignmentPage(items: [], nextToken: null);
+    if (resp.data == null) {
+      return const AssignmentPage(items: [], nextToken: null);
+    }
 
     final map = jsonDecode(resp.data!) as Map<String, dynamic>;
     final data = (map['data'] ?? map) as Map<String, dynamic>;
@@ -114,6 +116,7 @@ class AssignmentRepository {
     required String studentUsername,
     required String title,
     String? description,
+    String? dueDateUtcIso,
   }) async {
     const doc = r'''
       mutation CreateAssignment($input: CreateAssignmentInput!) {
@@ -127,6 +130,7 @@ class AssignmentRepository {
       'title': title,
       'status': AssignmentStatus.ASSIGNED.name,
       if (description != null) 'description': description,
+      if (dueDateUtcIso != null) 'dueDate': dueDateUtcIso,
     };
 
     final req = GraphQLRequest<String>(

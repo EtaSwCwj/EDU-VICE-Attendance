@@ -4,7 +4,8 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../models/ModelProvider.dart';
+import '../../../models/Assignment.dart';
+import '../../../models/AssignmentStatus.dart';
 import '../data/assignment_repository.dart';
 import '../widgets/assignment_action_sheet.dart';
 
@@ -38,24 +39,28 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
-  // ✅ 입력 UX (Next/Done + 포커스 이동)
   final FocusNode _studentFocus = FocusNode();
   final FocusNode _titleFocus = FocusNode();
   final FocusNode _descFocus = FocusNode();
 
+  // ✅ due date (local date only UI)
+  DateTime? _dueDateLocal; // 날짜만 의미있게 사용 (시간은 23:59로 고정 저장)
+
   final ScrollController _myScroll = ScrollController();
-  bool _myLoading = false; // load-more
-  bool _myRefreshing = false; // pull-to-refresh / first load
+  bool _myLoading = false;
+  bool _myRefreshing = false;
   bool _myHasMore = true;
   String? _myNextToken;
   final List<Assignment> _myItems = [];
+  String? _myLastError;
 
   final ScrollController _ownerScroll = ScrollController();
-  bool _ownerLoading = false; // load-more
-  bool _ownerRefreshing = false; // pull-to-refresh / first load
+  bool _ownerLoading = false;
+  bool _ownerRefreshing = false;
   bool _ownerHasMore = true;
   String? _ownerNextToken;
   final List<Assignment> _ownerItems = [];
+  String? _ownerLastError;
 
   int _tabIndex = 0;
 
@@ -147,9 +152,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _showError(String message) {
-    _showSnack(message);
-  }
+  void _showError(String message) => _showSnack(message);
 
   bool get _isHeaderBusy {
     if (_creating) return true;
@@ -160,7 +163,6 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
   ScrollController get _activeScroll => _tabIndex == 0 ? _myScroll : _ownerScroll;
 
   Future<void> _scrollToTop() async {
-    // 리스트 렌더링 반영 후 스크롤(안전)
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
     if (!_activeScroll.hasClients) return;
@@ -172,7 +174,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     );
   }
 
-  // --------- View transforms (search/filter/sort) ---------
+  // ---------------- View transforms ----------------
   bool _matchesSearch(Assignment a) {
     if (_searchText.isEmpty) return true;
     final q = _searchText.toLowerCase();
@@ -208,7 +210,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       case _SortMode.dueDate:
         final ad = a.dueDate?.getDateTimeInUtc();
         final bd = b.dueDate?.getDateTimeInUtc();
-        if (ad != null && bd != null) return ad.compareTo(bd);
+        if (ad != null && bd != null) return ad.compareTo(bd); // 가까운 due 먼저
         if (ad != null) return -1;
         if (bd != null) return 1;
         return 0;
@@ -224,9 +226,23 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     return out;
   }
 
-  // --------- Pagination loaders ---------
+  // ---------------- Error normalization ----------------
+  String _prettyError(Object e) {
+    final msg = e.toString();
 
-  // 새로고침할 때 기존 리스트를 지우지 않음(UX). 성공하면 교체.
+    if (msg.contains('Not Authorized') || msg.contains('Unauthorized') || msg.contains('401')) {
+      return '권한이 없습니다. (Cognito 세션/그룹/권한 정책 확인 필요)';
+    }
+    if (msg.contains('Validation') || msg.contains('FieldUndefined')) {
+      return '스키마/쿼리 불일치가 감지되었습니다. (백엔드 스키마와 앱 codegen 동기화 확인)';
+    }
+    if (msg.contains('Network') || msg.contains('Socket') || msg.contains('timed out')) {
+      return '네트워크 문제로 요청이 실패했습니다. (연결 상태 확인)';
+    }
+    return '요청 실패: $msg';
+  }
+
+  // ---------------- Pagination loaders ----------------
   Future<void> _refreshMy() async {
     final username = _teacherUsername;
     if (username == null || username.isEmpty) return;
@@ -236,6 +252,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       _myRefreshing = true;
       _myHasMore = true;
       _myNextToken = null;
+      _myLastError = null;
     });
 
     try {
@@ -257,8 +274,11 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     } catch (e, st) {
       safePrint('refreshMy failed: $e\n$st');
       if (!mounted) return;
-      setState(() => _myRefreshing = false);
-      _showError('내 과제 새로고침 실패: $e');
+      setState(() {
+        _myRefreshing = false;
+        _myLastError = _prettyError(e);
+      });
+      _showError('내 과제 새로고침 실패');
     }
   }
 
@@ -292,8 +312,11 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     } catch (e, st) {
       safePrint('loadMoreMy failed: $e\n$st');
       if (!mounted) return;
-      setState(() => _myLoading = false);
-      _showError('추가 로드 실패: $e');
+      setState(() {
+        _myLoading = false;
+        _myLastError = _prettyError(e);
+      });
+      _showError('추가 로드 실패');
     }
   }
 
@@ -303,6 +326,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       _ownerRefreshing = true;
       _ownerHasMore = true;
       _ownerNextToken = null;
+      _ownerLastError = null;
     });
 
     try {
@@ -323,8 +347,11 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     } catch (e, st) {
       safePrint('refreshOwner failed: $e\n$st');
       if (!mounted) return;
-      setState(() => _ownerRefreshing = false);
-      _showError('Owner 목록 새로고침 실패: $e');
+      setState(() {
+        _ownerRefreshing = false;
+        _ownerLastError = _prettyError(e);
+      });
+      _showError('Owner 목록 새로고침 실패');
     }
   }
 
@@ -355,12 +382,60 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     } catch (e, st) {
       safePrint('loadMoreOwner failed: $e\n$st');
       if (!mounted) return;
-      setState(() => _ownerLoading = false);
-      _showError('추가 로드 실패: $e');
+      setState(() {
+        _ownerLoading = false;
+        _ownerLastError = _prettyError(e);
+      });
+      _showError('추가 로드 실패');
     }
   }
 
-  // --------- Actions ---------
+  // ---------------- dueDate helper ----------------
+  String? _buildDueDateUtcIsoFromLocalDate(DateTime? localDate) {
+    if (localDate == null) return null;
+
+    // 날짜만 받기 때문에, “그날 23:59” 로컬 시간으로 저장 (마감 느낌)
+    final localEndOfDay = DateTime(
+      localDate.year,
+      localDate.month,
+      localDate.day,
+      23,
+      59,
+      0,
+    );
+
+    return localEndOfDay.toUtc().toIso8601String();
+    // 예: 2025-12-13T14:59:00.000Z (KST 기준)
+  }
+
+  String _formatDateYmd(DateTime? dtLocal) {
+    if (dtLocal == null) return '-';
+    final y = dtLocal.year.toString().padLeft(4, '0');
+    final m = dtLocal.month.toString().padLeft(2, '0');
+    final d = dtLocal.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  Future<void> _pickDueDate() async {
+    _hideKeyboard();
+
+    final now = DateTime.now();
+    final initial = _dueDateLocal ?? now;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 1, 1, 1),
+      lastDate: DateTime(now.year + 3, 12, 31),
+    );
+
+    if (!mounted) return;
+    if (picked == null) return;
+
+    setState(() => _dueDateLocal = DateTime(picked.year, picked.month, picked.day));
+  }
+
+  // ---------------- Actions ----------------
   Future<void> _createAssignment() async {
     final teacherUsername = _teacherUsername;
     if (teacherUsername == null || teacherUsername.isEmpty) {
@@ -377,6 +452,8 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       return;
     }
 
+    final dueUtcIso = _buildDueDateUtcIsoFromLocalDate(_dueDateLocal);
+
     _hideKeyboard();
     setState(() => _creating = true);
 
@@ -386,6 +463,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
         studentUsername: student,
         title: title,
         description: desc.isEmpty ? null : desc,
+        dueDateUtcIso: dueUtcIso,
       );
 
       if (!mounted) return;
@@ -393,8 +471,10 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       _studentUsernameController.clear();
       _titleController.clear();
       _descriptionController.clear();
-
-      setState(() => _createExpanded = false);
+      setState(() {
+        _dueDateLocal = null;
+        _createExpanded = false;
+      });
 
       if (_tabIndex == 0) {
         await _refreshMy();
@@ -408,7 +488,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     } catch (e, st) {
       safePrint('createAssignment failed: $e\n$st');
       if (!mounted) return;
-      _showError('생성 실패: $e');
+      _showError(_prettyError(e));
     } finally {
       if (mounted) setState(() => _creating = false);
     }
@@ -472,11 +552,11 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     } catch (e, st) {
       safePrint('delete failed: $e\n$st');
       if (!mounted) return;
-      _showError('삭제 실패: $e');
+      _showError(_prettyError(e));
     }
   }
 
-  // --------- UI ---------
+  // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
     final myView = _applyViewTransform(_myItems);
@@ -525,7 +605,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
             const Divider(height: 1),
             Expanded(
               child: _booting
-                  ? _buildBootSkeleton()
+                  ? _buildSkeletonList(count: 6)
                   : IndexedStack(
                       index: _tabIndex,
                       children: [
@@ -538,6 +618,9 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                           onRefresh: _refreshMy,
                           emptyTitle: '내 과제가 없습니다.',
                           emptyHint: '위에서 Create를 펼쳐서 새 과제를 만들어보세요.',
+                          header: _myLastError == null
+                              ? null
+                              : _ErrorBanner(message: _myLastError!),
                         ),
                         _buildListCompact(
                           controller: _ownerScroll,
@@ -547,7 +630,16 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                           items: ownerView,
                           onRefresh: _refreshOwner,
                           emptyTitle: 'OwnerOnly 항목이 없습니다.',
-                          emptyHint: '권한 정책에 의해 보이는 데이터가 제한될 수 있습니다.',
+                          emptyHint: '이 탭은 서버 @auth 정책에 따라 owners 그룹만 더 많은 데이터를 볼 수 있습니다.',
+                          header: Column(
+                            children: [
+                              const _OwnerPolicyBanner(),
+                              if (_ownerLastError != null) ...[
+                                const SizedBox(height: 8),
+                                _ErrorBanner(message: _ownerLastError!),
+                              ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -556,10 +648,6 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
         ),
       ),
     );
-  }
-
-  Widget _buildBootSkeleton() {
-    return _buildSkeletonList(count: 6);
   }
 
   Widget _buildCreateCollapsible() {
@@ -642,6 +730,42 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                         decoration: const InputDecoration(
                           labelText: 'description (optional)',
                           border: OutlineInputBorder(),
+                        ),
+                      ),
+
+                      // ✅ dueDate UI
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _pickDueDate,
+                              icon: const Icon(Icons.event),
+                              label: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Due date: ${_formatDateYmd(_dueDateLocal)}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            tooltip: 'Clear due date',
+                            onPressed: _dueDateLocal == null
+                                ? null
+                                : () => setState(() => _dueDateLocal = null),
+                            icon: const Icon(Icons.clear),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '※ dueDate는 “해당 날짜 23:59(로컬)” 기준으로 저장됩니다.',
+                          style: TextStyle(fontSize: 12),
                         ),
                       ),
                     ],
@@ -731,6 +855,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     required Future<void> Function() onRefresh,
     required String emptyTitle,
     required String emptyHint,
+    Widget? header,
   }) {
     final bool showSkeleton = refreshing && items.isEmpty;
 
@@ -741,65 +866,72 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       },
       child: showSkeleton
           ? _buildSkeletonList(count: 6, controller: controller)
-          : (items.isEmpty
-              ? ListView(
-                  controller: controller,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(12, 40, 12, 20),
-                  children: [
-                    Center(
-                      child: Text(
-                        emptyTitle,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        emptyHint,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                )
-              : ListView.separated(
-                  controller: controller,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
-                  itemCount: items.length + 1,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, i) {
-                    if (i == items.length) {
-                      if (loadingMore) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      if (!hasMore) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Center(child: Text('끝')),
-                        );
-                      }
-                      return const SizedBox(height: 16);
-                    }
+          : ListView.separated(
+              controller: controller,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
+              itemCount: 1 + (header != null ? 1 : 0) + (items.isEmpty ? 1 : (items.length + 1)),
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, i) {
+                int cursor = 0;
 
-                    final a = items[i];
-                    return _AssignmentTile(
-                      a: a,
-                      onActions: () => _openActionSheet(a),
-                      onCopyId: () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        await Clipboard.setData(ClipboardData(text: a.id));
-                        if (!mounted) return;
-                        messenger.showSnackBar(const SnackBar(content: Text('ID copied')));
-                      },
-                      onDelete: () => _deleteDirect(a),
+                if (header != null) {
+                  if (i == cursor) return header;
+                  cursor += 1;
+                }
+
+                if (items.isEmpty) {
+                  if (i == cursor) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 30),
+                      child: Column(
+                        children: [
+                          Text(emptyTitle, style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          Text(
+                            emptyHint,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     );
-                  },
-                )),
+                  }
+                  return const SizedBox.shrink();
+                }
+
+                final listIndex = i - cursor;
+                if (listIndex < items.length) {
+                  final a = items[listIndex];
+                  return _AssignmentTile(
+                    a: a,
+                    onActions: () => _openActionSheet(a),
+                    onCopyId: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      await Clipboard.setData(ClipboardData(text: a.id));
+                      if (!mounted) return;
+                      messenger.showSnackBar(const SnackBar(content: Text('ID copied')));
+                    },
+                    onDelete: () => _deleteDirect(a),
+                    formatYmd: _formatDateYmd,
+                  );
+                }
+
+                if (loadingMore) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (!hasMore) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: Text('더 이상 없음')),
+                  );
+                }
+                return const SizedBox(height: 16);
+              },
+            ),
     );
   }
 
@@ -861,19 +993,22 @@ class _AssignmentTile extends StatelessWidget {
   final VoidCallback onActions;
   final Future<void> Function() onCopyId;
   final VoidCallback onDelete;
+  final String Function(DateTime?) formatYmd;
 
   const _AssignmentTile({
     required this.a,
     required this.onActions,
     required this.onCopyId,
     required this.onDelete,
+    required this.formatYmd,
   });
 
   @override
   Widget build(BuildContext context) {
     final statusText = a.status.name;
-    final due = a.dueDate?.getDateTimeInUtc();
-    final dueText = due == null ? '-' : due.toLocal().toString().split('.').first;
+    final dueUtc = a.dueDate?.getDateTimeInUtc();
+    final dueLocal = dueUtc?.toLocal();
+    final dueText = formatYmd(dueLocal);
 
     return Card(
       child: ListTile(
@@ -949,6 +1084,69 @@ class _MetaChip extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _OwnerPolicyBanner extends StatelessWidget {
+  const _OwnerPolicyBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.info_outline),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('OwnerOnly 탭 안내', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '• 이 탭은 서버(AppSync) @auth 정책이 최종 판정합니다.\n'
+                    '• 현재 계정이 owners 그룹이 아니면 “비어있어도 정상”입니다.\n'
+                    '• 권한이 없으면 401/Not Authorized가 나올 수 있습니다.',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  const _ErrorBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      color: cs.errorContainer.withValues(alpha: 0.65),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, color: cs.onErrorContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(color: cs.onErrorContainer),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
