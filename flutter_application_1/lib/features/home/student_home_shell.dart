@@ -1,9 +1,11 @@
 // lib/features/home/student_home_shell.dart
 import 'package:flutter/material.dart';
+
 import '../homework/homework_page.dart';
+import '../student_assignments/student_assignments_page.dart';
 
 /// 학생 전용 홈 셸
-/// - 탭: [대시보드, 학습(숙제)]
+/// - 탭: [대시보드, 학습(로컬 숙제), 선생님 과제(AWS)]
 class StudentHomeShell extends StatefulWidget {
   const StudentHomeShell({super.key});
 
@@ -18,9 +20,10 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       const _StudentDashboardStub(),
-      const HomeworkPage(), // 기존 학생용 숙제/학습 탭
+      const HomeworkPage(), // 기존 학생용 로컬(학습/숙제)
+      const StudentAssignmentsPage(), // ✅ AWS(선생님 과제)
     ];
-    final titles = <String>["학생 대시보드", "학습"];
+    final titles = <String>["학생 대시보드", "학습", "선생님 과제"];
 
     return Scaffold(
       appBar: AppBar(title: Text(titles[_index])),
@@ -37,6 +40,11 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
             icon: Icon(Icons.menu_book_outlined),
             selectedIcon: Icon(Icons.menu_book),
             label: '학습',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment),
+            label: '과제',
           ),
         ],
         onDestinationSelected: (i) => setState(() => _index = i),

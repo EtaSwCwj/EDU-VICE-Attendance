@@ -1,9 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 // Amplify
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_api/amplify_api.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 
 // amplify pull 산출물
 import 'amplifyconfiguration.dart';
@@ -11,7 +13,7 @@ import 'amplifyconfiguration.dart';
 // 페이지들
 import 'features/dev/aws_smoketest_page.dart';
 import 'features/teacher/pages/teacher_assignments_page.dart';
-
+import 'features/student_assignments/student_assignments_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +34,7 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
 
   final _pages = const [
     AwsSmokeTestPage(),
-    TeacherAssignmentsPage(),
+    _AssignmentsRoleGate(),
   ];
 
   @override
@@ -42,13 +44,11 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
   }
 
   Future<void> _initAmplifyOnce() async {
-    // ✅ 이미 구성되어 있으면 즉시 통과 (핫리로드/재진입 방지)
     if (Amplify.isConfigured) return;
 
     try {
-      // ✅ addPlugins는 반드시 await
       await Amplify.addPlugins([
-        AmplifyAPI(), // amplify_flutter에서 제공됨
+        AmplifyAPI(),
         AmplifyAuthCognito(),
       ]);
 
@@ -75,14 +75,12 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
       home: FutureBuilder<void>(
         future: _amplifyInitFuture,
         builder: (context, snapshot) {
-          // ✅ 앱이 “멈춘 것처럼” 보이지 않게 로딩 화면을 먼저 그림
           if (snapshot.connectionState != ConnectionState.done) {
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
           }
 
-          // ✅ 초기화 실패 시 원인 표시
           if (snapshot.hasError) {
             return Scaffold(
               appBar: AppBar(title: const Text('Startup Error')),
@@ -111,3 +109,94 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
     );
   }
 }
+
+/// Assignments 탭: Cognito 그룹으로 Teacher/Student 화면 분기
+class _AssignmentsRoleGate extends StatefulWidget {
+  const _AssignmentsRoleGate();
+
+  @override
+  State<_AssignmentsRoleGate> createState() => _AssignmentsRoleGateState();
+}
+
+class _AssignmentsRoleGateState extends State<_AssignmentsRoleGate> {
+  late final Future<_Role> _roleFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _roleFuture = _resolveRole();
+  }
+
+  Future<_Role> _resolveRole() async {
+    try {
+      final session = await Amplify.Auth.fetchAuthSession();
+      if (!session.isSignedIn) return _Role.student;
+
+      final cognito = session as CognitoAuthSession;
+      final tokens = cognito.userPoolTokensResult.value;
+
+      // ✅ claims가 JsonWebClaims라 [] 접근이 안 됨 → JWT payload 직접 decode
+      final idToken = tokens.idToken.raw;
+      final payload = _decodeJwtPayload(idToken);
+
+      final groupsDyn = payload['cognito:groups'];
+      final groups = _asStringList(groupsDyn);
+
+      if (groups.contains('owners') || groups.contains('teachers')) {
+        return _Role.teacher;
+      }
+      return _Role.student;
+    } catch (e, st) {
+      safePrint('Role resolve failed: $e\n$st');
+      return _Role.student;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_Role>(
+      future: _roleFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        final role = snapshot.data ?? _Role.student;
+
+        if (role == _Role.teacher) {
+          return const TeacherAssignmentsPage();
+        }
+        return const StudentAssignmentsPage();
+      },
+    );
+  }
+
+  /// JWT payload(base64url) decode → Map
+  Map<String, dynamic> _decodeJwtPayload(String jwt) {
+    final parts = jwt.split('.');
+    if (parts.length != 3) return <String, dynamic>{};
+
+    final payloadPart = parts[1];
+    final normalized = base64Url.normalize(payloadPart);
+    final bytes = base64Url.decode(normalized);
+    final jsonStr = utf8.decode(bytes);
+
+    final obj = jsonDecode(jsonStr);
+    if (obj is Map<String, dynamic>) return obj;
+    return <String, dynamic>{};
+  }
+
+  List<String> _asStringList(dynamic v) {
+    if (v == null) return const <String>[];
+    if (v is List) {
+      return v.whereType<String>().toList();
+    }
+    if (v is String) {
+      // sometimes a single group might come as string
+      return <String>[v];
+    }
+    return const <String>[];
+  }
+}
+
+enum _Role { teacher, student }
