@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/Assignment.dart';
 import '../../models/AssignmentStatus.dart';
+import 'student_assignment_detail_page.dart';
 import 'student_assignment_repository.dart';
 
 enum _StatusFilter { all, assigned, done }
@@ -57,6 +58,13 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     super.dispose();
   }
 
+  void _snack(String msg) {
+    if (!mounted) return;
+    final m = ScaffoldMessenger.of(context);
+    m.clearSnackBars();
+    m.showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   Future<void> _boot() async {
     setState(() => _booting = true);
     try {
@@ -76,13 +84,6 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
       setState(() => _booting = false);
       _snack('로그인 세션 확인 필요: $e');
     }
-  }
-
-  void _snack(String msg) {
-    if (!mounted) return;
-    final m = ScaffoldMessenger.of(context);
-    m.clearSnackBars();
-    m.showSnackBar(SnackBar(content: Text(msg)));
   }
 
   void _hideKeyboard() {
@@ -184,6 +185,34 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     }
   }
 
+  // TemporalDateTime/TemporalDate 대응: dueDate -> local ymd 문자열
+  DateTime? _temporalToLocalDateTime(Object? v) {
+    if (v == null) return null;
+
+    if (v is TemporalDateTime) {
+      return v.getDateTimeInUtc().toLocal();
+    }
+    if (v is TemporalDate) {
+      final s = v.format();
+      final parts = s.split('-');
+      if (parts.length == 3) {
+        final y = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final d = int.tryParse(parts[2]);
+        if (y != null && m != null && d != null) return DateTime(y, m, d);
+      }
+      return null;
+    }
+
+    try {
+      return DateTime.parse(v.toString()).toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  DateTime? _dueLocal(Assignment a) => _temporalToLocalDateTime((a as dynamic).dueDate);
+
   String _ymd(DateTime? local) {
     if (local == null) return '-';
     final y = local.year.toString().padLeft(4, '0');
@@ -191,6 +220,9 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     final d = local.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
   }
+
+  bool _isSameLocalDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   List<Assignment> _applyView(List<Assignment> src) {
     Iterable<Assignment> it = src;
@@ -223,9 +255,31 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
       return aa.compareTo(bb);
     }
 
+    final now = DateTime.now();
+
     list.sort((a, b) {
-      final aCreated = a.createdAt?.getDateTimeInUtc();
-      final bCreated = b.createdAt?.getDateTimeInUtc();
+      final aDone = a.status == AssignmentStatus.DONE;
+      final bDone = b.status == AssignmentStatus.DONE;
+      if (aDone != bDone) return aDone ? 1 : -1;
+
+      final aDue = _dueLocal(a);
+      final bDue = _dueLocal(b);
+
+      final aToday = aDue != null && _isSameLocalDay(aDue, now);
+      final bToday = bDue != null && _isSameLocalDay(bDue, now);
+      if (aToday != bToday) return aToday ? -1 : 1;
+
+      if (aDue != null && bDue != null) {
+        final c = aDue.compareTo(bDue);
+        if (c != 0) return c;
+      } else if (aDue != null && bDue == null) {
+        return -1;
+      } else if (aDue == null && bDue != null) {
+        return 1;
+      }
+
+      final aCreated = _temporalToLocalDateTime((a as dynamic).createdAt);
+      final bCreated = _temporalToLocalDateTime((b as dynamic).createdAt);
       final c = cmpDate(aCreated, bCreated);
       return _sortMode == _SortMode.newest ? -c : c;
     });
@@ -233,10 +287,34 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     return list;
   }
 
+  Future<void> _openDetail(Assignment a) async {
+    _hideKeyboard();
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => StudentAssignmentDetailPage(assignment: a),
+      ),
+    );
+
+    // ✅ 상세에서 상태 바꾸면 pop(true)로 돌아오게 설계
+    if (changed == true) {
+      await _refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = _studentUsername == null ? '선생님 과제' : '선생님 과제 (내 계정: $_studentUsername)';
     final view = _applyView(_items);
+
+    final total = _items.length;
+    final assignedCnt = _items.where((a) => a.status == AssignmentStatus.ASSIGNED).length;
+    final doneCnt = _items.where((a) => a.status == AssignmentStatus.DONE).length;
+
+    final now = DateTime.now();
+    final todayDueCnt = _items.where((a) {
+      final d = _dueLocal(a);
+      return d != null && a.status == AssignmentStatus.ASSIGNED && _isSameLocalDay(d, now);
+    }).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -257,8 +335,35 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                 ? const LinearProgressIndicator(minHeight: 3)
                 : const SizedBox(height: 3),
           ),
+
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('오늘 할 일 요약', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        _pill(context, Icons.inbox, '전체 $total'),
+                        _pill(context, Icons.pending_actions, '진행중 $assignedCnt'),
+                        _pill(context, Icons.check_circle, '완료 $doneCnt'),
+                        _pill(context, Icons.today, '오늘 마감 $todayDueCnt'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Column(
               children: [
                 TextField(
@@ -277,7 +382,6 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<_StatusFilter>(
-                        // ✅ value → initialValue
                         initialValue: _statusFilter,
                         decoration: const InputDecoration(
                           labelText: 'Status',
@@ -298,10 +402,9 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: DropdownButtonFormField<_SortMode>(
-                        // ✅ value → initialValue
                         initialValue: _sortMode,
                         decoration: const InputDecoration(
-                          labelText: 'Sort',
+                          labelText: 'Sort(보조)',
                           border: OutlineInputBorder(),
                         ),
                         items: const [
@@ -320,6 +423,7 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
               ],
             ),
           ),
+
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
@@ -359,55 +463,75 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                             }
 
                             final a = view[i];
-                            final dueLocal = a.dueDate?.getDateTimeInUtc().toLocal();
+                            final dueLocal = _dueLocal(a);
                             final dueText = _ymd(dueLocal);
                             final isDone = a.status == AssignmentStatus.DONE;
+                            final isToday = dueLocal != null && _isSameLocalDay(dueLocal, DateTime.now());
 
-                            return Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      a.title,
-                                      style: Theme.of(context).textTheme.titleMedium,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 6,
-                                      children: [
-                                        _chip(context, Icons.person, 'teacher: ${a.teacherUsername}'),
-                                        _chip(context, Icons.event, 'due: $dueText'),
-                                        _chip(context, Icons.flag, 'status: ${a.status.name}'),
+                            return InkWell(
+                              onTap: () => _openDetail(a),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              a.title,
+                                              style: Theme.of(context).textTheme.titleMedium,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (isToday && !isDone) ...[
+                                            const SizedBox(width: 8),
+                                            _tag(context, 'TODAY'),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 6,
+                                        children: [
+                                          _chip(context, Icons.person, 'teacher: ${a.teacherUsername}'),
+                                          _chip(context, Icons.event, 'due: $dueText'),
+                                          _chip(context, Icons.flag, 'status: ${a.status.name}'),
+                                        ],
+                                      ),
+                                      if ((a.description ?? '').trim().isNotEmpty) ...[
+                                        const SizedBox(height: 10),
+                                        Text(a.description!, style: Theme.of(context).textTheme.bodyMedium),
                                       ],
-                                    ),
-                                    if ((a.description ?? '').trim().isNotEmpty) ...[
                                       const SizedBox(height: 10),
-                                      Text(a.description!, style: Theme.of(context).textTheme.bodyMedium),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: FilledButton(
+                                              onPressed: isDone ? null : () => _markDone(a),
+                                              child: const Text('DONE'),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              onPressed: isDone ? () => _markAssigned(a) : null,
+                                              child: const Text('UNDO'),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '탭하면 상세로 이동',
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
                                     ],
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: FilledButton(
-                                            onPressed: isDone ? null : () => _markDone(a),
-                                            child: const Text('DONE'),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: OutlinedButton(
-                                            onPressed: isDone ? () => _markAssigned(a) : null,
-                                            child: const Text('UNDO'),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             );
@@ -417,6 +541,37 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _pill(BuildContext context, IconData icon, String text) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 6),
+          Text(text, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+
+  Widget _tag(BuildContext context, String text) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: cs.tertiaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(text, style: Theme.of(context).textTheme.labelSmall),
     );
   }
 

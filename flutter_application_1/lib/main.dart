@@ -10,10 +10,10 @@ import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 // amplify pull 산출물
 import 'amplifyconfiguration.dart';
 
-// 페이지들
+// Pages / Shells
 import 'features/dev/aws_smoketest_page.dart';
-import 'features/teacher/pages/teacher_assignments_page.dart';
-import 'features/student_assignments/student_assignments_page.dart';
+import 'features/teacher/teacher_shell.dart';
+import 'features/home/student_home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,8 +89,8 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
           }
 
           final pages = <Widget>[
-            const AwsSmokeTestPage(),
-            const _AssignmentsRoleRouter(),
+            const _RoleHomeRouter(), // ✅ TeacherShell / StudentHomeShell 자동 분기
+            const AwsSmokeTestPage(), // ✅ 테스트 보조 탭 유지
           ];
 
           return Scaffold(
@@ -100,12 +100,14 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
               onDestinationSelected: (i) => setState(() => _index = i),
               destinations: const [
                 NavigationDestination(
-                  icon: Icon(Icons.cloud_done),
-                  label: 'AWS Test',
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home),
+                  label: 'Home',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.assignment),
-                  label: 'Assignments',
+                  icon: Icon(Icons.cloud_done_outlined),
+                  selectedIcon: Icon(Icons.cloud_done),
+                  label: 'AWS Test',
                 ),
               ],
             ),
@@ -116,17 +118,17 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
   }
 }
 
-/// Assignments 탭은 "로그인된 Cognito 그룹" 기준으로 Teacher/Student 페이지를 자동 분기한다.
-/// - teachers/owners => TeacherAssignmentsPage
-/// - students/그 외 => StudentAssignmentsPage
-class _AssignmentsRoleRouter extends StatefulWidget {
-  const _AssignmentsRoleRouter();
+/// Home 탭은 "로그인된 Cognito 그룹" 기준으로 Teacher/Student 셸을 자동 분기한다.
+/// - teachers/owners => TeacherShell
+/// - students/그 외 => StudentHomeShell
+class _RoleHomeRouter extends StatefulWidget {
+  const _RoleHomeRouter();
 
   @override
-  State<_AssignmentsRoleRouter> createState() => _AssignmentsRoleRouterState();
+  State<_RoleHomeRouter> createState() => _RoleHomeRouterState();
 }
 
-class _AssignmentsRoleRouterState extends State<_AssignmentsRoleRouter> {
+class _RoleHomeRouterState extends State<_RoleHomeRouter> {
   late final Future<_Role> _roleFuture;
 
   @override
@@ -140,19 +142,15 @@ class _AssignmentsRoleRouterState extends State<_AssignmentsRoleRouter> {
       final session = await Amplify.Auth.fetchAuthSession();
       final cognitoSession = session as CognitoAuthSession;
 
-      // ✅ 너 프로젝트의 SDK에선 AuthResult에 isSuccess 같은 플래그가 없고,
-      //    value 접근이 실패 시 throw 되는 형태로 보임.
-      //    그래서 try/catch로 토큰 획득 성공 여부를 판단한다.
+      // 토큰을 얻지 못하면(로그인 안 됐거나 실패) -> student로 안전 기본값
       CognitoUserPoolTokens tokens;
       try {
         tokens = cognitoSession.userPoolTokensResult.value;
       } catch (_) {
-        // 로그인 안 됐거나 토큰 획득 실패: 안전하게 student
         return _Role.student;
       }
 
-      final idTokenRaw = tokens.idToken.raw;
-      final payload = _decodeJwtPayload(idTokenRaw);
+      final payload = _decodeJwtPayload(tokens.idToken.raw);
       final groups = _extractGroups(payload);
 
       if (groups.contains('owners') || groups.contains('teachers')) {
@@ -177,11 +175,10 @@ class _AssignmentsRoleRouterState extends State<_AssignmentsRoleRouter> {
         }
 
         final role = snapshot.data ?? _Role.student;
-
         if (role == _Role.teacher) {
-          return const TeacherAssignmentsPage();
+          return const TeacherShell();
         }
-        return const StudentAssignmentsPage();
+        return const StudentHomeShell();
       },
     );
   }
