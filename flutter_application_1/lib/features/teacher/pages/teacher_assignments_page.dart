@@ -26,33 +26,33 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
 
   String? _teacherUsername;
 
-  // ✅ Create 패널 접기/펼치기
   bool _createExpanded = false;
 
-  // Search/Filter/Sort
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   String _searchText = '';
   _StatusFilter _statusFilter = _StatusFilter.all;
   _SortMode _sortMode = _SortMode.newest;
 
-  // Create inputs
   final TextEditingController _studentUsernameController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
-  // Pagination (My)
+  // ✅ 입력 UX (Next/Done + 포커스 이동)
+  final FocusNode _studentFocus = FocusNode();
+  final FocusNode _titleFocus = FocusNode();
+  final FocusNode _descFocus = FocusNode();
+
   final ScrollController _myScroll = ScrollController();
-  bool _myLoading = false;
-  bool _myRefreshing = false;
+  bool _myLoading = false; // load-more
+  bool _myRefreshing = false; // pull-to-refresh / first load
   bool _myHasMore = true;
   String? _myNextToken;
   final List<Assignment> _myItems = [];
 
-  // Pagination (OwnerOnly)
   final ScrollController _ownerScroll = ScrollController();
-  bool _ownerLoading = false;
-  bool _ownerRefreshing = false;
+  bool _ownerLoading = false; // load-more
+  bool _ownerRefreshing = false; // pull-to-refresh / first load
   bool _ownerHasMore = true;
   String? _ownerNextToken;
   final List<Assignment> _ownerItems = [];
@@ -100,6 +100,10 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     _titleController.dispose();
     _descriptionController.dispose();
 
+    _studentFocus.dispose();
+    _titleFocus.dispose();
+    _descFocus.dispose();
+
     _myScroll.dispose();
     _ownerScroll.dispose();
 
@@ -114,9 +118,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       final username = user.username;
 
       if (!mounted) return;
-      setState(() {
-        _teacherUsername = username;
-      });
+      setState(() => _teacherUsername = username);
 
       await Future.wait([
         _refreshMy(),
@@ -133,10 +135,41 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     }
   }
 
-  void _showError(String message) {
+  void _hideKeyboard() {
+    final scope = FocusScope.of(context);
+    if (scope.hasFocus) scope.unfocus();
+  }
+
+  void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showError(String message) {
+    _showSnack(message);
+  }
+
+  bool get _isHeaderBusy {
+    if (_creating) return true;
+    if (_tabIndex == 0) return _myRefreshing;
+    return _ownerRefreshing;
+  }
+
+  ScrollController get _activeScroll => _tabIndex == 0 ? _myScroll : _ownerScroll;
+
+  Future<void> _scrollToTop() async {
+    // 리스트 렌더링 반영 후 스크롤(안전)
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    if (!_activeScroll.hasClients) return;
+
+    await _activeScroll.animateTo(
+      0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
   }
 
   // --------- View transforms (search/filter/sort) ---------
@@ -192,15 +225,17 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
   }
 
   // --------- Pagination loaders ---------
+
+  // 새로고침할 때 기존 리스트를 지우지 않음(UX). 성공하면 교체.
   Future<void> _refreshMy() async {
     final username = _teacherUsername;
     if (username == null || username.isEmpty) return;
 
+    if (!mounted) return;
     setState(() {
       _myRefreshing = true;
       _myHasMore = true;
       _myNextToken = null;
-      _myItems.clear();
     });
 
     try {
@@ -212,7 +247,9 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
 
       if (!mounted) return;
       setState(() {
-        _myItems.addAll(page.items);
+        _myItems
+          ..clear()
+          ..addAll(page.items);
         _myNextToken = page.nextToken;
         _myHasMore = page.nextToken != null && page.nextToken!.isNotEmpty;
         _myRefreshing = false;
@@ -261,11 +298,11 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
   }
 
   Future<void> _refreshOwner() async {
+    if (!mounted) return;
     setState(() {
       _ownerRefreshing = true;
       _ownerHasMore = true;
       _ownerNextToken = null;
-      _ownerItems.clear();
     });
 
     try {
@@ -276,7 +313,9 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
 
       if (!mounted) return;
       setState(() {
-        _ownerItems.addAll(page.items);
+        _ownerItems
+          ..clear()
+          ..addAll(page.items);
         _ownerNextToken = page.nextToken;
         _ownerHasMore = page.nextToken != null && page.nextToken!.isNotEmpty;
         _ownerRefreshing = false;
@@ -338,6 +377,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       return;
     }
 
+    _hideKeyboard();
     setState(() => _creating = true);
 
     try {
@@ -354,7 +394,6 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       _titleController.clear();
       _descriptionController.clear();
 
-      // 생성 성공 후: 패널 닫기 + 리스트 갱신
       setState(() => _createExpanded = false);
 
       if (_tabIndex == 0) {
@@ -362,6 +401,10 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       } else {
         await _refreshOwner();
       }
+
+      if (!mounted) return;
+      _showSnack('과제 생성 완료');
+      await _scrollToTop();
     } catch (e, st) {
       safePrint('createAssignment failed: $e\n$st');
       if (!mounted) return;
@@ -411,14 +454,21 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     if (!mounted) return;
     if (ok != true) return;
 
+    _hideKeyboard();
+
     try {
       await _repo.deleteAssignment(id);
       if (!mounted) return;
+
       if (_tabIndex == 0) {
         await _refreshMy();
       } else {
         await _refreshOwner();
       }
+
+      if (!mounted) return;
+      _showSnack('삭제 완료');
+      await _scrollToTop();
     } catch (e, st) {
       safePrint('delete failed: $e\n$st');
       if (!mounted) return;
@@ -432,70 +482,89 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     final myView = _applyViewTransform(_myItems);
     final ownerView = _applyViewTransform(_ownerItems);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Teacher · Assignments'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SegmentedButton<int>(
-                    segments: const [
-                      ButtonSegment(value: 0, label: Text('내 과제')),
-                      ButtonSegment(value: 1, label: Text('OwnerOnly')),
-                    ],
-                    selected: {_tabIndex},
-                    onSelectionChanged: (s) => setState(() => _tabIndex = s.first),
+    return GestureDetector(
+      onTap: _hideKeyboard,
+      behavior: HitTestBehavior.translucent,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Teacher · Assignments'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SegmentedButton<int>(
+                      segments: const [
+                        ButtonSegment(value: 0, label: Text('내 과제')),
+                        ButtonSegment(value: 1, label: Text('OwnerOnly')),
+                      ],
+                      selected: {_tabIndex},
+                      onSelectionChanged: (s) {
+                        _hideKeyboard();
+                        setState(() => _tabIndex = s.first);
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-      body: _booting
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _buildCreateCollapsible(),
-                _buildToolbarCompact(),
-                const Divider(height: 1),
-                Expanded(
-                  child: IndexedStack(
-                    index: _tabIndex,
-                    children: [
-                      _buildListCompact(
-                        controller: _myScroll,
-                        refreshing: _myRefreshing,
-                        loadingMore: _myLoading,
-                        hasMore: _myHasMore,
-                        items: myView,
-                        onRefresh: _refreshMy,
-                        emptyText: '내 과제가 없습니다.',
-                      ),
-                      _buildListCompact(
-                        controller: _ownerScroll,
-                        refreshing: _ownerRefreshing,
-                        loadingMore: _ownerLoading,
-                        hasMore: _ownerHasMore,
-                        items: ownerView,
-                        onRefresh: _refreshOwner,
-                        emptyText: 'OwnerOnly 항목이 없습니다.',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+        body: Column(
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 120),
+              child: _isHeaderBusy
+                  ? const LinearProgressIndicator(minHeight: 3)
+                  : const SizedBox(height: 3),
             ),
+            _buildCreateCollapsible(),
+            _buildToolbarCompact(),
+            const Divider(height: 1),
+            Expanded(
+              child: _booting
+                  ? _buildBootSkeleton()
+                  : IndexedStack(
+                      index: _tabIndex,
+                      children: [
+                        _buildListCompact(
+                          controller: _myScroll,
+                          refreshing: _myRefreshing,
+                          loadingMore: _myLoading,
+                          hasMore: _myHasMore,
+                          items: myView,
+                          onRefresh: _refreshMy,
+                          emptyTitle: '내 과제가 없습니다.',
+                          emptyHint: '위에서 Create를 펼쳐서 새 과제를 만들어보세요.',
+                        ),
+                        _buildListCompact(
+                          controller: _ownerScroll,
+                          refreshing: _ownerRefreshing,
+                          loadingMore: _ownerLoading,
+                          hasMore: _ownerHasMore,
+                          items: ownerView,
+                          onRefresh: _refreshOwner,
+                          emptyTitle: 'OwnerOnly 항목이 없습니다.',
+                          emptyHint: '권한 정책에 의해 보이는 데이터가 제한될 수 있습니다.',
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  // ✅ Create 패널: 기본 접힘 + 헤더만 작게
+  Widget _buildBootSkeleton() {
+    return _buildSkeletonList(count: 6);
+  }
+
   Widget _buildCreateCollapsible() {
     final teacher = _teacherUsername ?? '-';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
       child: Card(
@@ -505,7 +574,10 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
             children: [
               InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => setState(() => _createExpanded = !_createExpanded),
+                onTap: () {
+                  _hideKeyboard();
+                  setState(() => _createExpanded = !_createExpanded);
+                },
                 child: Row(
                   children: [
                     Icon(_createExpanded ? Icons.expand_less : Icons.expand_more),
@@ -540,6 +612,9 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                     children: [
                       TextField(
                         controller: _studentUsernameController,
+                        focusNode: _studentFocus,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) => _titleFocus.requestFocus(),
                         decoration: const InputDecoration(
                           labelText: 'studentUsername',
                           border: OutlineInputBorder(),
@@ -548,6 +623,9 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: _titleController,
+                        focusNode: _titleFocus,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) => _descFocus.requestFocus(),
                         decoration: const InputDecoration(
                           labelText: 'title',
                           border: OutlineInputBorder(),
@@ -556,8 +634,11 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: _descriptionController,
+                        focusNode: _descFocus,
                         minLines: 1,
                         maxLines: 3,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _createAssignment(),
                         decoration: const InputDecoration(
                           labelText: 'description (optional)',
                           border: OutlineInputBorder(),
@@ -575,7 +656,6 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     );
   }
 
-  // ✅ 툴바: 공간 줄이기(한 번에 보기 좋게)
   Widget _buildToolbarCompact() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
@@ -583,6 +663,8 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
         children: [
           TextField(
             controller: _searchController,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _hideKeyboard(),
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
               hintText: '검색: title / studentUsername / description',
@@ -593,6 +675,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                       onPressed: () {
                         _searchController.clear();
                         setState(() => _searchText = '');
+                        _hideKeyboard();
                       },
                       icon: const Icon(Icons.clear),
                     ),
@@ -610,7 +693,10 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                     DropdownMenuEntry(value: _StatusFilter.assigned, label: 'ASSIGNED'),
                     DropdownMenuEntry(value: _StatusFilter.done, label: 'DONE'),
                   ],
-                  onSelected: (v) => setState(() => _statusFilter = v ?? _StatusFilter.all),
+                  onSelected: (v) {
+                    _hideKeyboard();
+                    setState(() => _statusFilter = v ?? _StatusFilter.all);
+                  },
                 ),
               ),
               const SizedBox(width: 10),
@@ -623,7 +709,10 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                     DropdownMenuEntry(value: _SortMode.dueDate, label: 'Due date'),
                     DropdownMenuEntry(value: _SortMode.title, label: 'Title'),
                   ],
-                  onSelected: (v) => setState(() => _sortMode = v ?? _SortMode.newest),
+                  onSelected: (v) {
+                    _hideKeyboard();
+                    setState(() => _sortMode = v ?? _SortMode.newest);
+                  },
                 ),
               ),
             ],
@@ -633,7 +722,6 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     );
   }
 
-  // ✅ 리스트: 제목/상태 중심으로 축약 + empty 표시
   Widget _buildListCompact({
     required ScrollController controller,
     required bool refreshing,
@@ -641,61 +729,129 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     required bool hasMore,
     required List<Assignment> items,
     required Future<void> Function() onRefresh,
-    required String emptyText,
+    required String emptyTitle,
+    required String emptyHint,
   }) {
+    final bool showSkeleton = refreshing && items.isEmpty;
+
     return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: items.isEmpty && !refreshing
-          ? ListView(
-              controller: controller,
-              physics: const AlwaysScrollableScrollPhysics(),
+      onRefresh: () async {
+        _hideKeyboard();
+        await onRefresh();
+      },
+      child: showSkeleton
+          ? _buildSkeletonList(count: 6, controller: controller)
+          : (items.isEmpty
+              ? ListView(
+                  controller: controller,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(12, 40, 12, 20),
+                  children: [
+                    Center(
+                      child: Text(
+                        emptyTitle,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Text(
+                        emptyHint,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                )
+              : ListView.separated(
+                  controller: controller,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
+                  itemCount: items.length + 1,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    if (i == items.length) {
+                      if (loadingMore) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      if (!hasMore) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(child: Text('끝')),
+                        );
+                      }
+                      return const SizedBox(height: 16);
+                    }
+
+                    final a = items[i];
+                    return _AssignmentTile(
+                      a: a,
+                      onActions: () => _openActionSheet(a),
+                      onCopyId: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        await Clipboard.setData(ClipboardData(text: a.id));
+                        if (!mounted) return;
+                        messenger.showSnackBar(const SnackBar(content: Text('ID copied')));
+                      },
+                      onDelete: () => _deleteDirect(a),
+                    );
+                  },
+                )),
+    );
+  }
+
+  Widget _buildSkeletonList({required int count, ScrollController? controller}) {
+    final c = Theme.of(context).colorScheme;
+    final base = c.surfaceContainerHighest.withValues(alpha: 0.7);
+
+    return ListView.separated(
+      controller: controller,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
+      itemCount: count,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (_, __) {
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 60),
-                Center(
-                  child: Text(
-                    emptyText,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+                Container(
+                  height: 18,
+                  width: 180,
+                  decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(6)),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Container(
+                      height: 28,
+                      width: 120,
+                      decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(999)),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 28,
+                      width: 110,
+                      decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(999)),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 28,
+                      width: 80,
+                      decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(999)),
+                    ),
+                  ],
                 ),
               ],
-            )
-          : ListView.separated(
-              controller: controller,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
-              itemCount: items.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, i) {
-                if (i == items.length) {
-                  if (refreshing || loadingMore) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  if (!hasMore) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(child: Text('끝')),
-                    );
-                  }
-                  return const SizedBox(height: 16);
-                }
-
-                final a = items[i];
-                return _AssignmentTile(
-                  a: a,
-                  onActions: () => _openActionSheet(a),
-                  onCopyId: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    await Clipboard.setData(ClipboardData(text: a.id));
-                    if (!mounted) return;
-                    messenger.showSnackBar(const SnackBar(content: Text('ID copied')));
-                  },
-                  onDelete: () => _deleteDirect(a),
-                );
-              },
             ),
+          ),
+        );
+      },
     );
   }
 }

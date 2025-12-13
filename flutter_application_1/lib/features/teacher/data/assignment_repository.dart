@@ -1,136 +1,112 @@
 import 'dart:convert';
 
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:amplify_api/amplify_api.dart';
-import '../../../models/ModelProvider.dart';
 
-class PagedResult<T> {
-  final List<T> items;
+import '../../../models/Assignment.dart';
+import '../../../models/AssignmentStatus.dart';
+
+class AssignmentPage {
+  final List<Assignment> items;
   final String? nextToken;
-  const PagedResult({required this.items, required this.nextToken});
+  const AssignmentPage({required this.items, required this.nextToken});
 }
 
 class AssignmentRepository {
-  Future<List<Assignment>> listAssignmentsByTeacher({
-    required String teacherUsername,
-  }) async {
-    final req = ModelQueries.list(
-      Assignment.classType,
-      where: Assignment.TEACHERUSERNAME.eq(teacherUsername),
-    );
-    final res = await Amplify.API.query(request: req).response;
+  static const _assignmentFields = r'''
+    id
+    teacherUsername
+    studentUsername
+    title
+    description
+    status
+    dueDate
+    createdAt
+    updatedAt
+  ''';
 
-    if (res.errors.isNotEmpty) {
-      throw Exception(_errorsToText(res.errors));
-    }
-    if (res.data == null) return [];
-    return res.data!.items.whereType<Assignment>().toList();
-  }
-
-  Future<List<Assignment>> listAssignmentsOwnerOnly() async {
-    final req = ModelQueries.list(Assignment.classType);
-    final res = await Amplify.API.query(request: req).response;
-
-    if (res.errors.isNotEmpty) {
-      throw Exception(_errorsToText(res.errors));
-    }
-    if (res.data == null) return [];
-    return res.data!.items.whereType<Assignment>().toList();
-  }
-
-  /// ✅ 페이지네이션: teacherUsername 필터
-  /// - 주의: 이 프로젝트 스키마에는 _version/_deleted/_lastChangedAt 없음 → 쿼리에서 제거
-  Future<PagedResult<Assignment>> listAssignmentsByTeacherPaged({
+  Future<AssignmentPage> listAssignmentsByTeacherPaged({
     required String teacherUsername,
     required int limit,
     required String? nextToken,
   }) async {
-    const query = r'''
-      query ListAssignments($filter: ModelAssignmentFilterInput, $limit: Int, $nextToken: String) {
-        listAssignments(filter: $filter, limit: $limit, nextToken: $nextToken) {
-          items {
-            id
-            teacherUsername
-            studentUsername
-            title
-            description
-            status
-            dueDate
-            createdAt
-            updatedAt
-            __typename
-          }
+    const doc = r'''
+      query AssignmentsByTeacherV3($teacherUsername: String!, $limit: Int, $nextToken: String) {
+        assignmentsByTeacherV3(teacherUsername: $teacherUsername, limit: $limit, nextToken: $nextToken) {
+          items { ''' +
+        _assignmentFields +
+        r''' }
           nextToken
-          __typename
         }
       }
     ''';
 
-    final variables = <String, dynamic>{
-      'filter': {
-        'teacherUsername': {'eq': teacherUsername}
+    final req = GraphQLRequest<String>(
+      document: doc,
+      variables: {
+        'teacherUsername': teacherUsername,
+        'limit': limit,
+        'nextToken': nextToken,
       },
-      'limit': limit,
-      'nextToken': nextToken,
-    };
-
-    final req = GraphQLRequest<String>(
-      document: query,
-      variables: variables,
-      decodePath: null,
     );
 
-    final res = await Amplify.API.query(request: req).response;
-    if (res.errors.isNotEmpty) {
-      throw Exception(_errorsToText(res.errors));
-    }
+    final resp = await Amplify.API.query(request: req).response;
+    _throwIfHasErrors(resp);
 
-    return _parseListAssignments(res.data);
+    if (resp.data == null) return const AssignmentPage(items: [], nextToken: null);
+
+    final map = jsonDecode(resp.data!) as Map<String, dynamic>;
+    final data = (map['data'] ?? map) as Map<String, dynamic>;
+    final conn = (data['assignmentsByTeacherV3'] ?? {}) as Map<String, dynamic>;
+
+    final rawItems = (conn['items'] as List?) ?? const [];
+    final items = rawItems
+        .whereType<Map<String, dynamic>>()
+        .map((e) => Assignment.fromJson(e))
+        .toList();
+
+    final token = conn['nextToken'] as String?;
+    return AssignmentPage(items: items, nextToken: token);
   }
 
-  /// ✅ 페이지네이션: owner-only 목록
-  Future<PagedResult<Assignment>> listAssignmentsOwnerOnlyPaged({
+  Future<AssignmentPage> listAssignmentsOwnerOnlyPaged({
     required int limit,
     required String? nextToken,
   }) async {
-    const query = r'''
-      query ListAssignments($limit: Int, $nextToken: String) {
+    // OwnerOnly은 서버 @auth로 판정. 클라는 listAssignments 호출만.
+    // ✅ ModelQueries.list 쓰지 말 것(_version/_deleted/_lastChangedAt 메타필드 이슈 회피)
+    const doc = r'''
+      query ListAssignmentsOwnerOnly($limit: Int, $nextToken: String) {
         listAssignments(limit: $limit, nextToken: $nextToken) {
-          items {
-            id
-            teacherUsername
-            studentUsername
-            title
-            description
-            status
-            dueDate
-            createdAt
-            updatedAt
-            __typename
-          }
+          items { ''' +
+        _assignmentFields +
+        r''' }
           nextToken
-          __typename
         }
       }
     ''';
 
-    final variables = <String, dynamic>{
-      'limit': limit,
-      'nextToken': nextToken,
-    };
-
     final req = GraphQLRequest<String>(
-      document: query,
-      variables: variables,
-      decodePath: null,
+      document: doc,
+      variables: {'limit': limit, 'nextToken': nextToken},
     );
 
-    final res = await Amplify.API.query(request: req).response;
-    if (res.errors.isNotEmpty) {
-      throw Exception(_errorsToText(res.errors));
-    }
+    final resp = await Amplify.API.query(request: req).response;
+    _throwIfHasErrors(resp);
 
-    return _parseListAssignments(res.data);
+    if (resp.data == null) return const AssignmentPage(items: [], nextToken: null);
+
+    final map = jsonDecode(resp.data!) as Map<String, dynamic>;
+    final data = (map['data'] ?? map) as Map<String, dynamic>;
+    final conn = (data['listAssignments'] ?? {}) as Map<String, dynamic>;
+
+    final rawItems = (conn['items'] as List?) ?? const [];
+    final items = rawItems
+        .whereType<Map<String, dynamic>>()
+        .map((e) => Assignment.fromJson(e))
+        .toList();
+
+    final token = conn['nextToken'] as String?;
+    return AssignmentPage(items: items, nextToken: token);
   }
 
   Future<void> createAssignment({
@@ -139,91 +115,73 @@ class AssignmentRepository {
     required String title,
     String? description,
   }) async {
-    final item = Assignment(
-      teacherUsername: teacherUsername,
-      studentUsername: studentUsername,
-      title: title,
-      description: description,
-      status: AssignmentStatus.ASSIGNED,
+    const doc = r'''
+      mutation CreateAssignment($input: CreateAssignmentInput!) {
+        createAssignment(input: $input) { id }
+      }
+    ''';
+
+    final input = <String, dynamic>{
+      'teacherUsername': teacherUsername,
+      'studentUsername': studentUsername,
+      'title': title,
+      'status': AssignmentStatus.ASSIGNED.name,
+      if (description != null) 'description': description,
+    };
+
+    final req = GraphQLRequest<String>(
+      document: doc,
+      variables: {'input': input},
     );
 
-    final req = ModelMutations.create(item);
-    final res = await Amplify.API.mutate(request: req).response;
-
-    if (res.errors.isNotEmpty) {
-      throw Exception(_errorsToText(res.errors));
-    }
+    final resp = await Amplify.API.mutate(request: req).response;
+    _throwIfHasErrors(resp);
   }
 
   Future<void> deleteAssignment(String id) async {
-    final req = ModelMutations.deleteById(
-      Assignment.classType,
-      AssignmentModelIdentifier(id: id),
+    const doc = r'''
+      mutation DeleteAssignment($input: DeleteAssignmentInput!) {
+        deleteAssignment(input: $input) { id }
+      }
+    ''';
+
+    final req = GraphQLRequest<String>(
+      document: doc,
+      variables: {'input': {'id': id}},
     );
-    final res = await Amplify.API.mutate(request: req).response;
 
-    if (res.errors.isNotEmpty) {
-      throw Exception(_errorsToText(res.errors));
-    }
+    final resp = await Amplify.API.mutate(request: req).response;
+    _throwIfHasErrors(resp);
   }
 
-  // ----------------- helpers -----------------
-
-  String _errorsToText(List<GraphQLResponseError> errors) {
-    return errors.map((e) => e.message).join(' | ');
-  }
-
-  /// 응답 형태 방어 파서
-  PagedResult<Assignment> _parseListAssignments(String? raw) {
-    if (raw == null || raw.isEmpty) {
-      return const PagedResult(items: <Assignment>[], nextToken: null);
-    }
-
-    Map<String, dynamic> root;
-    try {
-      root = jsonDecode(raw) as Map<String, dynamic>;
-    } catch (e) {
-      safePrint('[AssignmentRepository] jsonDecode failed');
-      safePrint(raw);
-      throw Exception('jsonDecode failed: $e');
-    }
-
-    // { "data": { "listAssignments": {...} } }
-    final data = root['data'];
-    if (data is Map<String, dynamic>) {
-      final la = data['listAssignments'];
-      if (la is Map<String, dynamic>) {
-        return _parseListAssignmentsObject(la);
+  Future<void> updateAssignmentStatus({
+    required String id,
+    required AssignmentStatus status,
+  }) async {
+    const doc = r'''
+      mutation UpdateAssignment($input: UpdateAssignmentInput!) {
+        updateAssignment(input: $input) { id status }
       }
-    }
+    ''';
 
-    // { "listAssignments": {...} }
-    final la2 = root['listAssignments'];
-    if (la2 is Map<String, dynamic>) {
-      return _parseListAssignmentsObject(la2);
-    }
+    final req = GraphQLRequest<String>(
+      document: doc,
+      variables: {
+        'input': {
+          'id': id,
+          'status': status.name,
+        }
+      },
+    );
 
-    // root 자체가 listAssignments 객체
-    if (root.containsKey('items') && root['items'] is List) {
-      return _parseListAssignmentsObject(root);
-    }
-
-    safePrint('[AssignmentRepository] Unexpected response shape');
-    safePrint(raw);
-    throw Exception('Unexpected response shape (listAssignments not found)');
+    final resp = await Amplify.API.mutate(request: req).response;
+    _throwIfHasErrors(resp);
   }
 
-  PagedResult<Assignment> _parseListAssignmentsObject(Map<String, dynamic> la) {
-    final itemsRaw = (la['items'] as List<dynamic>? ?? <dynamic>[]);
-    final items = <Assignment>[];
-
-    for (final it in itemsRaw) {
-      if (it is Map<String, dynamic>) {
-        items.add(Assignment.fromJson(it));
-      }
+  static void _throwIfHasErrors(GraphQLResponse<String> resp) {
+    if (resp.errors.isNotEmpty) {
+      final msgs = resp.errors.map((e) => e.message).join(' | ');
+      throw Exception('GraphQL error: $msgs');
     }
-
-    final token = la['nextToken'] as String?;
-    return PagedResult(items: items, nextToken: token);
   }
 }

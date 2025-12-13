@@ -1,127 +1,154 @@
 import 'package:flutter/material.dart';
-import '../../teacher/data/assignment_editor.dart';
-import '../../../models/ModelProvider.dart';
+
+import '../../../models/Assignment.dart';
+import '../../../models/AssignmentStatus.dart';
+import '../data/assignment_editor.dart';
+import '../data/assignment_repository.dart';
 
 Future<void> showAssignmentActionSheet({
   required BuildContext context,
   required Assignment assignment,
-  VoidCallback? onChanged,
-  VoidCallback? onDeleted,
+  required VoidCallback onChanged,
+  required VoidCallback onDeleted,
 }) async {
-  final theme = Theme.of(context);
-
   await showModalBottomSheet<void>(
     context: context,
-    useSafeArea: true,
     showDragHandle: true,
-    isScrollControlled: false,
-    builder: (bottomCtx) {
-      final isDone = assignment.status == AssignmentStatus.DONE;
+    isScrollControlled: true,
+    builder: (ctx) => _AssignmentActionSheet(
+      assignment: assignment,
+      onChanged: onChanged,
+      onDeleted: onDeleted,
+    ),
+  );
+}
 
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+class _AssignmentActionSheet extends StatefulWidget {
+  final Assignment assignment;
+  final VoidCallback onChanged;
+  final VoidCallback onDeleted;
+
+  const _AssignmentActionSheet({
+    required this.assignment,
+    required this.onChanged,
+    required this.onDeleted,
+  });
+
+  @override
+  State<_AssignmentActionSheet> createState() => _AssignmentActionSheetState();
+}
+
+class _AssignmentActionSheetState extends State<_AssignmentActionSheet> {
+  late final AssignmentRepository _repo;
+  late final AssignmentEditor _editor;
+
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _repo = AssignmentRepository();
+    _editor = AssignmentEditor(_repo);
+  }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    final m = ScaffoldMessenger.of(context);
+    m.clearSnackBars();
+    m.showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  AssignmentStatus get _nextStatus {
+    return widget.assignment.status == AssignmentStatus.ASSIGNED
+        ? AssignmentStatus.DONE
+        : AssignmentStatus.ASSIGNED;
+  }
+
+  Future<void> _toggleStatus() async {
+    setState(() => _busy = true);
+    try {
+      await _editor.updateStatus(
+        assignment: widget.assignment,
+        nextStatus: _nextStatus,
+      );
+      if (!mounted) return;
+      widget.onChanged();
+      Navigator.pop(context);
+      _snack('상태 변경 완료');
+    } catch (e) {
+      if (!mounted) return;
+      _snack('상태 변경 실패: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _delete() async {
+    final id = widget.assignment.id;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('삭제'),
+        content: Text('정말 삭제할까?\n\n$id'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제')),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (ok != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await _editor.deleteById(id);
+      if (!mounted) return;
+      widget.onDeleted();
+      Navigator.pop(context);
+      _snack('삭제 완료');
+    } catch (e) {
+      if (!mounted) return;
+      _snack('삭제 실패: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.assignment;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // assignment.title: non-null 가정(스키마 title: String!)
-            Text(
-              assignment.title,
-              style: theme.textTheme.titleMedium,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            ListTile(
+              title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text('student: ${a.studentUsername} · status: ${a.status.name}'),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'by ${assignment.teacherUsername} → ${assignment.studentUsername}', // 모두 non-null
-              style: theme.textTheme.bodySmall,
-            ),
-            const SizedBox(height: 8),
             const Divider(),
-
-            // 상태 토글
             ListTile(
-              leading: Icon(isDone ? Icons.undo : Icons.check_circle),
-              title: Text(isDone ? '상태 되돌리기(ASSIGNED)' : '완료로 표시(DONE)'),
-              onTap: () async {
-                // await 이전에 레퍼런스 캡처
-                final nav = Navigator.of(bottomCtx);
-                final messenger = ScaffoldMessenger.of(bottomCtx);
-
-                try {
-                  final next =
-                      isDone ? AssignmentStatus.ASSIGNED : AssignmentStatus.DONE;
-                  await AssignmentEditor.updateStatus(id: assignment.id, status: next);
-                  if (!bottomCtx.mounted) return;
-                  nav.pop(); // 시트 닫기
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('상태 변경: ${next.name}')),
-                  );
-                  onChanged?.call();
-                } on Exception catch (e) {
-                  if (!bottomCtx.mounted) return;
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('상태 변경 실패: $e')),
-                  );
-                }
-              },
+              enabled: !_busy,
+              leading: const Icon(Icons.swap_horiz),
+              title: Text('상태 토글 (${a.status.name} → ${_nextStatus.name})'),
+              onTap: _busy ? null : _toggleStatus,
             ),
-
-            // 삭제
             ListTile(
-              leading: const Icon(Icons.delete_outline),
+              enabled: !_busy,
+              leading: const Icon(Icons.delete),
               title: const Text('삭제'),
-              textColor: theme.colorScheme.error,
-              iconColor: theme.colorScheme.error,
-              onTap: () async {
-                final nav = Navigator.of(bottomCtx);
-                final messenger = ScaffoldMessenger.of(bottomCtx);
-
-                final ok = await showDialog<bool>(
-                  context: bottomCtx,
-                  builder: (dctx) => AlertDialog(
-                    title: const Text('과제 삭제'),
-                    content: const Text('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(dctx).pop(false),
-                        child: const Text('취소'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.of(dctx).pop(true),
-                        child: const Text('삭제'),
-                      ),
-                    ],
-                  ),
-                );
-                if (ok != true) return;
-
-                try {
-                  final success = await AssignmentEditor.deleteById(assignment.id);
-                  if (!success) throw Exception('삭제 실패');
-                  if (!bottomCtx.mounted) return;
-                  nav.pop(); // 시트 닫기
-                  messenger.showSnackBar(const SnackBar(content: Text('삭제 완료')));
-                  onDeleted?.call();
-                } on Exception catch (e) {
-                  if (!bottomCtx.mounted) return;
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('삭제 실패: $e')),
-                  );
-                }
-              },
+              onTap: _busy ? null : _delete,
             ),
-
-            const SizedBox(height: 4),
-            const Divider(),
-            Text(
-              'ID: ${assignment.id}',
-              style: theme.textTheme.bodySmall!.copyWith(color: theme.hintColor),
-            ),
-            const SizedBox(height: 8),
+            if (_busy) ...[
+              const SizedBox(height: 10),
+              const LinearProgressIndicator(minHeight: 3),
+            ],
           ],
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
