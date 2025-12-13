@@ -32,11 +32,6 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
 
   int _index = 0;
 
-  final _pages = const [
-    AwsSmokeTestPage(),
-    _AssignmentsRoleGate(),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -93,14 +88,25 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
             );
           }
 
+          final pages = <Widget>[
+            const AwsSmokeTestPage(),
+            const _AssignmentsRoleRouter(),
+          ];
+
           return Scaffold(
-            body: _pages[_index],
+            body: pages[_index],
             bottomNavigationBar: NavigationBar(
               selectedIndex: _index,
               onDestinationSelected: (i) => setState(() => _index = i),
               destinations: const [
-                NavigationDestination(icon: Icon(Icons.cloud_done), label: 'AWS Test'),
-                NavigationDestination(icon: Icon(Icons.assignment), label: 'Assignments'),
+                NavigationDestination(
+                  icon: Icon(Icons.cloud_done),
+                  label: 'AWS Test',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.assignment),
+                  label: 'Assignments',
+                ),
               ],
             ),
           );
@@ -110,44 +116,51 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
   }
 }
 
-/// Assignments 탭: Cognito 그룹으로 Teacher/Student 화면 분기
-class _AssignmentsRoleGate extends StatefulWidget {
-  const _AssignmentsRoleGate();
+/// Assignments 탭은 "로그인된 Cognito 그룹" 기준으로 Teacher/Student 페이지를 자동 분기한다.
+/// - teachers/owners => TeacherAssignmentsPage
+/// - students/그 외 => StudentAssignmentsPage
+class _AssignmentsRoleRouter extends StatefulWidget {
+  const _AssignmentsRoleRouter();
 
   @override
-  State<_AssignmentsRoleGate> createState() => _AssignmentsRoleGateState();
+  State<_AssignmentsRoleRouter> createState() => _AssignmentsRoleRouterState();
 }
 
-class _AssignmentsRoleGateState extends State<_AssignmentsRoleGate> {
+class _AssignmentsRoleRouterState extends State<_AssignmentsRoleRouter> {
   late final Future<_Role> _roleFuture;
 
   @override
   void initState() {
     super.initState();
-    _roleFuture = _resolveRole();
+    _roleFuture = _detectRole();
   }
 
-  Future<_Role> _resolveRole() async {
+  Future<_Role> _detectRole() async {
     try {
       final session = await Amplify.Auth.fetchAuthSession();
-      if (!session.isSignedIn) return _Role.student;
+      final cognitoSession = session as CognitoAuthSession;
 
-      final cognito = session as CognitoAuthSession;
-      final tokens = cognito.userPoolTokensResult.value;
+      // ✅ 너 프로젝트의 SDK에선 AuthResult에 isSuccess 같은 플래그가 없고,
+      //    value 접근이 실패 시 throw 되는 형태로 보임.
+      //    그래서 try/catch로 토큰 획득 성공 여부를 판단한다.
+      CognitoUserPoolTokens tokens;
+      try {
+        tokens = cognitoSession.userPoolTokensResult.value;
+      } catch (_) {
+        // 로그인 안 됐거나 토큰 획득 실패: 안전하게 student
+        return _Role.student;
+      }
 
-      // ✅ claims가 JsonWebClaims라 [] 접근이 안 됨 → JWT payload 직접 decode
-      final idToken = tokens.idToken.raw;
-      final payload = _decodeJwtPayload(idToken);
-
-      final groupsDyn = payload['cognito:groups'];
-      final groups = _asStringList(groupsDyn);
+      final idTokenRaw = tokens.idToken.raw;
+      final payload = _decodeJwtPayload(idTokenRaw);
+      final groups = _extractGroups(payload);
 
       if (groups.contains('owners') || groups.contains('teachers')) {
         return _Role.teacher;
       }
       return _Role.student;
-    } catch (e, st) {
-      safePrint('Role resolve failed: $e\n$st');
+    } catch (e) {
+      safePrint('[RoleDetect] failed -> $e');
       return _Role.student;
     }
   }
@@ -158,7 +171,9 @@ class _AssignmentsRoleGateState extends State<_AssignmentsRoleGate> {
       future: _roleFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final role = snapshot.data ?? _Role.student;
@@ -170,33 +185,28 @@ class _AssignmentsRoleGateState extends State<_AssignmentsRoleGate> {
       },
     );
   }
-
-  /// JWT payload(base64url) decode → Map
-  Map<String, dynamic> _decodeJwtPayload(String jwt) {
-    final parts = jwt.split('.');
-    if (parts.length != 3) return <String, dynamic>{};
-
-    final payloadPart = parts[1];
-    final normalized = base64Url.normalize(payloadPart);
-    final bytes = base64Url.decode(normalized);
-    final jsonStr = utf8.decode(bytes);
-
-    final obj = jsonDecode(jsonStr);
-    if (obj is Map<String, dynamic>) return obj;
-    return <String, dynamic>{};
-  }
-
-  List<String> _asStringList(dynamic v) {
-    if (v == null) return const <String>[];
-    if (v is List) {
-      return v.whereType<String>().toList();
-    }
-    if (v is String) {
-      // sometimes a single group might come as string
-      return <String>[v];
-    }
-    return const <String>[];
-  }
 }
 
 enum _Role { teacher, student }
+
+Map<String, dynamic> _decodeJwtPayload(String jwt) {
+  final parts = jwt.split('.');
+  if (parts.length != 3) return <String, dynamic>{};
+
+  final payloadBase64 = parts[1];
+  final normalized = base64Url.normalize(payloadBase64);
+  final payloadBytes = base64Url.decode(normalized);
+  final payloadString = utf8.decode(payloadBytes);
+
+  final obj = jsonDecode(payloadString);
+  if (obj is Map<String, dynamic>) return obj;
+  return <String, dynamic>{};
+}
+
+Set<String> _extractGroups(Map<String, dynamic> payload) {
+  final v = payload['cognito:groups'];
+  if (v is List) {
+    return v.whereType<String>().toSet();
+  }
+  return <String>{};
+}
