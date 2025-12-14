@@ -19,7 +19,7 @@ dependencies:
   go_router: ^16.2.4
   path_provider: ^2.1.5
   geolocator: ^14.0.2
-  shared_preferences: ^2.3.3 
+  shared_preferences: ^2.5.4 
 
   # --- [추가] 로컬 DB (플랫폼 공통) ---
   sembast: ^3.6.0          # 로컬 문서형 DB (모바일/데스크톱 파일 기반)
@@ -28,6 +28,7 @@ dependencies:
   amplify_flutter: 2.6.1
   amplify_api: 2.6.1
   amplify_auth_cognito: 2.6.1
+  image_picker: ^1.2.1
 
 dev_dependencies:
   flutter_test:

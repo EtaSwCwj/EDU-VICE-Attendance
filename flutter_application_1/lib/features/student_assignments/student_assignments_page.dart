@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/Assignment.dart';
 import '../../models/AssignmentStatus.dart';
@@ -11,6 +12,9 @@ import 'student_assignment_repository.dart';
 enum _StatusFilter { all, assigned, done }
 enum _SortMode { newest, oldest }
 
+// ✅ 경고 제거: 사용되지 않는 none 제거
+enum _SheetResult { refresh, openDetail }
+
 class StudentAssignmentsPage extends StatefulWidget {
   const StudentAssignmentsPage({super.key});
 
@@ -19,7 +23,7 @@ class StudentAssignmentsPage extends StatefulWidget {
 }
 
 class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
-  final _repo = StudentAssignmentRepository();
+  final StudentAssignmentRepository _repo = StudentAssignmentRepository();
 
   bool _booting = true;
   bool _refreshing = false;
@@ -29,9 +33,10 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
   String? _nextToken;
   bool _hasMore = true;
 
-  final List<Assignment> _items = [];
+  final List<Assignment> _items = <Assignment>[];
   final ScrollController _scroll = ScrollController();
 
+  // 검색/필터/정렬
   final TextEditingController _searchController = TextEditingController();
   String _searchText = '';
   _StatusFilter _statusFilter = _StatusFilter.all;
@@ -58,18 +63,11 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     super.dispose();
   }
 
-  void _snack(String msg) {
-    if (!mounted) return;
-    final m = ScaffoldMessenger.of(context);
-    m.clearSnackBars();
-    m.showSnackBar(SnackBar(content: Text(msg)));
-  }
-
   Future<void> _boot() async {
     setState(() => _booting = true);
     try {
       final user = await Amplify.Auth.getCurrentUser();
-      final username = user.username;
+      final String username = user.username;
 
       if (!mounted) return;
       setState(() => _studentUsername = username);
@@ -86,12 +84,19 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     }
   }
 
+  void _snack(String msg) {
+    if (!mounted) return;
+    final m = ScaffoldMessenger.of(context);
+    m.clearSnackBars();
+    m.showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   void _hideKeyboard() {
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
   Future<void> _refresh() async {
-    final s = _studentUsername;
+    final String? s = _studentUsername;
     if (s == null || s.isEmpty) return;
 
     setState(() {
@@ -125,11 +130,11 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
   }
 
   Future<void> _loadMore() async {
-    final s = _studentUsername;
+    final String? s = _studentUsername;
     if (s == null || s.isEmpty) return;
     if (!_hasMore) return;
 
-    final token = _nextToken;
+    final String? token = _nextToken;
     if (token == null || token.isEmpty) {
       setState(() => _hasMore = false);
       return;
@@ -161,7 +166,10 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
 
   Future<void> _markDone(Assignment a) async {
     try {
-      await _repo.updateAssignmentStatus(id: a.id, status: AssignmentStatus.DONE);
+      await _repo.updateAssignmentStatus(
+        id: a.id,
+        status: AssignmentStatus.DONE,
+      );
       if (!mounted) return;
       _snack('DONE 처리 완료');
       await _refresh();
@@ -174,7 +182,10 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
 
   Future<void> _markAssigned(Assignment a) async {
     try {
-      await _repo.updateAssignmentStatus(id: a.id, status: AssignmentStatus.ASSIGNED);
+      await _repo.updateAssignmentStatus(
+        id: a.id,
+        status: AssignmentStatus.ASSIGNED,
+      );
       if (!mounted) return;
       _snack('ASSIGNED로 되돌림');
       await _refresh();
@@ -185,33 +196,190 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     }
   }
 
-  // TemporalDateTime/TemporalDate 대응: dueDate -> local ymd 문자열
-  DateTime? _temporalToLocalDateTime(Object? v) {
-    if (v == null) return null;
-
-    if (v is TemporalDateTime) {
-      return v.getDateTimeInUtc().toLocal();
-    }
-    if (v is TemporalDate) {
-      final s = v.format();
-      final parts = s.split('-');
-      if (parts.length == 3) {
-        final y = int.tryParse(parts[0]);
-        final m = int.tryParse(parts[1]);
-        final d = int.tryParse(parts[2]);
-        if (y != null && m != null && d != null) return DateTime(y, m, d);
-      }
-      return null;
-    }
-
-    try {
-      return DateTime.parse(v.toString()).toLocal();
-    } catch (_) {
-      return null;
+  Future<void> _openDetailPage(Assignment a) async {
+    _hideKeyboard();
+    final bool? changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => StudentAssignmentDetailPage(assignment: a),
+      ),
+    );
+    if (changed == true) {
+      await _refresh();
     }
   }
 
-  DateTime? _dueLocal(Assignment a) => _temporalToLocalDateTime((a as dynamic).dueDate);
+  Future<void> _openDetailSheet(Assignment a) async {
+    _hideKeyboard();
+
+    final _SheetResult? result = await showModalBottomSheet<_SheetResult>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        bool working = false;
+
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            Future<void> setStatus(AssignmentStatus next) async {
+              if (working) return;
+              setModalState(() => working = true);
+
+              try {
+                await _repo.updateAssignmentStatus(id: a.id, status: next);
+
+                if (!ctx.mounted) return;
+                ScaffoldMessenger.of(ctx).clearSnackBars();
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('상태 변경 완료: ${next.name}')),
+                );
+
+                Navigator.of(ctx).pop(_SheetResult.refresh);
+              } catch (e, st) {
+                safePrint('Student sheet setStatus failed: $e\n$st');
+
+                if (!ctx.mounted) return;
+                ScaffoldMessenger.of(ctx).clearSnackBars();
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('상태 변경 실패: $e')),
+                );
+              } finally {
+                if (ctx.mounted) {
+                  setModalState(() => working = false);
+                } else {
+                  working = false;
+                }
+              }
+            }
+
+            DateTime? toLocal(TemporalDateTime? v) =>
+                v?.getDateTimeInUtc().toLocal();
+
+            String ymd(DateTime? local) {
+              if (local == null) return '-';
+              final y = local.year.toString().padLeft(4, '0');
+              final m = local.month.toString().padLeft(2, '0');
+              final d = local.day.toString().padLeft(2, '0');
+              return '$y-$m-$d';
+            }
+
+            final dueLocal = toLocal(a.dueDate);
+            final createdLocal = toLocal(a.createdAt);
+            final bool isDone = a.status == AssignmentStatus.DONE;
+            final String desc = (a.description ?? '').trim();
+
+            final String? book = (a.book ?? '').trim().isEmpty ? null : a.book;
+            final String? range = (a.range ?? '').trim().isEmpty ? null : a.range;
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            a.title,
+                            style: Theme.of(ctx).textTheme.titleLarge,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        OutlinedButton(
+                          onPressed: () => Navigator.of(ctx).pop(_SheetResult.openDetail),
+                          child: const Text('상세 페이지'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        _chip(ctx, Icons.person, 'teacher: ${a.teacherUsername}'),
+                        _chip(ctx, Icons.event, 'due: ${ymd(dueLocal)}'),
+                        _chip(ctx, Icons.flag, 'status: ${a.status.name}'),
+                        _chip(ctx, Icons.schedule, 'created: ${ymd(createdLocal)}'),
+                        if (book != null) _chip(ctx, Icons.menu_book, 'book: $book'),
+                        if (range != null) _chip(ctx, Icons.format_list_numbered, 'range: $range'),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'id: ${a.id}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(ctx).textTheme.bodySmall,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            await Clipboard.setData(ClipboardData(text: a.id));
+                            if (!ctx.mounted) return;
+                            ScaffoldMessenger.of(ctx).clearSnackBars();
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('ID 복사 완료')),
+                            );
+                          },
+                          icon: const Icon(Icons.copy, size: 18),
+                          label: const Text('Copy ID'),
+                        ),
+                      ],
+                    ),
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Text(desc, style: Theme.of(ctx).textTheme.bodyMedium),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: (working || isDone) ? null : () => setStatus(AssignmentStatus.DONE),
+                            child: working ? const Text('처리 중…') : const Text('DONE'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: (working || !isDone) ? null : () => setStatus(AssignmentStatus.ASSIGNED),
+                            child: working ? const Text('처리 중…') : const Text('UNDO'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result == _SheetResult.refresh) {
+      await _refresh();
+      return;
+    }
+
+    if (result == _SheetResult.openDetail) {
+      await _openDetailPage(a);
+      return;
+    }
+  }
 
   String _ymd(DateTime? local) {
     if (local == null) return '-';
@@ -220,6 +388,8 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     final d = local.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
   }
+
+  DateTime? _dueLocal(Assignment a) => a.dueDate?.getDateTimeInUtc().toLocal();
 
   bool _isSameLocalDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
@@ -278,27 +448,13 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
         return 1;
       }
 
-      final aCreated = _temporalToLocalDateTime((a as dynamic).createdAt);
-      final bCreated = _temporalToLocalDateTime((b as dynamic).createdAt);
+      final aCreated = a.createdAt?.getDateTimeInUtc();
+      final bCreated = b.createdAt?.getDateTimeInUtc();
       final c = cmpDate(aCreated, bCreated);
       return _sortMode == _SortMode.newest ? -c : c;
     });
 
     return list;
-  }
-
-  Future<void> _openDetail(Assignment a) async {
-    _hideKeyboard();
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => StudentAssignmentDetailPage(assignment: a),
-      ),
-    );
-
-    // ✅ 상세에서 상태 바꾸면 pop(true)로 돌아오게 설계
-    if (changed == true) {
-      await _refresh();
-    }
   }
 
   @override
@@ -335,7 +491,6 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                 ? const LinearProgressIndicator(minHeight: 3)
                 : const SizedBox(height: 3),
           ),
-
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
             child: Card(
@@ -344,7 +499,10 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('오늘 할 일 요약', style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      '오늘 할 일 요약',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -356,12 +514,15 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                         _pill(context, Icons.today, '오늘 마감 $todayDueCnt'),
                       ],
                     ),
+                    if (todayDueCnt > 0) ...[
+                      const SizedBox(height: 10),
+                      _banner(context, '오늘 마감 과제가 있어요. 위쪽에 먼저 뜹니다.'),
+                    ],
                   ],
                 ),
               ),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Column(
@@ -423,7 +584,6 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
               ],
             ),
           ),
-
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
@@ -469,8 +629,8 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                             final isToday = dueLocal != null && _isSameLocalDay(dueLocal, DateTime.now());
 
                             return InkWell(
-                              onTap: () => _openDetail(a),
                               borderRadius: BorderRadius.circular(12),
+                              onTap: () => _openDetailSheet(a),
                               child: Card(
                                 child: Padding(
                                   padding: const EdgeInsets.all(12),
@@ -527,7 +687,7 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
-                                        '탭하면 상세로 이동',
+                                        '카드 탭 → 상세(하단 시트)',
                                         style: Theme.of(context).textTheme.bodySmall,
                                       ),
                                     ],
@@ -541,6 +701,19 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _banner(BuildContext context, String text) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
     );
   }
 
