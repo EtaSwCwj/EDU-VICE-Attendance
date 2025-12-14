@@ -1,36 +1,41 @@
-// lib/main.dart
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
+// Amplify
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 
+// amplify pull 산출물
 import 'amplifyconfiguration.dart';
+
+// Pages / Shells
+import 'features/dev/aws_smoketest_page.dart';
+import 'features/teacher/teacher_shell.dart';
+import 'features/home/student_home_shell.dart';
+
+// 새로 추가: DI & Config
 import 'config/app_config.dart';
 import 'core/di/injection_container.dart';
-import 'features/home/student_home_shell.dart';
-import 'features/teacher/teacher_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 환경 설정 초기화
-  final config = AppConfig.fromEnvironment();
-
-  // 의존성 주입 초기화
-  await setupDependencies(config: config);
-
-  // 앱 실행
-  runApp(EVAttendanceApp(config: config));
+  
+  // DI 초기화 (선택적)
+  try {
+    final config = AppConfig.development(); // 개발 환경
+    await setupDependencies(config: config);
+  } catch (e) {
+    // DI 초기화 실패해도 앱은 실행되도록
+    safePrint('[DI] Failed to initialize: $e');
+  }
+  
+  runApp(const EVAttendanceApp());
 }
 
 class EVAttendanceApp extends StatefulWidget {
-  final AppConfig config;
-
-  const EVAttendanceApp({
-    super.key,
-    required this.config,
-  });
+  const EVAttendanceApp({super.key});
 
   @override
   State<EVAttendanceApp> createState() => _EVAttendanceAppState();
@@ -38,6 +43,8 @@ class EVAttendanceApp extends StatefulWidget {
 
 class _EVAttendanceAppState extends State<EVAttendanceApp> {
   late final Future<void> _amplifyInitFuture;
+
+  int _index = 0;
 
   @override
   void initState() {
@@ -55,16 +62,11 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
       ]);
 
       await Amplify.configure(amplifyconfig);
-
-      if (widget.config.enableLogging) {
-        safePrint('[Amplify] Configure: SUCCESS');
-      }
+      safePrint('[Amplify] configure: SUCCESS');
     } on AmplifyAlreadyConfiguredException {
-      if (widget.config.enableLogging) {
-        safePrint('[Amplify] Already configured. Skip.');
-      }
+      safePrint('[Amplify] already configured. Skip.');
     } catch (e, st) {
-      safePrint('[Amplify] Configure: ERROR -> $e');
+      safePrint('[Amplify] configure: ERROR -> $e');
       safePrint(st.toString());
       rethrow;
     }
@@ -73,13 +75,10 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: widget.config.appName,
+      title: 'EDU-VICE Attendance',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.light,
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
       home: FutureBuilder<void>(
@@ -96,74 +95,46 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
               appBar: AppBar(title: const Text('Startup Error')),
               body: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Amplify 초기화 실패',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 16),
-                    SelectableText(
-                      '${snapshot.error}',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ],
+                child: SelectableText(
+                  'Amplify init failed:\n\n${snapshot.error}',
                 ),
               ),
             );
           }
 
-          return const _MainScaffold();
+          final pages = <Widget>[
+            const _RoleHomeRouter(), // ✅ TeacherShell / StudentHomeShell 자동 분기
+            const AwsSmokeTestPage(), // ✅ 테스트 보조 탭 유지
+          ];
+
+          return Scaffold(
+            body: pages[_index],
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _index,
+              onDestinationSelected: (i) => setState(() => _index = i),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home),
+                  label: 'Home',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.cloud_done_outlined),
+                  selectedIcon: Icon(Icons.cloud_done),
+                  label: 'AWS Test',
+                ),
+              ],
+            ),
+          );
         },
       ),
     );
   }
 }
 
-class _MainScaffold extends StatefulWidget {
-  const _MainScaffold();
-
-  @override
-  State<_MainScaffold> createState() => _MainScaffoldState();
-}
-
-class _MainScaffoldState extends State<_MainScaffold> {
-  int _index = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final config = getIt<AppConfig>();
-    final pages = <Widget>[
-      const _RoleHomeRouter(),
-      if (config.isDevelopment) const Center(child: Text('AWS Test Page')),
-    ];
-
-    return Scaffold(
-      body: pages[_index],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          if (config.isDevelopment)
-            const NavigationDestination(
-              icon: Icon(Icons.cloud_done_outlined),
-              selectedIcon: Icon(Icons.cloud_done),
-              label: 'Dev Tools',
-            ),
-        ],
-      ),
-    );
-  }
-}
-
+/// Home 탭은 "로그인된 Cognito 그룹" 기준으로 Teacher/Student 셸을 자동 분기한다.
+/// - teachers/owners => TeacherShell
+/// - students/그 외 => StudentHomeShell
 class _RoleHomeRouter extends StatefulWidget {
   const _RoleHomeRouter();
 
@@ -185,6 +156,7 @@ class _RoleHomeRouterState extends State<_RoleHomeRouter> {
       final session = await Amplify.Auth.fetchAuthSession();
       final cognitoSession = session as CognitoAuthSession;
 
+      // 토큰을 얻지 못하면(로그인 안 됐거나 실패) -> student로 안전 기본값
       CognitoUserPoolTokens tokens;
       try {
         tokens = cognitoSession.userPoolTokensResult.value;
@@ -192,41 +164,16 @@ class _RoleHomeRouterState extends State<_RoleHomeRouter> {
         return _Role.student;
       }
 
-      final groups = _extractGroups(tokens.idToken.raw);
+      final payload = _decodeJwtPayload(tokens.idToken.raw);
+      final groups = _extractGroups(payload);
 
       if (groups.contains('owners') || groups.contains('teachers')) {
         return _Role.teacher;
       }
       return _Role.student;
     } catch (e) {
-      final config = getIt<AppConfig>();
-      if (config.enableLogging) {
-        safePrint('[RoleDetect] failed -> $e');
-      }
+      safePrint('[RoleDetect] failed -> $e');
       return _Role.student;
-    }
-  }
-
-  Set<String> _extractGroups(String jwt) {
-    try {
-      final parts = jwt.split('.');
-      if (parts.length != 3) return {};
-
-      final payloadBase64 = parts[1];
-      final normalized = base64Url.normalize(payloadBase64);
-      final payloadBytes = base64Url.decode(normalized);
-      final payloadString = utf8.decode(payloadBytes);
-
-      final obj = jsonDecode(payloadString);
-      if (obj is! Map<String, dynamic>) return {};
-
-      final groupsValue = obj['cognito:groups'];
-      if (groupsValue is List) {
-        return groupsValue.whereType<String>().toSet();
-      }
-      return {};
-    } catch (e) {
-      return {};
     }
   }
 
@@ -252,3 +199,25 @@ class _RoleHomeRouterState extends State<_RoleHomeRouter> {
 }
 
 enum _Role { teacher, student }
+
+Map<String, dynamic> _decodeJwtPayload(String jwt) {
+  final parts = jwt.split('.');
+  if (parts.length != 3) return <String, dynamic>{};
+
+  final payloadBase64 = parts[1];
+  final normalized = base64Url.normalize(payloadBase64);
+  final payloadBytes = base64Url.decode(normalized);
+  final payloadString = utf8.decode(payloadBytes);
+
+  final obj = jsonDecode(payloadString);
+  if (obj is Map<String, dynamic>) return obj;
+  return <String, dynamic>{};
+}
+
+Set<String> _extractGroups(Map<String, dynamic> payload) {
+  final v = payload['cognito:groups'];
+  if (v is List) {
+    return v.whereType<String>().toSet();
+  }
+  return <String>{};
+}
