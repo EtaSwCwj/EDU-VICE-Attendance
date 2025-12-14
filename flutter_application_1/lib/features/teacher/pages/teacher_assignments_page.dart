@@ -8,6 +8,7 @@ import '../../../models/Assignment.dart';
 import '../../../models/AssignmentStatus.dart';
 import '../data/assignment_repository.dart';
 import '../widgets/assignment_action_sheet.dart';
+import 'teacher_assignment_local_view_page.dart';
 
 enum _StatusFilter { all, assigned, done }
 enum _SortMode { newest, dueDate, title }
@@ -394,7 +395,6 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
   String? _buildDueDateUtcIsoFromLocalDate(DateTime? localDate) {
     if (localDate == null) return null;
 
-    // 날짜만 받기 때문에, “그날 23:59” 로컬 시간으로 저장 (마감 느낌)
     final localEndOfDay = DateTime(
       localDate.year,
       localDate.month,
@@ -405,7 +405,6 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     );
 
     return localEndOfDay.toUtc().toIso8601String();
-    // 예: 2025-12-13T14:59:00.000Z (KST 기준)
   }
 
   String _formatDateYmd(DateTime? dtLocal) {
@@ -556,6 +555,15 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
     }
   }
 
+  Future<void> _openLocalView(Assignment a) async {
+    _hideKeyboard();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TeacherAssignmentLocalViewPage(assignment: a),
+      ),
+    );
+  }
+
   // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
@@ -618,9 +626,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                           onRefresh: _refreshMy,
                           emptyTitle: '내 과제가 없습니다.',
                           emptyHint: '위에서 Create를 펼쳐서 새 과제를 만들어보세요.',
-                          header: _myLastError == null
-                              ? null
-                              : _ErrorBanner(message: _myLastError!),
+                          header: _myLastError == null ? null : _ErrorBanner(message: _myLastError!),
                         ),
                         _buildListCompact(
                           controller: _ownerScroll,
@@ -732,8 +738,6 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                           border: OutlineInputBorder(),
                         ),
                       ),
-
-                      // ✅ dueDate UI
                       const SizedBox(height: 10),
                       Row(
                         children: [
@@ -905,6 +909,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
                   final a = items[listIndex];
                   return _AssignmentTile(
                     a: a,
+                    onTap: () => _openLocalView(a), // ✅ “디바이스 공유 로컬 조회” 상세
                     onActions: () => _openActionSheet(a),
                     onCopyId: () async {
                       final messenger = ScaffoldMessenger.of(context);
@@ -990,6 +995,7 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
 
 class _AssignmentTile extends StatelessWidget {
   final Assignment a;
+  final VoidCallback onTap;
   final VoidCallback onActions;
   final Future<void> Function() onCopyId;
   final VoidCallback onDelete;
@@ -997,6 +1003,7 @@ class _AssignmentTile extends StatelessWidget {
 
   const _AssignmentTile({
     required this.a,
+    required this.onTap,
     required this.onActions,
     required this.onCopyId,
     required this.onDelete,
@@ -1012,6 +1019,7 @@ class _AssignmentTile extends StatelessWidget {
 
     return Card(
       child: ListTile(
+        onTap: onTap, // ✅ 카드 탭 → 로컬 조회 상세
         title: Text(
           a.title,
           style: Theme.of(context).textTheme.titleMedium,
@@ -1030,11 +1038,16 @@ class _AssignmentTile extends StatelessWidget {
               _MetaChip(icon: Icons.event, text: dueText),
               if ((a.description ?? '').trim().isNotEmpty)
                 const _MetaChip(icon: Icons.notes, text: 'desc'),
+              const _MetaChip(icon: Icons.cloud_off, text: '로컬 조회'),
             ],
           ),
         ),
         trailing: PopupMenuButton<String>(
           onSelected: (k) async {
+            if (k == 'detail') {
+              onTap();
+              return;
+            }
             if (k == 'sheet') {
               onActions();
               return;
@@ -1049,6 +1062,7 @@ class _AssignmentTile extends StatelessWidget {
             }
           },
           itemBuilder: (_) => const [
+            PopupMenuItem(value: 'detail', child: Text('Local Detail')),
             PopupMenuItem(value: 'sheet', child: Text('Actions')),
             PopupMenuItem(value: 'copy', child: Text('Copy ID')),
             PopupMenuItem(value: 'delete', child: Text('Delete')),
