@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'student_assignment_local_keys.dart';
 import 'student_assignment_submission_repository.dart';
 import 'student_assignment_submission_repository_local.dart';
 
@@ -40,45 +41,85 @@ class StudentAssignmentLocalSnapshotLoader {
     );
   }
 
-  static String debugKeySubmitted(String studentUsername, String assignmentId) {
-    return 'student_assignment_submitted::$studentUsername::$assignmentId';
+  static String debugKeySubmitted({
+    required String studentUsername,
+    required String assignmentId,
+  }) {
+    return StudentAssignmentLocalKeys.submitted(
+      studentUsername: studentUsername,
+      assignmentId: assignmentId,
+    );
   }
 
-  static String debugKeySubmittedAt(String studentUsername, String assignmentId) {
-    return 'student_assignment_submitted_at::$studentUsername::$assignmentId';
+  static String debugKeySubmittedAt({
+    required String studentUsername,
+    required String assignmentId,
+  }) {
+    return StudentAssignmentLocalKeys.submittedAt(
+      studentUsername: studentUsername,
+      assignmentId: assignmentId,
+    );
   }
 
-  static String debugKeyNote(String studentUsername, String assignmentId) {
-    return 'student_assignment_note::$studentUsername::$assignmentId';
+  static String debugKeyNote({
+    required String studentUsername,
+    required String assignmentId,
+  }) {
+    return StudentAssignmentLocalKeys.note(
+      studentUsername: studentUsername,
+      assignmentId: assignmentId,
+    );
   }
 
-  static String debugKeyAttachment(String studentUsername, String assignmentId) {
-    return 'student_assignment_attachment::$studentUsername::$assignmentId';
+  static String debugKeyAttachment({
+    required String studentUsername,
+    required String assignmentId,
+  }) {
+    return StudentAssignmentLocalKeys.attachment(
+      studentUsername: studentUsername,
+      assignmentId: assignmentId,
+    );
   }
 
   static Future<Map<String, String>> debugKeyTypes(List<String> keys) async {
-    final prefs = await SharedPreferences.getInstance();
-    final out = <String, String>{};
+  final prefs = await SharedPreferences.getInstance();
+  final out = <String, String>{};
 
-    for (final k in keys) {
-      final v = prefs.get(k);
+  for (final k in keys) {
+    final v = prefs.get(k);
 
-      if (v is bool) {
-        out[k] = 'bool';
-      } else if (v is int) {
-        out[k] = 'int';
-      } else if (v is String) {
-        out[k] = 'String(len=${v.length})';
-      } else {
-        final list = prefs.getStringList(k);
-        if (list != null) {
-          out[k] = 'StringList(len=${list.length})';
-        } else {
-          out[k] = 'null';
-        }
-      }
+    if (v is bool) {
+      out[k] = 'bool';
+      continue;
+    }
+    if (v is int) {
+      out[k] = 'int';
+      continue;
+    }
+    if (v is String) {
+      out[k] = 'String(len=${v.length})';
+      continue;
     }
 
-    return out;
+    final list = prefs.getStringList(k);
+    if (list != null) {
+      out[k] = 'StringList(len=${list.length})';
+      continue;
+    }
+
+    // 저장된 값이 없을 때(null)도 "의미상 기본값"이 있는 키들은 디버그에서 기본값을 보여준다.
+    if (k.startsWith(StudentAssignmentLocalKeys.submittedPrefix)) {
+      out[k] = 'bool(default:false)';
+    } else if (k.startsWith(StudentAssignmentLocalKeys.notePrefix)) {
+      out[k] = 'String(len=0)';
+    } else if (k.startsWith(StudentAssignmentLocalKeys.attachmentPrefix)) {
+      out[k] = 'StringList(len=0)';
+    } else {
+      // submitted_at 등: 기본값이 없는 키는 null 그대로 표시
+      out[k] = 'null';
+    }
   }
+
+  return out;
+}
 }

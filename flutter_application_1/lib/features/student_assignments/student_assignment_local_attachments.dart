@@ -1,23 +1,19 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'student_assignment_local_keys.dart';
+
 class StudentAssignmentLocalAttachments {
   StudentAssignmentLocalAttachments._();
-
-  static const String _prefix = 'student_assignment_attachment::';
-
-  static String _key({
-    required String studentUsername,
-    required String assignmentId,
-  }) {
-    return '$_prefix$studentUsername::$assignmentId';
-  }
 
   /// 디버그용: 실제로 사용되는 SharedPreferences 키 문자열
   static String debugKey({
     required String studentUsername,
     required String assignmentId,
   }) {
-    return _key(studentUsername: studentUsername, assignmentId: assignmentId);
+    return StudentAssignmentLocalKeys.attachment(
+      studentUsername: studentUsername,
+      assignmentId: assignmentId,
+    );
   }
 
   // ---------------------------
@@ -32,7 +28,7 @@ class StudentAssignmentLocalAttachments {
     required String assignmentId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final key = _key(studentUsername: studentUsername, assignmentId: assignmentId);
+    final key = StudentAssignmentLocalKeys.attachment(studentUsername: studentUsername, assignmentId: assignmentId);
 
     // 1) 정상 케이스: StringList
     final list = prefs.getStringList(key);
@@ -64,7 +60,7 @@ class StudentAssignmentLocalAttachments {
     required List<String> paths,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final key = _key(studentUsername: studentUsername, assignmentId: assignmentId);
+    final key = StudentAssignmentLocalKeys.attachment(studentUsername: studentUsername, assignmentId: assignmentId);
 
     final cleaned = _uniqueNonEmpty(paths);
     await prefs.setStringList(key, cleaned);
@@ -107,7 +103,7 @@ class StudentAssignmentLocalAttachments {
     required String assignmentId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key(studentUsername: studentUsername, assignmentId: assignmentId));
+    await prefs.remove(StudentAssignmentLocalKeys.attachment(studentUsername: studentUsername, assignmentId: assignmentId));
   }
 
   // ---------------------------------------

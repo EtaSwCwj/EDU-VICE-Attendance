@@ -457,10 +457,22 @@ class _StudentAssignmentDetailPageState extends State<StudentAssignmentDetailPag
   }
 
   Widget _buildDebugCard() {
-    final kSubmitted = StudentAssignmentLocalSnapshotLoader.debugKeySubmitted(_studentUsername, _assignmentId);
-    final kSubmittedAt = StudentAssignmentLocalSnapshotLoader.debugKeySubmittedAt(_studentUsername, _assignmentId);
-    final kNote = StudentAssignmentLocalSnapshotLoader.debugKeyNote(_studentUsername, _assignmentId);
-    final kAttach = StudentAssignmentLocalSnapshotLoader.debugKeyAttachment(_studentUsername, _assignmentId);
+    final kSubmitted = StudentAssignmentLocalSnapshotLoader.debugKeySubmitted(
+      studentUsername: _studentUsername,
+      assignmentId: _assignmentId,
+    );
+    final kSubmittedAt = StudentAssignmentLocalSnapshotLoader.debugKeySubmittedAt(
+      studentUsername: _studentUsername,
+      assignmentId: _assignmentId,
+    );
+    final kNote = StudentAssignmentLocalSnapshotLoader.debugKeyNote(
+      studentUsername: _studentUsername,
+      assignmentId: _assignmentId,
+    );
+    final kAttach = StudentAssignmentLocalSnapshotLoader.debugKeyAttachment(
+      studentUsername: _studentUsername,
+      assignmentId: _assignmentId,
+    );
 
     final keys = <String>[kSubmitted, kSubmittedAt, kNote, kAttach];
 

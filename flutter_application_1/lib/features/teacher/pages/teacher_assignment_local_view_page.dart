@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,6 +5,9 @@ import 'package:flutter/services.dart';
 
 import '../../../models/Assignment.dart';
 import '../../student_assignments/student_assignment_local_snapshot.dart';
+import '../../student_assignments/student_assignment_local_keys.dart';
+
+import '../../../shared/widgets/local_debug_card.dart';
 
 class TeacherAssignmentLocalViewPage extends StatefulWidget {
   final Assignment assignment;
@@ -20,51 +22,16 @@ class TeacherAssignmentLocalViewPage extends StatefulWidget {
 }
 
 class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalViewPage> {
-  bool _loading = true;
-
-  late StudentAssignmentLocalSnapshot _snapshot;
-
-  @override
-  void initState() {
-    super.initState();
-    _snapshot = const StudentAssignmentLocalSnapshot(
-      submitted: false,
-      submittedAtEpochMillis: null,
-      note: '',
-      photoPaths: <String>[],
-    );
-    unawaited(_loadLocal());
-  }
+  int _reloadToken = 0;
 
   String get _studentUsername => widget.assignment.studentUsername;
   String get _assignmentId => widget.assignment.id;
 
-  Future<void> _loadLocal() async {
-    setState(() => _loading = true);
-
-    try {
-      final snap = await StudentAssignmentLocalSnapshotLoader.load(
-        studentUsername: _studentUsername,
-        assignmentId: _assignmentId,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _snapshot = snap;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _snapshot = const StudentAssignmentLocalSnapshot(
-          submitted: false,
-          submittedAtEpochMillis: null,
-          note: '',
-          photoPaths: <String>[],
-        );
-        _loading = false;
-      });
-    }
+  Future<StudentAssignmentLocalSnapshot> _loadLocal() {
+    return StudentAssignmentLocalSnapshotLoader.load(
+      studentUsername: _studentUsername,
+      assignmentId: _assignmentId,
+    );
   }
 
   Future<void> _copyId() async {
@@ -72,6 +39,10 @@ class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalV
     if (!mounted) return;
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ID copied')));
+  }
+
+  void _reload() {
+    setState(() => _reloadToken++);
   }
 
   @override
@@ -89,27 +60,36 @@ class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalV
           ),
           IconButton(
             tooltip: 'Reload',
-            onPressed: _loadLocal,
+            onPressed: _reload,
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-              children: [
-                _buildHeaderCard(a),
-                const SizedBox(height: 10),
-                _buildLocalSummaryCard(),
-                const SizedBox(height: 10),
-                _buildMemoCard(),
-                const SizedBox(height: 10),
-                _buildPhotosCard(),
-                const SizedBox(height: 10),
-                _buildDebugCard(),
-              ],
-            ),
+      body: FutureBuilder<StudentAssignmentLocalSnapshot>(
+        key: ValueKey(_reloadToken),
+        future: _loadLocal(),
+        builder: (context, snap) {
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final local = snap.data!;
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            children: [
+              _buildHeaderCard(a),
+              const SizedBox(height: 10),
+              _buildLocalSummaryCard(local),
+              const SizedBox(height: 10),
+              _buildStudentMemoCard(local),
+              const SizedBox(height: 10),
+              _buildPhotosCard(local),
+              const SizedBox(height: 10),
+              _buildDebugCard(),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -152,25 +132,36 @@ class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalV
     return '${id.substring(0, 10)}...';
   }
 
-  Widget _buildLocalSummaryCard() {
-    final submittedText = _snapshot.submitted ? 'YES' : 'NO';
-    final noteYesNo = _snapshot.note.trim().isEmpty ? 'NO' : 'YES';
-    final submittedAtText = _snapshot.submittedAtEpochMillis == null
-        ? '-'
-        : _fmtEpochMillis(_snapshot.submittedAtEpochMillis!);
+  Widget _buildLocalSummaryCard(StudentAssignmentLocalSnapshot local) {
+    final submittedText = local.submitted ? 'YES' : 'NO';
+    final submittedAtText =
+        local.submittedAtEpochMillis == null ? '-' : _fmtEpochMillis(local.submittedAtEpochMillis!);
+    final hasNoteText = local.note.trim().isEmpty ? 'NO' : 'YES';
+    final photoCountText = '${local.photoPaths.length}장';
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 6,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _chip(Icons.cloud_off, '로컬 데이터(같은 디바이스)'),
-            _chip(Icons.assignment_turned_in, '제출: $submittedText'),
-            _chip(Icons.schedule, '제출시각: $submittedAtText'),
-            _chip(Icons.notes, '메모: $noteYesNo'),
-            _chip(Icons.photo, '사진: ${_snapshot.photoPaths.length}장'),
+            Text('로컬 데이터(같은 디바이스)', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _pill('제출: $submittedText'),
+                _pill('제출시간: $submittedAtText'),
+                _pill('메모: $hasNoteText'),
+                _pill('사진: $photoCountText'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '※ 지금 단계(디바이스 공유)는 “같은 폰에서만” 교사가 볼 수 있게 하는 용도입니다.',
+              style: TextStyle(fontSize: 12),
+            ),
           ],
         ),
       ),
@@ -187,9 +178,7 @@ class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalV
     return '$y-$m-$d $hh:$mm';
   }
 
-  Widget _buildMemoCard() {
-    final memo = _snapshot.note.trim();
-
+  Widget _buildStudentMemoCard(StudentAssignmentLocalSnapshot local) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -197,26 +186,25 @@ class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalV
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('학생 메모(로컬)', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (memo.isEmpty)
-              const Text('저장된 메모가 없습니다.')
-            else
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-                ),
-                child: Text(memo),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
               ),
+              child: Text(
+                local.note.trim().isEmpty ? '(메모 없음)' : local.note,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPhotosCard() {
+  Widget _buildPhotosCard(StudentAssignmentLocalSnapshot local) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -224,12 +212,12 @@ class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalV
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('증빙 사진(로컬)', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (_snapshot.photoPaths.isEmpty)
+            const SizedBox(height: 10),
+            if (local.photoPaths.isEmpty)
               const Text('아직 첨부된 사진이 없습니다.')
             else
               Column(
-                children: _snapshot.photoPaths.map(_photoTile).toList(),
+                children: local.photoPaths.map(_photoTile).toList(),
               ),
           ],
         ),
@@ -284,54 +272,14 @@ class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalV
   }
 
   Widget _buildDebugCard() {
-    final kSubmitted = StudentAssignmentLocalSnapshotLoader.debugKeySubmitted(_studentUsername, _assignmentId);
-    final kSubmittedAt = StudentAssignmentLocalSnapshotLoader.debugKeySubmittedAt(_studentUsername, _assignmentId);
-    final kNote = StudentAssignmentLocalSnapshotLoader.debugKeyNote(_studentUsername, _assignmentId);
-    final kAttach = StudentAssignmentLocalSnapshotLoader.debugKeyAttachment(_studentUsername, _assignmentId);
-
-    final keys = <String>[kSubmitted, kSubmittedAt, kNote, kAttach];
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('디버그(로컬 키 + 타입)', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            FutureBuilder<Map<String, String>>(
-              future: StudentAssignmentLocalSnapshotLoader.debugKeyTypes(keys),
-              builder: (context, snap) {
-                if (!snap.hasData) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: LinearProgressIndicator(minHeight: 2),
-                  );
-                }
-
-                final typeMap = snap.data!;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: keys.map((k) {
-                    final typeInfo = typeMap[k] ?? 'unknown';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text('• $k  ->  $typeInfo'),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              '※ 지금 단계(디바이스 공유)는 “같은 폰에서만” 교사가 볼 수 있게 하는 용도입니다.',
-              style: TextStyle(fontSize: 12),
-            ),
-          ],
-        ),
-      ),
+    final keys = StudentAssignmentLocalKeys.all(
+      studentUsername: _studentUsername,
+      assignmentId: _assignmentId,
     );
+
+    return LocalDebugCard(keys: keys);
   }
+
 
   Widget _chip(IconData icon, String text) {
     final cs = Theme.of(context).colorScheme;
@@ -349,6 +297,18 @@ class _TeacherAssignmentLocalViewPageState extends State<TeacherAssignmentLocalV
           Text(text, overflow: TextOverflow.ellipsis),
         ],
       ),
+    );
+  }
+
+  Widget _pill(String text) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(text),
     );
   }
 }
