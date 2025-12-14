@@ -230,8 +230,6 @@ class _StudentAssignmentDetailPageState extends State<StudentAssignmentDetailPag
                 _buildMemoCard(),
                 const SizedBox(height: 10),
                 _buildPhotosCard(),
-                const SizedBox(height: 10),
-                _buildDebugCard(),
               ],
             ),
     );
@@ -450,56 +448,6 @@ class _StudentAssignmentDetailPageState extends State<StudentAssignmentDetailPag
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDebugCard() {
-    final kSubmitted = StudentAssignmentLocalSnapshotLoader.debugKeySubmitted(_studentUsername, _assignmentId);
-    final kSubmittedAt = StudentAssignmentLocalSnapshotLoader.debugKeySubmittedAt(_studentUsername, _assignmentId);
-    final kNote = StudentAssignmentLocalSnapshotLoader.debugKeyNote(_studentUsername, _assignmentId);
-    final kAttach = StudentAssignmentLocalSnapshotLoader.debugKeyAttachment(_studentUsername, _assignmentId);
-
-    final keys = <String>[kSubmitted, kSubmittedAt, kNote, kAttach];
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('디버그(로컬 키 + 타입)', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            FutureBuilder<Map<String, String>>(
-              future: StudentAssignmentLocalSnapshotLoader.debugKeyTypes(keys),
-              builder: (context, snap) {
-                if (!snap.hasData) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: LinearProgressIndicator(minHeight: 2),
-                  );
-                }
-
-                final typeMap = snap.data!;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: keys.map((k) {
-                    final typeInfo = typeMap[k] ?? 'unknown';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text('• $k  ->  $typeInfo'),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              '※ 지금 단계(디바이스 공유)는 “같은 폰에서만” 교사가 볼 수 있게 하는 용도입니다.',
-              style: TextStyle(fontSize: 12),
-            ),
           ],
         ),
       ),
