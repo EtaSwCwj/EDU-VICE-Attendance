@@ -9,6 +9,10 @@ import '../network/network_info.dart';
 import '../network/sync_manager.dart';
 import '../../data/local/sembast_database.dart';
 
+// Features
+import '../../features/lessons/domain/repositories/lesson_repository.dart';
+import '../../features/lessons/data/repositories/lesson_local_repository.dart';
+
 final getIt = GetIt.instance;
 
 /// 의존성 주입 초기화
@@ -55,8 +59,13 @@ Future<void> setupDependencies({AppConfig? config}) async {
   // 예: getIt.registerLazySingleton<AttendanceLocalDataSource>(...)
 
   // ========== Repositories ==========
-  // TODO: 각 feature의 repository 등록
-  // 예: getIt.registerLazySingleton<AttendanceRepository>(...)
+  // Lesson Repository
+  final db = await database.database;
+  getIt.registerLazySingleton(() => db);
+  
+  getIt.registerLazySingleton<LessonRepository>(
+    () => LessonLocalRepository(getIt()),
+  );
 
   // ========== Use Cases ==========
   // TODO: 각 feature의 use case 등록
