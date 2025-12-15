@@ -7,6 +7,11 @@ abstract class LessonRepository {
   Future<Either<Failure, List<Lesson>>> getLessonsByTeacher(String teacherId, DateTime date);
   Future<Either<Failure, List<Lesson>>> getLessonsByStudent(String studentId, DateTime date);
   Future<Either<Failure, Lesson>> getLessonById(String id);
+  Future<Either<Failure, List<Lesson>>> getLessonsByDateRange({
+    required String teacherId,
+    required DateTime startDate,
+    required DateTime endDate,
+  });
   
   // 수업 생성
   Future<Either<Failure, Lesson>> createLesson(Lesson lesson);

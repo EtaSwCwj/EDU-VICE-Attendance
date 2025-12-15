@@ -80,6 +80,31 @@ class LessonLocalRepository implements LessonRepository {
   }
 
   @override
+  Future<Either<Failure, List<Lesson>>> getLessonsByDateRange({
+    required String teacherId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      final finder = Finder(
+        filter: Filter.and([
+          Filter.equals('teacherId', teacherId),
+          Filter.greaterThanOrEquals('scheduledAt', startDate.toIso8601String()),
+          Filter.lessThanOrEquals('scheduledAt', endDate.toIso8601String()),
+        ]),
+        sortOrders: [SortOrder('scheduledAt')],
+      );
+
+      final records = await _store.find(db, finder: finder);
+      final lessons = records.map((r) => _fromMap(r.value)).toList();
+
+      return Right(lessons);
+    } on CacheException {
+      return Left(CacheFailure());
+    }
+  }
+
+  @override
   Future<Either<Failure, Lesson>> createLesson(Lesson lesson) async {
     try {
       await _store.record(lesson.id).put(db, _toMap(lesson));

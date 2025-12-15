@@ -1,128 +1,313 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../lessons/presentation/providers/lesson_provider.dart';
+import '../../lessons/presentation/widgets/lesson_card.dart';
+import '../../lessons/presentation/widgets/recurring_lesson_dialog.dart';
+import '../../lessons/domain/entities/lesson.dart';
 
-/// 교사용 - 수업(Classes) 1차 스켈레톤
-/// - 지금은 더미 UI만 제공 (목록/상세 구조 확인용)
-/// - 다음 단계에서 실제 데이터 연동 및 라우팅 연결 예정
-class TeacherClassesPage extends StatelessWidget {
+class TeacherClassesPage extends StatefulWidget {
   const TeacherClassesPage({super.key});
+
+  @override
+  State<TeacherClassesPage> createState() => _TeacherClassesPageState();
+}
+
+class _TeacherClassesPageState extends State<TeacherClassesPage> {
+  DateTime _selectedDate = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadLessons();
+    });
+  }
+
+  void _loadLessons() {
+    context.read<LessonProvider>().loadLessonsByDate(
+      teacherId: 'teacher-001',
+      date: _selectedDate,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Classes (Teacher)'),
+        title: const Text('수업 관리'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: () => _selectDate(context),
+          ),
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          _SectionHeader(
-            icon: Icons.event_note,
-            title: '오늘 수업',
-            subtitle: '당일 일정만 간략 확인',
-          ),
-          const SizedBox(height: 8),
-          ...List.generate(
-            3,
-            (i) => _ClassTile(
-              title: '수업 ${i + 1}',
-              subtitle: '시간: 18:${(i * 10).toString().padLeft(2, '0')} ~ 19:${(i * 10 + 50).toString().padLeft(2, '0')}',
-              students: ['student_test1', 'student_test2'],
+          _buildWeekSelector(),
+          Expanded(
+            child: Consumer<LessonProvider>(
+              builder: (context, provider, child) {
+                if (provider.isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (provider.error != null) {
+                  return Center(child: Text('에러: ${provider.error}'));
+                }
+
+                final lessons = provider.allLessons
+                    .where((l) => _isSameDay(l.scheduledAt, _selectedDate))
+                    .toList()
+                  ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+
+                if (lessons.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.event_busy, size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        Text(
+                          '${_selectedDate.month}월 ${_selectedDate.day}일\n수업이 없습니다',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: lessons.length,
+                  itemBuilder: (context, index) => LessonCard(
+                    lesson: lessons[index],
+                    onTap: () => _showLessonDetail(lessons[index]),
+                  ),
+                );
+              },
             ),
           ),
-          const SizedBox(height: 24),
-          _SectionHeader(
-            icon: Icons.view_week,
-            title: '주간 보기(더미)',
-            subtitle: '주간 요약 영역 – 다음 단계에서 캘린더/표로 교체',
-          ),
-          const SizedBox(height: 8),
-          Container(
-            height: 120,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: const Center(
-              child: Text('주간 타임라인(placeholder)'),
-            ),
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('수업 추가 UI는 다음 단계에서 연결됩니다.')),
-              );
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddLessonDialog(),
+        icon: const Icon(Icons.add),
+        label: const Text('수업 추가'),
+      ),
+    );
+  }
+
+  Widget _buildWeekSelector() {
+    final today = DateTime.now();
+    final startOfWeek = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
+    final weekDays = List.generate(7, (i) => startOfWeek.add(Duration(days: i)));
+
+    return Container(
+      height: 80,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: weekDays.length,
+        itemBuilder: (context, index) {
+          final date = weekDays[index];
+          final isSelected = _isSameDay(date, _selectedDate);
+          final isToday = _isSameDay(date, today);
+
+          return GestureDetector(
+            onTap: () {
+              setState(() => _selectedDate = date);
+              _loadLessons();
             },
-            icon: const Icon(Icons.add),
-            label: const Text('수업 추가'),
-          ),
+            child: Container(
+              width: 60,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : isToday
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : null,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isToday && !isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.transparent,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _getWeekdayName(date.weekday),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${date.day}',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _getWeekdayName(int weekday) {
+    const names = ['월', '화', '수', '목', '금', '토', '일'];
+    return names[weekday - 1];
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2026),
+    );
+    if (picked != null && mounted) {
+      setState(() => _selectedDate = picked);
+      _loadLessons();
+    }
+  }
+
+  Future<void> _showAddLessonDialog() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => const RecurringLessonDialog(),
+    );
+
+    if (result != null && mounted) {
+      // TODO: 수업 생성 로직
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('수업이 추가되었습니다')),
+      );
+      _loadLessons();
+    }
+  }
+
+  void _showLessonDetail(Lesson lesson) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              lesson.subject,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+            _buildDetailRow(Icons.schedule, '시간',
+                '${_formatTime(lesson.scheduledAt)} (${lesson.durationMinutes}분)'),
+            _buildDetailRow(Icons.group, '학생', '${lesson.studentIds.length}명'),
+            if (lesson.memo != null)
+              _buildDetailRow(Icons.note, '메모', lesson.memo!),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _editLesson(lesson);
+                    },
+                    icon: const Icon(Icons.edit),
+                    label: const Text('수정'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _deleteLesson(lesson);
+                    },
+                    icon: const Icon(Icons.delete),
+                    label: const Text('삭제'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 8),
+          Text('$label: '),
+          Expanded(child: Text(value)),
         ],
       ),
     );
   }
-}
 
-class _SectionHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String? subtitle;
+  String _formatTime(DateTime dt) {
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
 
-  const _SectionHeader({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const Spacer(),
-        if (subtitle != null)
-          Text(
-            subtitle!,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-      ],
+  void _editLesson(Lesson lesson) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('수업 수정 기능은 곧 추가됩니다')),
     );
   }
-}
 
-class _ClassTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final List<String> students;
-
-  const _ClassTile({
-    required this.title,
-    required this.subtitle,
-    required this.students,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: const Icon(Icons.class_),
-        title: Text(title),
-        subtitle: Text('$subtitle\n학생: ${students.join(', ')}'),
-        isThreeLine: true,
-        trailing: IconButton(
-          icon: const Icon(Icons.more_horiz),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('“$title” 상세/편집은 다음 단계에서 구현')),
-            );
-          },
-        ),
+  Future<void> _deleteLesson(Lesson lesson) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('수업 삭제'),
+        content: const Text('이 수업을 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('삭제'),
+          ),
+        ],
       ),
     );
+
+    if (confirmed == true && mounted) {
+      // TODO: 삭제 로직
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('수업이 삭제되었습니다')),
+      );
+      _loadLessons();
+    }
   }
 }

@@ -29,6 +29,7 @@ class LessonProvider extends ChangeNotifier {
   List<Lesson> get upcoming => _upcoming;
   List<Lesson> get completed => _completed;
   List<Lesson> get warnings => _warnings;
+  List<Lesson> get allLessons => [..._inProgress, ..._upcoming, ..._completed, ..._warnings];
   bool get isLoading => _isLoading;
   String? get error => _error;
   int get totalCount => _inProgress.length + _upcoming.length + _completed.length + _warnings.length;
@@ -52,6 +53,39 @@ class LessonProvider extends ChangeNotifier {
         _upcoming = data.upcoming;
         _completed = data.completed;
         _warnings = data.warnings;
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
+  }
+
+  // 특정 날짜의 수업 로드
+  Future<void> loadLessonsByDate({
+    required String teacherId,
+    required DateTime date,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    final result = await _repository.getLessonsByDateRange(
+      teacherId: teacherId,
+      startDate: DateTime(date.year, date.month, date.day),
+      endDate: DateTime(date.year, date.month, date.day, 23, 59, 59),
+    );
+
+    result.fold(
+      (failure) {
+        _error = failure.message;
+        _isLoading = false;
+        notifyListeners();
+      },
+      (lessons) {
+        // 상태별로 분류
+        _inProgress = lessons.where((l) => l.status == LessonStatus.inProgress).toList();
+        _upcoming = lessons.where((l) => l.status == LessonStatus.scheduled && !l.shouldWarn).toList();
+        _completed = lessons.where((l) => l.status == LessonStatus.completed).toList();
+        _warnings = lessons.where((l) => l.status == LessonStatus.scheduled && l.shouldWarn).toList();
         _isLoading = false;
         notifyListeners();
       },
