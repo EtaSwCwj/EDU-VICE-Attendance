@@ -1,9 +1,11 @@
 // lib/features/teacher_homework/teacher_homework_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:get_it/get_it.dart';
 
 import '../homework/models.dart';
 import '../homework/local_homework_repository.dart';
+import '../books/data/repositories/book_local_repository.dart';
 import 'local_teacher_homework_repository.dart';
 import 'teacher_homework_provider.dart';
 
@@ -12,9 +14,18 @@ class TeacherHomeworkPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // BookLocalRepository가 등록되어 있으면 사용, 없으면 null
+    BookLocalRepository? bookRepo;
+    try {
+      bookRepo = GetIt.instance<BookLocalRepository>();
+    } catch (_) {
+      // GetIt에 등록되지 않은 경우 무시
+    }
+
     return ChangeNotifierProvider<TeacherHomeworkProvider>(
       create: (_) => TeacherHomeworkProvider(
         LocalTeacherHomeworkRepository(LocalHomeworkRepository()),
+        bookRepo: bookRepo,
       )..loadStudents(),
       child: const _TeacherHomeworkView(),
     );

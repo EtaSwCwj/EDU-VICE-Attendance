@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'pages/teacher_home_page_new.dart';
 import 'pages/teacher_classes_page.dart';
 import 'pages/teacher_students_page.dart';
-import 'pages/teacher_assignments_page.dart';
+import '../teacher_homework/teacher_homework_page.dart';
+import '../books/presentation/pages/book_management_page.dart';
 
-/// 교사용 앱 쉘: 하단 탭 네비게이션(홈/수업/학생/숙제)
+/// 교사용 앱 쉘: 하단 탭 네비게이션(홈/수업/학생/숙제/교재)
 /// - IndexedStack으로 탭 상태 유지
 class TeacherShell extends StatefulWidget {
   const TeacherShell({super.key});
@@ -17,10 +18,11 @@ class _TeacherShellState extends State<TeacherShell> {
   int _index = 0;
 
   static const _pages = <Widget>[
-    TeacherHomePage(), // ✅ 새로운 수업 관리 페이지
-    TeacherClassesPage(),
-    TeacherStudentsPage(),
-    TeacherAssignmentsPage(),
+    TeacherHomePage(),        // 수업 관리 페이지
+    TeacherClassesPage(),     // 반 관리
+    TeacherStudentsPage(),    // 학생 관리
+    TeacherHomeworkPage(),    // 숙제 관리
+    BookManagementPage(),     // 교재 관리 + 설정 접근
   ];
 
   @override
@@ -50,6 +52,11 @@ class _TeacherShellState extends State<TeacherShell> {
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment),
             label: '숙제',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book),
+            label: '교재',
           ),
         ],
       ),

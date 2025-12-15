@@ -4,6 +4,8 @@ import '../../lessons/presentation/providers/lesson_provider.dart';
 import '../../lessons/presentation/widgets/lesson_card.dart';
 import '../../lessons/presentation/widgets/evaluation_dialog.dart';
 import '../../lessons/domain/entities/lesson.dart';
+import '../../settings/settings_page.dart';
+import '../../../shared/services/auth_state.dart';
 
 class TeacherHomePage extends StatefulWidget {
   const TeacherHomePage({super.key});
@@ -44,6 +46,12 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadLessons,
+            tooltip: '새로고침',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _openSettings,
+            tooltip: '설정',
           ),
         ],
       ),
@@ -124,7 +132,10 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
                 ],
                 if (provider.completed.isNotEmpty) ...[
                   _buildSectionHeader('✅ 완료', provider.completed.length, Colors.green),
-                  ...provider.completed.map((lesson) => LessonCard(lesson: lesson)),
+                  ...provider.completed.map((lesson) => LessonCard(
+                        lesson: lesson,
+                        onEdit: () => _editCompletedLesson(lesson),
+                      )),
                 ],
               ],
             ),
@@ -273,6 +284,11 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
         scheduledAt: DateTime(now.year, now.month, now.day, 10, 0),
         durationMinutes: 90,
         status: LessonStatus.inProgress,
+        progress: const LessonProgress(
+          chapterName: '3단원 소수',
+          startPage: 45,
+          endPage: 52,
+        ),
         isRecurring: false,
         createdAt: DateTime.now(),
       ),
@@ -296,6 +312,11 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
         scheduledAt: DateTime(now.year, now.month, now.day, 14, 0),
         durationMinutes: 60,
         status: LessonStatus.scheduled,
+        progress: const LessonProgress(
+          chapterName: 'Unit 4 Food',
+          startPage: 35,
+          endPage: 42,
+        ),
         isRecurring: false,
         createdAt: DateTime.now(),
       ),
@@ -319,6 +340,11 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
         scheduledAt: DateTime(now.year, now.month, now.day, 16, 0),
         durationMinutes: 90,
         status: LessonStatus.scheduled,
+        progress: const LessonProgress(
+          chapterName: '2장 화학',
+          startPage: 20,
+          endPage: 28,
+        ),
         isRecurring: false,
         createdAt: DateTime.now(),
       ),
@@ -333,6 +359,34 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('테스트 데이터가 추가되었습니다')),
+      );
+    }
+  }
+
+  void _editCompletedLesson(Lesson lesson) {
+    // TODO: 수업 탭으로 이동 (해당 날짜)
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('수업 탭으로 이동 기능은 곧 추가됩니다')),
+    );
+  }
+
+  void _openSettings() {
+    try {
+      final authState = context.read<AuthState>();
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChangeNotifierProvider.value(
+            value: authState,
+            child: Scaffold(
+              appBar: AppBar(title: const Text('설정')),
+              body: const SettingsPage(role: 'teacher'),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('설정 페이지를 열 수 없습니다')),
       );
     }
   }

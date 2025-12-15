@@ -7,6 +7,35 @@ enum LessonStatus {
   missed,      // 결석/미진행
 }
 
+/// 수업 진도 정보
+class LessonProgress extends Equatable {
+  final String? chapterName;      // 챕터명 (예: "1단원 자연수")
+  final int? startPage;           // 시작 페이지
+  final int? endPage;             // 끝 페이지
+  final String? note;             // 진도 관련 메모
+
+  const LessonProgress({
+    this.chapterName,
+    this.startPage,
+    this.endPage,
+    this.note,
+  });
+
+  String get displayText {
+    final parts = <String>[];
+    if (chapterName != null) parts.add(chapterName!);
+    if (startPage != null && endPage != null) {
+      parts.add('p.$startPage-$endPage');
+    } else if (startPage != null) {
+      parts.add('p.$startPage~');
+    }
+    return parts.isEmpty ? '진도 미정' : parts.join(' ');
+  }
+
+  @override
+  List<Object?> get props => [chapterName, startPage, endPage];
+}
+
 class Lesson extends Equatable {
   final String id;
   final String academyId;
@@ -18,9 +47,13 @@ class Lesson extends Equatable {
   final int durationMinutes;
   final LessonStatus status;
   
+  // 진도 정보 (NEW!)
+  final LessonProgress? progress;
+  
   // 평가 정보
   final Map<String, int>? studentScores; // studentId -> score (0-100)
   final Map<String, bool>? attendance;   // studentId -> present
+  final Map<String, String>? studentMemos; // studentId -> memo (학생별 메모)
   final String? memo;
   
   // 반복 정보 (원본 수업만 가짐)
@@ -40,8 +73,10 @@ class Lesson extends Equatable {
     required this.scheduledAt,
     required this.durationMinutes,
     required this.status,
+    this.progress,
     this.studentScores,
     this.attendance,
+    this.studentMemos,
     this.memo,
     this.recurrenceId,
     required this.isRecurring,
@@ -66,9 +101,16 @@ class Lesson extends Equatable {
   }
 
   Lesson copyWith({
+    List<String>? studentIds,
+    String? bookId,
+    String? subject,
+    DateTime? scheduledAt,
+    int? durationMinutes,
     LessonStatus? status,
+    LessonProgress? progress,
     Map<String, int>? studentScores,
     Map<String, bool>? attendance,
+    Map<String, String>? studentMemos,
     String? memo,
     DateTime? completedAt,
   }) {
@@ -76,14 +118,16 @@ class Lesson extends Equatable {
       id: id,
       academyId: academyId,
       teacherId: teacherId,
-      studentIds: studentIds,
-      bookId: bookId,
-      subject: subject,
-      scheduledAt: scheduledAt,
-      durationMinutes: durationMinutes,
+      studentIds: studentIds ?? this.studentIds,
+      bookId: bookId ?? this.bookId,
+      subject: subject ?? this.subject,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
       status: status ?? this.status,
+      progress: progress ?? this.progress,
       studentScores: studentScores ?? this.studentScores,
       attendance: attendance ?? this.attendance,
+      studentMemos: studentMemos ?? this.studentMemos,
       memo: memo ?? this.memo,
       recurrenceId: recurrenceId,
       isRecurring: isRecurring,

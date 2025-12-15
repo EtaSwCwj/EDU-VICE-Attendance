@@ -1,149 +1,19 @@
+// lib/features/books/presentation/pages/book_management_page.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:get_it/get_it.dart';
-import '../../shared/services/auth_state.dart';
-import '../../shared/services/mock_storage.dart';
-import '../books/data/repositories/book_local_repository.dart';
-import '../books/domain/entities/book.dart';
 
-class SettingsPage extends StatelessWidget {
-  final String role;
-  const SettingsPage({required this.role, super.key});
+import '../../data/repositories/book_local_repository.dart';
+import '../../domain/entities/book.dart';
 
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthState>();
-    
-    return ListView(
-      children: [
-        // 사용자 정보
-        ListTile(
-          leading: const CircleAvatar(child: Icon(Icons.person)),
-          title: Text(auth.user?.name ?? ''),
-          subtitle: Text(_getRoleText(role)),
-        ),
-        const Divider(),
-        
-        // 선생/원장만 책 관리 가능
-        if (role == 'teacher' || role == 'owner') ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              '📚 교재 관리',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Colors.indigo,
-              ),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.menu_book, color: Colors.indigo),
-            title: const Text('교재 목록'),
-            subtitle: const Text('등록된 교재 확인'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showBookList(context),
-          ),
-          ListTile(
-            leading: const Icon(Icons.add_circle, color: Colors.green),
-            title: const Text('교재 추가'),
-            subtitle: const Text('새 교재 등록'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showAddBookDialog(context),
-          ),
-          const Divider(),
-        ],
-        
-        // 일반 설정
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            '⚙️ 설정',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-        ),
-        ListTile(
-          leading: const Icon(Icons.refresh),
-          title: const Text('데이터 새로고침'),
-          onTap: () async {
-            await context.read<AuthState>().reloadFromStorage();
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('데이터를 다시 불러왔습니다')),
-              );
-            }
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.folder_open),
-          title: const Text('accounts.json 경로 보기'),
-          onTap: () async {
-            final path = await MockStorage.filePath();
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('경로: $path')));
-            }
-          },
-        ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.logout, color: Colors.red),
-          title: const Text('로그아웃', style: TextStyle(color: Colors.red)),
-          onTap: () => context.read<AuthState>().signOut(),
-        ),
-      ],
-    );
-  }
-
-  String _getRoleText(String role) {
-    switch (role) {
-      case 'admin':
-        return '관리자';
-      case 'owner':
-        return '원장';
-      case 'teacher':
-        return '선생';
-      case 'student':
-        return '학생';
-      default:
-        return role;
-    }
-  }
-
-  void _showBookList(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const _BookListPage(),
-      ),
-    );
-  }
-
-  void _showAddBookDialog(BuildContext context) async {
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => const _BookAddDialog(),
-    );
-
-    if (result != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('교재 "${result['title']}"이(가) 추가되었습니다')),
-      );
-    }
-  }
-}
-
-/// 교재 목록 페이지
-class _BookListPage extends StatefulWidget {
-  const _BookListPage();
+/// 교재 관리 페이지 (하단 탭용)
+class BookManagementPage extends StatefulWidget {
+  const BookManagementPage({super.key});
 
   @override
-  State<_BookListPage> createState() => _BookListPageState();
+  State<BookManagementPage> createState() => _BookManagementPageState();
 }
 
-class _BookListPageState extends State<_BookListPage> {
+class _BookManagementPageState extends State<BookManagementPage> {
   final _bookRepo = GetIt.instance<BookLocalRepository>();
   String _filterSubject = '전체';
   List<Book> _books = [];
@@ -215,7 +85,7 @@ class _BookListPageState extends State<_BookListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('교재 목록'),
+        title: const Text('교재 관리'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -224,6 +94,7 @@ class _BookListPageState extends State<_BookListPage> {
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.filter_list),
+            tooltip: '과목 필터',
             onSelected: (value) => setState(() => _filterSubject = value),
             itemBuilder: (context) => [
               const PopupMenuItem(value: '전체', child: Text('전체')),
@@ -238,7 +109,7 @@ class _BookListPageState extends State<_BookListPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _filteredBooks.isEmpty
-              ? const Center(child: Text('등록된 교재가 없습니다'))
+              ? _buildEmptyState()
               : RefreshIndicator(
                   onRefresh: _loadBooks,
                   child: ListView.builder(
@@ -272,6 +143,26 @@ class _BookListPageState extends State<_BookListPage> {
       ),
     );
   }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.menu_book, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            _filterSubject == '전체' ? '등록된 교재가 없습니다' : '$_filterSubject 교재가 없습니다',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Colors.grey[600],
+                ),
+          ),
+          const SizedBox(height: 8),
+          const Text('+ 버튼을 눌러 교재를 추가하세요'),
+        ],
+      ),
+    );
+  }
 }
 
 class _BookCard extends StatelessWidget {
@@ -282,11 +173,16 @@ class _BookCard extends StatelessWidget {
 
   Color _getSubjectColor(String subject) {
     switch (subject) {
-      case '수학': return Colors.blue;
-      case '영어': return Colors.green;
-      case '과학': return Colors.orange;
-      case '국어': return Colors.purple;
-      default: return Colors.grey;
+      case '수학':
+        return Colors.blue;
+      case '영어':
+        return Colors.green;
+      case '과학':
+        return Colors.orange;
+      case '국어':
+        return Colors.purple;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -327,7 +223,7 @@ class _BookCard extends StatelessWidget {
                     const Text('목차', style: TextStyle(fontWeight: FontWeight.bold)),
                     const Spacer(),
                     Text('${book.chapters.length}개 챕터',
-                         style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -446,7 +342,7 @@ class _BookAddDialogState extends State<_BookAddDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('📖 기본 정보', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const Text('기본 정보', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 12),
         TextField(
           controller: _titleController,
@@ -455,12 +351,14 @@ class _BookAddDialogState extends State<_BookAddDialog> {
             border: OutlineInputBorder(),
             hintText: '예: 초등 수학의 정석',
           ),
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
+                value: _selectedSubject,
                 decoration: const InputDecoration(
                   labelText: '과목',
                   border: OutlineInputBorder(),
@@ -474,6 +372,7 @@ class _BookAddDialogState extends State<_BookAddDialog> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
+                value: _selectedGrade,
                 decoration: const InputDecoration(
                   labelText: '학년',
                   border: OutlineInputBorder(),
@@ -488,6 +387,7 @@ class _BookAddDialogState extends State<_BookAddDialog> {
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
+          value: _publishYear,
           decoration: const InputDecoration(
             labelText: '출판연도',
             border: OutlineInputBorder(),
@@ -507,7 +407,7 @@ class _BookAddDialogState extends State<_BookAddDialog> {
       children: [
         Row(
           children: [
-            const Text('📋 목차', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text('목차', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Spacer(),
             Text('${_chapters.length}개', style: TextStyle(color: Colors.grey[600])),
           ],
@@ -628,7 +528,6 @@ class _BookAddDialogState extends State<_BookAddDialog> {
     setState(() => _saving = true);
 
     try {
-      // 고유 ID 생성
       final id = 'book-${_selectedSubject.toLowerCase()}-${DateTime.now().millisecondsSinceEpoch}';
 
       final book = Book(

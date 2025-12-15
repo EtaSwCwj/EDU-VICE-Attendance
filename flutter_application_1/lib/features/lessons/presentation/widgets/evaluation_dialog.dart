@@ -3,7 +3,7 @@ import '../../domain/entities/lesson.dart';
 
 class EvaluationDialog extends StatefulWidget {
   final Lesson lesson;
-  final List<String> studentNames; // studentId별 이름 매핑 필요
+  final List<String> studentNames;
 
   const EvaluationDialog({
     super.key,
@@ -18,21 +18,23 @@ class EvaluationDialog extends StatefulWidget {
 class _EvaluationDialogState extends State<EvaluationDialog> {
   final Map<String, int> _scores = {};
   final Map<String, bool> _attendance = {};
-  final _memoController = TextEditingController();
+  final Map<String, TextEditingController> _memoControllers = {};
 
   @override
   void initState() {
     super.initState();
-    // 초기값 설정
     for (final studentId in widget.lesson.studentIds) {
-      _scores[studentId] = 70; // 기본 70점
-      _attendance[studentId] = true; // 기본 출석
+      _scores[studentId] = 70;
+      _attendance[studentId] = true;
+      _memoControllers[studentId] = TextEditingController();
     }
   }
 
   @override
   void dispose() {
-    _memoController.dispose();
+    for (final controller in _memoControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -40,7 +42,7 @@ class _EvaluationDialogState extends State<EvaluationDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 700),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -58,6 +60,7 @@ class _EvaluationDialogState extends State<EvaluationDialog> {
                     studentName: studentName,
                     score: _scores[studentId]!,
                     isPresent: _attendance[studentId]!,
+                    memoController: _memoControllers[studentId]!,
                     onScoreChanged: (score) {
                       setState(() => _scores[studentId] = score);
                     },
@@ -68,7 +71,6 @@ class _EvaluationDialogState extends State<EvaluationDialog> {
                 },
               ),
             ),
-            _buildMemoSection(),
             _buildActions(),
           ],
         ),
@@ -87,26 +89,26 @@ class _EvaluationDialogState extends State<EvaluationDialog> {
         children: [
           const Icon(Icons.rate_review, color: Colors.blue),
           const SizedBox(width: 8),
-          Text(
-            '수업 평가',
-            style: Theme.of(context).textTheme.titleLarge,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '수업 평가',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                if (widget.lesson.progress != null)
+                  Text(
+                    widget.lesson.progress!.displayText,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildMemoSection() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: TextField(
-        controller: _memoController,
-        decoration: const InputDecoration(
-          labelText: '메모 (선택)',
-          hintText: '수업 내용, 특이사항 등',
-          border: OutlineInputBorder(),
-        ),
-        maxLines: 3,
       ),
     );
   }
@@ -132,10 +134,17 @@ class _EvaluationDialogState extends State<EvaluationDialog> {
   }
 
   void _submit() {
+    final Map<String, String> memos = {};
+    for (final entry in _memoControllers.entries) {
+      if (entry.value.text.isNotEmpty) {
+        memos[entry.key] = entry.value.text;
+      }
+    }
+
     Navigator.pop(context, {
       'scores': _scores,
       'attendance': _attendance,
-      'memo': _memoController.text.isEmpty ? null : _memoController.text,
+      'memos': memos,
     });
   }
 }
@@ -144,6 +153,7 @@ class _StudentEvaluationItem extends StatelessWidget {
   final String studentName;
   final int score;
   final bool isPresent;
+  final TextEditingController memoController;
   final ValueChanged<int> onScoreChanged;
   final ValueChanged<bool> onAttendanceChanged;
 
@@ -151,6 +161,7 @@ class _StudentEvaluationItem extends StatelessWidget {
     required this.studentName,
     required this.score,
     required this.isPresent,
+    required this.memoController,
     required this.onScoreChanged,
     required this.onAttendanceChanged,
   });
@@ -207,6 +218,17 @@ class _StudentEvaluationItem extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: memoController,
+              decoration: const InputDecoration(
+                labelText: '메모 (선택)',
+                hintText: '이 학생에 대한 특이사항',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              maxLines: 2,
+            ),
           ],
         ),
       ),
@@ -231,7 +253,7 @@ class _ScoreSlider extends StatelessWidget {
           value: score.toDouble(),
           min: 0,
           max: 100,
-          divisions: 20, // 5점 단위
+          divisions: 20,
           label: '$score점',
           onChanged: (value) => onChanged(value.toInt()),
         ),

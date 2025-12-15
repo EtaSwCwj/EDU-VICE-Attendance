@@ -14,7 +14,7 @@ import 'amplifyconfiguration.dart';
 // Pages / Shells
 import 'features/dev/aws_smoketest_page.dart';
 import 'features/teacher/teacher_shell.dart';
-import 'features/home/student_home_shell.dart';
+import 'features/student/student_shell.dart';
 
 // 새로 추가: DI & Config
 import 'config/app_config.dart';
@@ -200,7 +200,7 @@ class _RoleHomeRouterState extends State<_RoleHomeRouter> {
         if (role == _Role.teacher) {
           return const TeacherShell();
         }
-        return const StudentHomeShell();
+        return const StudentShell();
       },
     );
   }

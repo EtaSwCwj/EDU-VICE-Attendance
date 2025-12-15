@@ -6,6 +6,7 @@ class LessonCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onEvaluate;
   final VoidCallback? onStart;
+  final VoidCallback? onEdit;
 
   const LessonCard({
     super.key,
@@ -13,6 +14,7 @@ class LessonCard extends StatelessWidget {
     this.onTap,
     this.onEvaluate,
     this.onStart,
+    this.onEdit,
   });
 
   String _formatTime(DateTime dt) {
@@ -32,6 +34,7 @@ class LessonCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 상단: 상태 배지 + 과목명 + 시간
               Row(
                 children: [
                   _StatusBadge(status: lesson.status),
@@ -54,6 +57,7 @@ class LessonCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
+              // 학생 수 + 수업 시간
               Row(
                 children: [
                   const Icon(Icons.group, size: 16),
@@ -65,6 +69,25 @@ class LessonCard extends StatelessWidget {
                   Text('${lesson.durationMinutes}분'),
                 ],
               ),
+              // 진도 정보 (NEW!)
+              if (lesson.progress != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.menu_book, size: 16, color: Colors.indigo),
+                    const SizedBox(width: 4),
+                    Text(
+                      lesson.progress!.displayText,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.indigo[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              // 메모
               if (lesson.memo != null) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -77,6 +100,7 @@ class LessonCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
+              // 완료된 수업: 평균 점수
               if (lesson.status == LessonStatus.completed &&
                   lesson.studentScores != null) ...[
                 const SizedBox(height: 8),
@@ -87,6 +111,7 @@ class LessonCard extends StatelessWidget {
                 lesson: lesson,
                 onEvaluate: onEvaluate,
                 onStart: onStart,
+                onEdit: onEdit,
               ),
             ],
           ),
@@ -102,7 +127,7 @@ class LessonCard extends StatelessWidget {
       case LessonStatus.completed:
         return Colors.green[50]!;
       case LessonStatus.scheduled:
-        return Colors.white;
+        return Colors.grey[50]!;
       case LessonStatus.missed:
         return Colors.red[50]!;
     }
@@ -121,7 +146,7 @@ class _StatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: config.color,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         config.label,
@@ -179,19 +204,30 @@ class _ActionButtons extends StatelessWidget {
   final Lesson lesson;
   final VoidCallback? onEvaluate;
   final VoidCallback? onStart;
+  final VoidCallback? onEdit;
 
   const _ActionButtons({
     required this.lesson,
     this.onEvaluate,
     this.onStart,
+    this.onEdit,
   });
 
   @override
   Widget build(BuildContext context) {
+    // 완료 수업: 수정 버튼
     if (lesson.status == LessonStatus.completed) {
-      return const SizedBox.shrink();
+      return SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: onEdit,
+          icon: const Icon(Icons.edit),
+          label: const Text('수정'),
+        ),
+      );
     }
 
+    // 진행중 수업: 평가하기 버튼
     if (lesson.status == LessonStatus.inProgress) {
       return SizedBox(
         width: double.infinity,
@@ -207,6 +243,7 @@ class _ActionButtons extends StatelessWidget {
       );
     }
 
+    // 예정 수업: 수업 시작 버튼
     if (lesson.isToday && !lesson.isPast) {
       return SizedBox(
         width: double.infinity,

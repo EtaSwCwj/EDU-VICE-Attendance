@@ -252,8 +252,17 @@ class LessonLocalRepository implements LessonRepository {
       'scheduledAt': lesson.scheduledAt.toIso8601String(),
       'durationMinutes': lesson.durationMinutes,
       'status': lesson.status.name,
+      'progress': lesson.progress != null
+          ? {
+              'chapterName': lesson.progress!.chapterName,
+              'startPage': lesson.progress!.startPage,
+              'endPage': lesson.progress!.endPage,
+              'note': lesson.progress!.note,
+            }
+          : null,
       'studentScores': lesson.studentScores,
       'attendance': lesson.attendance,
+      'studentMemos': lesson.studentMemos,
       'memo': lesson.memo,
       'recurrenceId': lesson.recurrenceId,
       'isRecurring': lesson.isRecurring,
@@ -263,6 +272,17 @@ class LessonLocalRepository implements LessonRepository {
   }
 
   Lesson _fromMap(Map<String, dynamic> map) {
+    LessonProgress? progress;
+    if (map['progress'] != null) {
+      final p = map['progress'] as Map<String, dynamic>;
+      progress = LessonProgress(
+        chapterName: p['chapterName'] as String?,
+        startPage: p['startPage'] as int?,
+        endPage: p['endPage'] as int?,
+        note: p['note'] as String?,
+      );
+    }
+
     return Lesson(
       id: map['id'] as String,
       academyId: map['academyId'] as String,
@@ -273,11 +293,15 @@ class LessonLocalRepository implements LessonRepository {
       scheduledAt: DateTime.parse(map['scheduledAt'] as String),
       durationMinutes: map['durationMinutes'] as int,
       status: LessonStatus.values.firstWhere((e) => e.name == map['status']),
+      progress: progress,
       studentScores: map['studentScores'] != null
           ? Map<String, int>.from(map['studentScores'] as Map)
           : null,
       attendance: map['attendance'] != null
           ? Map<String, bool>.from(map['attendance'] as Map)
+          : null,
+      studentMemos: map['studentMemos'] != null
+          ? Map<String, String>.from(map['studentMemos'] as Map)
           : null,
       memo: map['memo'] as String?,
       recurrenceId: map['recurrenceId'] as String?,

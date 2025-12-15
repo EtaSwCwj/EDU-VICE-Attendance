@@ -1,0 +1,52 @@
+// lib/features/student/student_shell.dart
+import 'package:flutter/material.dart';
+import 'pages/student_home_page.dart';
+import 'pages/student_lessons_page.dart';
+import 'pages/student_homework_page.dart';
+
+/// 학생용 앱 쉘: 하단 탭 네비게이션(홈/수업/숙제)
+/// - IndexedStack으로 탭 상태 유지
+class StudentShell extends StatefulWidget {
+  const StudentShell({super.key});
+
+  @override
+  State<StudentShell> createState() => _StudentShellState();
+}
+
+class _StudentShellState extends State<StudentShell> {
+  int _index = 0;
+
+  static const _pages = <Widget>[
+    StudentHomePage(),     // 홈 (오늘 수업/숙제 요약)
+    StudentLessonsPage(),  // 내 수업
+    StudentHomeworkPage(), // 내 숙제
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _index, children: _pages),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: '홈',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school),
+            label: '수업',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment),
+            label: '숙제',
+          ),
+        ],
+      ),
+    );
+  }
+}

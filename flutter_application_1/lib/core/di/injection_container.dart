@@ -12,6 +12,7 @@ import '../../data/local/sembast_database.dart';
 // Features
 import '../../features/lessons/domain/repositories/lesson_repository.dart';
 import '../../features/lessons/data/repositories/lesson_local_repository.dart';
+import '../../features/books/data/repositories/book_local_repository.dart';
 
 final getIt = GetIt.instance;
 
@@ -66,6 +67,11 @@ Future<void> setupDependencies({AppConfig? config}) async {
   getIt.registerLazySingleton<LessonRepository>(
     () => LessonLocalRepository(getIt()),
   );
+
+  // Book Repository
+  final bookRepo = BookLocalRepository(db);
+  await bookRepo.seedDefaultBooks(); // 기본 교재 데이터 시드
+  getIt.registerLazySingleton<BookLocalRepository>(() => bookRepo);
 
   // ========== Use Cases ==========
   // TODO: 각 feature의 use case 등록

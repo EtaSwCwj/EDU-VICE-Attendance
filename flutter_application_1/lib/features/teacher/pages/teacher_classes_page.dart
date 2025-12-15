@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../lessons/presentation/providers/lesson_provider.dart';
 import '../../lessons/presentation/widgets/lesson_card.dart';
-import '../../lessons/presentation/widgets/recurring_lesson_dialog.dart';
 import '../../lessons/domain/entities/lesson.dart';
 
 class TeacherClassesPage extends StatefulWidget {
@@ -90,11 +89,8 @@ class _TeacherClassesPageState extends State<TeacherClassesPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddLessonDialog(),
-        icon: const Icon(Icons.add),
-        label: const Text('수업 추가'),
-      ),
+      // 기획서: 수업 추가/수정은 학생 탭에서만 가능
+      // 수업 탭은 조회/평가 전용
     );
   }
 
@@ -189,40 +185,64 @@ class _TeacherClassesPageState extends State<TeacherClassesPage> {
     }
   }
 
-  Future<void> _showAddLessonDialog() async {
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => const RecurringLessonDialog(),
-    );
-
-    if (result != null && mounted) {
-      // TODO: 수업 생성 로직
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('수업이 추가되었습니다')),
-      );
-      _loadLessons();
-    }
-  }
-
   void _showLessonDetail(Lesson lesson) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              lesson.subject,
-              style: Theme.of(context).textTheme.headlineSmall,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    lesson.subject,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(lesson.status),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _getStatusText(lesson.status),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             _buildDetailRow(Icons.schedule, '시간',
                 '${_formatTime(lesson.scheduledAt)} (${lesson.durationMinutes}분)'),
             _buildDetailRow(Icons.group, '학생', '${lesson.studentIds.length}명'),
+            if (lesson.progress != null)
+              _buildDetailRow(Icons.menu_book, '진도', lesson.progress!.displayText),
             if (lesson.memo != null)
               _buildDetailRow(Icons.note, '메모', lesson.memo!),
+            if (lesson.studentScores != null) ...[
+              const Divider(),
+              const Text('평가 결과', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...lesson.studentScores!.entries.map((e) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Text('학생 ${e.key.substring(e.key.length - 3)}'),
+                    const Spacer(),
+                    Text('${e.value}점', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              )),
+            ],
             const SizedBox(height: 24),
             Row(
               children: [
@@ -256,6 +276,24 @@ class _TeacherClassesPageState extends State<TeacherClassesPage> {
         ),
       ),
     );
+  }
+
+  Color _getStatusColor(LessonStatus status) {
+    switch (status) {
+      case LessonStatus.scheduled: return Colors.grey;
+      case LessonStatus.inProgress: return Colors.blue;
+      case LessonStatus.completed: return Colors.green;
+      case LessonStatus.missed: return Colors.red;
+    }
+  }
+
+  String _getStatusText(LessonStatus status) {
+    switch (status) {
+      case LessonStatus.scheduled: return '예정';
+      case LessonStatus.inProgress: return '진행중';
+      case LessonStatus.completed: return '완료';
+      case LessonStatus.missed: return '미진행';
+    }
   }
 
   Widget _buildDetailRow(IconData icon, String label, String value) {

@@ -9,6 +9,7 @@ import '../features/attendance/attendance_page.dart';
 import '../features/homework/homework_page.dart';
 import '../features/notifications/notifications_page.dart';
 import '../features/settings/settings_page.dart';
+import '../features/student/student_shell.dart';
 
 class HomeShell extends StatefulWidget {
   final String role; // 'owner' | 'teacher' | 'student'
@@ -23,6 +24,11 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    // 학생인 경우 StudentShell 사용
+    if (widget.role == 'student') {
+      return const StudentShell();
+    }
+
     final tabs = _tabsForRole(widget.role);
 
     return Scaffold(
@@ -55,10 +61,9 @@ class _HomeShellState extends State<HomeShell> {
           _Tab('알림', Icons.notifications_none, NotificationsPage(role: role)),
           _Tab('설정', Icons.settings_outlined, SettingsPage(role: role)),
         ];
-      default: // student
+      default: // 기타 역할 (fallback)
         return [
-          const _Tab('홈', Icons.home_outlined, StudentHomePage()),
-          const _Tab('학습', Icons.menu_book_outlined, HomeworkPage()),
+          const _Tab('대시보드', Icons.dashboard_outlined, OwnerDashboardPage()),
           _Tab('설정', Icons.settings_outlined, SettingsPage(role: role)),
         ];
     }

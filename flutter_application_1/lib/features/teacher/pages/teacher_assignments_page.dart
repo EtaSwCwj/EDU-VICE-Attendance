@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../../models/Assignment.dart';
 import '../../../models/AssignmentStatus.dart';
+import '../../../shared/services/auth_state.dart';
 import '../data/assignment_repository.dart';
 import '../widgets/assignment_action_sheet.dart';
 import 'teacher_assignment_local_view_page.dart';
+import '../../settings/settings_page.dart';
 
 enum _StatusFilter { all, assigned, done }
 enum _SortMode { newest, dueDate, title }
@@ -576,6 +579,38 @@ class _TeacherAssignmentsPageState extends State<TeacherAssignmentsPage> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Teacher · Assignments'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: '설정',
+              onPressed: () {
+                try {
+                  final authState = context.read<AuthState>();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ChangeNotifierProvider.value(
+                        value: authState,
+                        child: Scaffold(
+                          appBar: AppBar(title: const Text('설정')),
+                          body: const SettingsPage(role: 'teacher'),
+                        ),
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  // AuthState가 없으면 Provider 없이 열기
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('설정')),
+                        body: const _SettingsPageFallback(),
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(48),
             child: Padding(
@@ -1162,6 +1197,79 @@ class _ErrorBanner extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// AuthState 없이 작동하는 설정 페이지 (폴백)
+class _SettingsPageFallback extends StatelessWidget {
+  const _SettingsPageFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      children: [
+        // 사용자 정보
+        const ListTile(
+          leading: CircleAvatar(child: Icon(Icons.person)),
+          title: Text('선생님'),
+          subtitle: Text('교사'),
+        ),
+        const Divider(),
+
+        // 교재 관리
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            '📚 교재 관리',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Colors.indigo,
+            ),
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.menu_book, color: Colors.indigo),
+          title: const Text('교재 목록'),
+          subtitle: const Text('등록된 교재 확인'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('교재 목록 기능은 곧 추가됩니다')),
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.add_circle, color: Colors.green),
+          title: const Text('교재 추가'),
+          subtitle: const Text('새 교재 등록'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('교재 추가 기능은 곧 추가됩니다')),
+            );
+          },
+        ),
+        const Divider(),
+
+        // 일반 설정
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            '⚙️ 설정',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: const Text('앱 정보'),
+          subtitle: const Text('버전 1.0.0'),
+        ),
+      ],
     );
   }
 }

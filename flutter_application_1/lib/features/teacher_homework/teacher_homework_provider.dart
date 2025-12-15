@@ -2,17 +2,22 @@
 import 'package:flutter/foundation.dart';
 
 import '../homework/models.dart';
+import '../books/data/repositories/book_local_repository.dart';
+import '../books/domain/entities/book.dart';
 import 'teacher_homework_repository.dart';
 
 class TeacherHomeworkProvider extends ChangeNotifier {
-  TeacherHomeworkProvider(this._repo);
+  TeacherHomeworkProvider(this._repo, {BookLocalRepository? bookRepo})
+      : _bookRepo = bookRepo;
 
   final TeacherHomeworkRepository _repo;
+  final BookLocalRepository? _bookRepo;
 
   List<StudentRef> _students = [];
   String? _selectedStudentId;
 
   List<Assignment> _items = []; // 선택 학생의 전체 과제
+  List<Book> _allBooks = [];    // 등록된 모든 교재
   String? _selectedSubjectId;   // 과목 필터
   String _studentQuery = "";    // 학생 검색어
   bool _loading = false;
@@ -20,6 +25,7 @@ class TeacherHomeworkProvider extends ChangeNotifier {
   bool get loading => _loading;
   List<StudentRef> get students => _students;
   String? get selectedStudentId => _selectedStudentId;
+  List<Book> get allBooks => _allBooks;
 
   // 화면에 보여줄 리스트(과목 필터 적용 + 정렬)
   List<Assignment> get items {
@@ -48,25 +54,56 @@ class TeacherHomeworkProvider extends ChangeNotifier {
 
   String? get selectedSubjectId => _selectedSubjectId;
 
+  /// 과목 옵션: 등록된 교재에서 추출 (교재가 있으면 교재 우선, 없으면 기존 과제에서)
   List<SubjectRef> get subjectOptions {
     final map = <String, SubjectRef>{};
+
+    // 등록된 교재에서 과목 추출
+    for (final book in _allBooks) {
+      map[book.subject] = SubjectRef(id: book.subject, name: book.subject);
+    }
+
+    // 기존 과제에서도 과목 추출 (기존 데이터 호환)
     for (final a in _items) {
       map[a.subject.id] = a.subject;
     }
+
     final out = map.values.toList()..sort((a, b) => a.name.compareTo(b.name));
     return out;
   }
 
-  /// 선택된 과목 기준으로 책 옵션 생성
+  /// 선택된 과목 기준으로 책 옵션 생성 (등록된 교재 우선)
   List<BookRef> get bookOptions {
     final map = <String, BookRef>{};
+
+    // 등록된 교재에서 책 추출
+    for (final book in _allBooks) {
+      if (_selectedSubjectId == null ||
+          _selectedSubjectId!.isEmpty ||
+          book.subject == _selectedSubjectId) {
+        map[book.id] = BookRef(id: book.id, name: book.title);
+      }
+    }
+
+    // 기존 과제에서도 책 추출 (기존 데이터 호환)
     for (final a in _items) {
-      if (_selectedSubjectId == null || _selectedSubjectId!.isEmpty || a.subject.id == _selectedSubjectId) {
+      if (_selectedSubjectId == null ||
+          _selectedSubjectId!.isEmpty ||
+          a.subject.id == _selectedSubjectId) {
         map[a.book.id] = a.book;
       }
     }
+
     final out = map.values.toList()..sort((a, b) => a.name.compareTo(b.name));
     return out;
+  }
+
+  /// 등록된 교재 목록 로드
+  Future<void> loadBooks() async {
+    if (_bookRepo != null) {
+      _allBooks = await _bookRepo!.getAll();
+      notifyListeners();
+    }
   }
 
   // ---------- 학생 목록 로드/검색 ----------
@@ -74,6 +111,9 @@ class TeacherHomeworkProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
+      // 교재 목록도 함께 로드
+      await loadBooks();
+
       _studentQuery = (query ?? "").trim();
       _students = await _repo.fetchStudents(query: _studentQuery.isEmpty ? null : _studentQuery);
       if (_selectedStudentId == null || !_students.any((s) => s.id == _selectedStudentId)) {

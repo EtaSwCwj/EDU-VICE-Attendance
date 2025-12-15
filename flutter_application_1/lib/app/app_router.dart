@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../shared/services/auth_state.dart';
 import '../features/auth/login_page.dart';
 import '../features/home/teacher_home_shell.dart';
-import '../features/home/student_home_shell.dart';
+import '../features/student/student_shell.dart';
 import '../features/home/owner_home_shell.dart';
 import '../features/teacher_homework/teacher_homework_page.dart';
 
@@ -39,12 +39,12 @@ class AppRouter {
               case 'teacher':
                 return const TeacherHomeShell();
               case 'student':
-                return const StudentHomeShell();
+                return const StudentShell();
               case 'owner':
                 return const OwnerHomeShell();
               default:
                 // 알 수 없는 역할은 최소 권한(학생) 셸로
-                return const StudentHomeShell();
+                return const StudentShell();
             }
           },
         ),
