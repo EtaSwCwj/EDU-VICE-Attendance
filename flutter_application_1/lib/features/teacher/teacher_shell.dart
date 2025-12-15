@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'pages/teacher_home_page.dart';
+import 'pages/teacher_home_page_new.dart';
 import 'pages/teacher_classes_page.dart';
 import 'pages/teacher_students_page.dart';
 import 'pages/teacher_assignments_page.dart';
@@ -17,7 +17,7 @@ class _TeacherShellState extends State<TeacherShell> {
   int _index = 0;
 
   static const _pages = <Widget>[
-    TeacherHomePage(),
+    TeacherHomePage(), // ✅ 새로운 수업 관리 페이지
     TeacherClassesPage(),
     TeacherStudentsPage(),
     TeacherAssignmentsPage(),

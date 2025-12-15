@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../domain/entities/lesson.dart';
 
 class LessonCard extends StatelessWidget {
@@ -15,6 +14,10 @@ class LessonCard extends StatelessWidget {
     this.onEvaluate,
     this.onStart,
   });
+
+  String _formatTime(DateTime dt) {
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +45,7 @@ class LessonCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    DateFormat('HH:mm').format(lesson.scheduledAt),
+                    _formatTime(lesson.scheduledAt),
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey[700],

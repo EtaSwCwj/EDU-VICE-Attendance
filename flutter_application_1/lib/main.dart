@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 // Amplify
 import 'package:amplify_flutter/amplify_flutter.dart';
@@ -18,6 +19,10 @@ import 'features/home/student_home_shell.dart';
 // 새로 추가: DI & Config
 import 'config/app_config.dart';
 import 'core/di/injection_container.dart';
+
+// Lesson Provider
+import 'features/lessons/presentation/providers/lesson_provider.dart';
+import 'features/lessons/domain/repositories/lesson_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,59 +79,62 @@ class _EVAttendanceAppState extends State<EVAttendanceApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'EDU-VICE Attendance',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: FutureBuilder<void>(
-        future: _amplifyInitFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
+    return ChangeNotifierProvider(
+      create: (_) => LessonProvider(getIt<LessonRepository>()),
+      child: MaterialApp(
+        title: 'EDU-VICE Attendance',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
+        ),
+        home: FutureBuilder<void>(
+          future: _amplifyInitFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
 
-          if (snapshot.hasError) {
-            return Scaffold(
-              appBar: AppBar(title: const Text('Startup Error')),
-              body: Padding(
-                padding: const EdgeInsets.all(16),
-                child: SelectableText(
-                  'Amplify init failed:\n\n${snapshot.error}',
+            if (snapshot.hasError) {
+              return Scaffold(
+                appBar: AppBar(title: const Text('Startup Error')),
+                body: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SelectableText(
+                    'Amplify init failed:\n\n${snapshot.error}',
+                  ),
                 ),
+              );
+            }
+
+            final pages = <Widget>[
+              const _RoleHomeRouter(), // ✅ TeacherShell / StudentHomeShell 자동 분기
+              const AwsSmokeTestPage(), // ✅ 테스트 보조 탭 유지
+            ];
+
+            return Scaffold(
+              body: pages[_index],
+              bottomNavigationBar: NavigationBar(
+                selectedIndex: _index,
+                onDestinationSelected: (i) => setState(() => _index = i),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.cloud_done_outlined),
+                    selectedIcon: Icon(Icons.cloud_done),
+                    label: 'AWS Test',
+                  ),
+                ],
               ),
             );
-          }
-
-          final pages = <Widget>[
-            const _RoleHomeRouter(), // ✅ TeacherShell / StudentHomeShell 자동 분기
-            const AwsSmokeTestPage(), // ✅ 테스트 보조 탭 유지
-          ];
-
-          return Scaffold(
-            body: pages[_index],
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (i) => setState(() => _index = i),
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.cloud_done_outlined),
-                  selectedIcon: Icon(Icons.cloud_done),
-                  label: 'AWS Test',
-                ),
-              ],
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }
