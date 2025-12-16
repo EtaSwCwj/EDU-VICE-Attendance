@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import '../../shared/services/user_sync_service.dart';
 
 /// AppSync(GraphQL) + Cognito(User Pools) 스모크 테스트 화면
 /// - 상단: 로그인/로그아웃, 세션 상태, 인증 모드(API Key/Cognito), 필드 프리셋
@@ -95,6 +96,25 @@ class _AwsSmokeTestPageState extends State<AwsSmokeTestPage> {
 
       if (res.isSignedIn) {
         _appendLog('[Auth] signIn: SUCCESS');
+
+        // Cognito 로그인 성공 후 DynamoDB에 동기화
+        _appendLog('[Auth] Syncing user to DynamoDB...');
+        try {
+          final syncService = UserSyncService();
+          final syncResult = await syncService.syncCurrentUser();
+
+          if (syncResult.success) {
+            if (syncResult.isNew) {
+              _appendLog('[Auth] ✅ User synced to DynamoDB (newly created)');
+            } else {
+              _appendLog('[Auth] ✅ User already exists in DynamoDB');
+            }
+          } else {
+            _appendLog('[Auth] ⚠️ User sync failed: ${syncResult.message}');
+          }
+        } catch (e) {
+          _appendLog('[Auth] ❌ User sync exception: $e');
+        }
       } else {
         await _handleNextStep(res);
       }

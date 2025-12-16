@@ -21,19 +21,30 @@
 
 import 'package:amplify_core/amplify_core.dart' as amplify_core;
 import 'Assignment.dart';
+import 'Book.dart';
+import 'Chapter.dart';
+import 'Lesson.dart';
 import 'Student.dart';
 import 'Teacher.dart';
+import 'TeacherStudent.dart';
 
 export 'Assignment.dart';
 export 'AssignmentStatus.dart';
+export 'Book.dart';
+export 'Chapter.dart';
+export 'Grade.dart';
+export 'Lesson.dart';
+export 'LessonStatus.dart';
 export 'Student.dart';
+export 'Subject.dart';
 export 'Teacher.dart';
+export 'TeacherStudent.dart';
 
 class ModelProvider implements amplify_core.ModelProviderInterface {
   @override
-  String version = "7247ab8330b7cc9df2bcce4aebffe128";
+  String version = "2c3be31f68f9abfd9265a2c8fdc88d31";
   @override
-  List<amplify_core.ModelSchema> modelSchemas = [Assignment.schema, Student.schema, Teacher.schema];
+  List<amplify_core.ModelSchema> modelSchemas = [Assignment.schema, Book.schema, Chapter.schema, Lesson.schema, Student.schema, Teacher.schema, TeacherStudent.schema];
   @override
   List<amplify_core.ModelSchema> customTypeSchemas = [];
   static final ModelProvider _instance = ModelProvider();
@@ -44,10 +55,18 @@ class ModelProvider implements amplify_core.ModelProviderInterface {
     switch(modelName) {
       case "Assignment":
         return Assignment.classType;
+      case "Book":
+        return Book.classType;
+      case "Chapter":
+        return Chapter.classType;
+      case "Lesson":
+        return Lesson.classType;
       case "Student":
         return Student.classType;
       case "Teacher":
         return Teacher.classType;
+      case "TeacherStudent":
+        return TeacherStudent.classType;
       default:
         throw Exception("Failed to find model in model provider for model name: " + modelName);
     }

@@ -1,21 +1,15 @@
 import 'package:flutter/material.dart';
-
-/// 테스트용 책 데이터 (실제로는 BookRepository에서 가져옴)
-class _TestBook {
-  final String id;
-  final String title;
-  final String subject;
-  final List<String> chapters;
-
-  const _TestBook(this.id, this.title, this.subject, this.chapters);
-}
+import 'package:amplify_flutter/amplify_flutter.dart';
+import '../../../../models/ModelProvider.dart' as aws;
+import '../../../../core/di/injection_container.dart';
+import '../../../books/data/repositories/book_aws_repository.dart';
 
 /// 숙제 발급 다이얼로그
 /// 학생 상세 페이지에서 호출됨
 class HomeworkCreateDialog extends StatefulWidget {
   final String studentId;
   final String studentName;
-  
+
   const HomeworkCreateDialog({
     super.key,
     required this.studentId,
@@ -27,27 +21,93 @@ class HomeworkCreateDialog extends StatefulWidget {
 }
 
 class _HomeworkCreateDialogState extends State<HomeworkCreateDialog> {
+  final BookAwsRepository _bookRepo = getIt<BookAwsRepository>();
+
   // 마감일
   DateTime _dueDate = DateTime.now().add(const Duration(days: 3));
-  
+
   // 책/진도 정보
-  _TestBook? _selectedBook;
-  String? _selectedChapter;
+  aws.Book? _selectedBook;
+  aws.Chapter? _selectedChapter;
+  String? _manualChapter; // 수기 입력 챕터
   final _startPageController = TextEditingController();
   final _endPageController = TextEditingController();
   final _descriptionController = TextEditingController();
 
-  // 테스트 책 데이터 (BookRepository와 동일하게 유지!)
-  final _testBooks = [
-    const _TestBook('book-math-elementary-01', '초등 수학의 정석', '수학', 
-      ['1단원 자연수', '2단원 분수', '3단원 소수', '4단원 도형', '5단원 측정', '6단원 규칙성']),
-    const _TestBook('book-eng-elementary-01', '초등 영어 첫걸음', '영어', 
-      ['Unit 1 Greetings', 'Unit 2 Family', 'Unit 3 School', 'Unit 4 Food', 'Unit 5 Animals', 'Unit 6 Weather']),
-    const _TestBook('book-sci-elementary-01', '초등 과학 탐구', '과학', 
-      ['1단원 생물의 세계', '2단원 물질의 성질', '3단원 힘과 운동', '4단원 지구와 우주']),
-    const _TestBook('book-kor-elementary-01', '초등 국어 독해력', '국어', 
-      ['1장 문장 이해하기', '2장 단락 파악하기', '3장 글의 구조', '4장 추론하기', '5장 비판적 읽기']),
-  ];
+  // AWS Book 데이터
+  List<aws.Book> _books = [];
+  bool _loadingBooks = true;
+  String? _bookLoadError;
+
+  // AWS Chapter 데이터
+  List<aws.Chapter> _chapters = [];
+  bool _loadingChapters = false;
+  String? _chapterLoadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBooks();
+  }
+
+  Future<void> _loadBooks() async {
+    setState(() {
+      _loadingBooks = true;
+      _bookLoadError = null;
+    });
+
+    try {
+      safePrint('[HomeworkCreateDialog] Loading books from AWS...');
+      final books = await _bookRepo.getAll();
+
+      if (mounted) {
+        setState(() {
+          _books = books;
+          _loadingBooks = false;
+        });
+        safePrint('[HomeworkCreateDialog] Loaded ${books.length} books');
+      }
+    } catch (e) {
+      safePrint('[HomeworkCreateDialog] Error loading books: $e');
+      if (mounted) {
+        setState(() {
+          _bookLoadError = '교재 목록을 불러오는데 실패했습니다: $e';
+          _loadingBooks = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadChapters(String bookId) async {
+    setState(() {
+      _loadingChapters = true;
+      _chapterLoadError = null;
+      _chapters = [];
+      _selectedChapter = null;
+      _manualChapter = null;
+    });
+
+    try {
+      safePrint('[HomeworkCreateDialog] Loading chapters for book: $bookId');
+      final chapters = await _bookRepo.getChaptersByBookId(bookId);
+
+      if (mounted) {
+        setState(() {
+          _chapters = chapters;
+          _loadingChapters = false;
+        });
+        safePrint('[HomeworkCreateDialog] Loaded ${chapters.length} chapters');
+      }
+    } catch (e) {
+      safePrint('[HomeworkCreateDialog] Error loading chapters: $e');
+      if (mounted) {
+        setState(() {
+          _chapterLoadError = '챕터 목록을 불러오는데 실패했습니다: $e';
+          _loadingChapters = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -172,41 +232,172 @@ class _HomeworkCreateDialogState extends State<HomeworkCreateDialog> {
       children: [
         const Text('📚 교재/범위', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 12),
-        DropdownButtonFormField<_TestBook>(
-          decoration: const InputDecoration(
-            labelText: '교재 선택',
-            border: OutlineInputBorder(),
-          ),
-          items: _testBooks.map((book) {
-            return DropdownMenuItem(
-              value: book,
-              child: Text('${book.title} (${book.subject})'),
-            );
-          }).toList(),
-          onChanged: (book) {
-            setState(() {
-              _selectedBook = book;
-              _selectedChapter = null;
-            });
-          },
-        ),
-        if (_selectedBook != null) ...[
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
+
+        if (_loadingBooks)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (_bookLoadError != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(_bookLoadError!, style: const TextStyle(color: Colors.red)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadBooks,
+                  tooltip: '다시 시도',
+                ),
+              ],
+            ),
+          )
+        else if (_books.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '등록된 교재가 없습니다. 교재 관리 페이지에서 교재를 먼저 등록해주세요.',
+                    style: TextStyle(color: Colors.orange),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          DropdownButtonFormField<aws.Book>(
             decoration: const InputDecoration(
-              labelText: '챕터 선택',
+              labelText: '교재 선택',
               border: OutlineInputBorder(),
             ),
-            items: _selectedBook!.chapters.map((chapter) {
+            items: _books.map((book) {
+              final subjectName = _getSubjectName(book.subject);
+              final gradeName = _getGradeName(book.grade);
               return DropdownMenuItem(
-                value: chapter,
-                child: Text(chapter),
+                value: book,
+                child: Text('${book.title} ($subjectName, $gradeName)'),
               );
             }).toList(),
-            onChanged: (chapter) {
-              setState(() => _selectedChapter = chapter);
+            onChanged: (book) {
+              setState(() {
+                _selectedBook = book;
+              });
+              if (book != null) {
+                _loadChapters(book.id);
+              }
             },
           ),
+
+        if (_selectedBook != null) ...[
+          const SizedBox(height: 12),
+          if (_loadingChapters)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_chapterLoadError != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(_chapterLoadError!, style: const TextStyle(color: Colors.red)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: () => _loadChapters(_selectedBook!.id),
+                    tooltip: '다시 시도',
+                  ),
+                ],
+              ),
+            )
+          else if (_chapters.isEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.grey),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '등록된 목차 없음',
+                          style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: '챕터/단원 (예: 1단원, Unit 1)',
+                    border: OutlineInputBorder(),
+                    hintText: '챕터 또는 단원명 입력',
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _manualChapter = value.isNotEmpty ? value : null;
+                    });
+                  },
+                ),
+              ],
+            )
+          else
+            DropdownButtonFormField<aws.Chapter>(
+              decoration: const InputDecoration(
+                labelText: '챕터 선택',
+                border: OutlineInputBorder(),
+              ),
+              value: _selectedChapter,
+              items: _chapters.map((chapter) {
+                return DropdownMenuItem(
+                  value: chapter,
+                  child: Text('${chapter.orderIndex}. ${chapter.title}'),
+                );
+              }).toList(),
+              onChanged: (chapter) {
+                setState(() {
+                  _selectedChapter = chapter;
+                });
+              },
+            ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -241,6 +432,30 @@ class _HomeworkCreateDialogState extends State<HomeworkCreateDialog> {
     );
   }
 
+  String _getSubjectName(aws.Subject subject) {
+    switch (subject) {
+      case aws.Subject.MATH:
+        return '수학';
+      case aws.Subject.ENGLISH:
+        return '영어';
+      case aws.Subject.SCIENCE:
+        return '과학';
+      case aws.Subject.KOREAN:
+        return '국어';
+    }
+  }
+
+  String _getGradeName(aws.Grade grade) {
+    switch (grade) {
+      case aws.Grade.ELEMENTARY:
+        return '초등';
+      case aws.Grade.MIDDLE:
+        return '중등';
+      case aws.Grade.HIGH:
+        return '고등';
+    }
+  }
+
   Widget _buildDescriptionSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,7 +476,7 @@ class _HomeworkCreateDialogState extends State<HomeworkCreateDialog> {
   }
 
   Widget _buildActions() {
-    final isValid = _selectedBook != null && _selectedChapter != null;
+    final isValid = _selectedBook != null && (_selectedChapter != null || _manualChapter != null || _descriptionController.text.isNotEmpty);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -291,12 +506,39 @@ class _HomeworkCreateDialogState extends State<HomeworkCreateDialog> {
   }
 
   void _submit() {
+    if (_selectedBook == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('교재를 선택해주세요')),
+      );
+      return;
+    }
+
+    // AWS Book의 subject를 String으로 변환
+    String subjectString;
+    switch (_selectedBook!.subject) {
+      case aws.Subject.MATH:
+        subjectString = '수학';
+        break;
+      case aws.Subject.ENGLISH:
+        subjectString = '영어';
+        break;
+      case aws.Subject.SCIENCE:
+        subjectString = '과학';
+        break;
+      case aws.Subject.KOREAN:
+        subjectString = '국어';
+        break;
+    }
+
+    // 챕터 정보: 드롭다운에서 선택했으면 그 제목, 아니면 수기 입력 사용
+    final chapterText = _selectedChapter?.title ?? _manualChapter;
+
     final result = {
       'studentId': widget.studentId,
-      'bookId': _selectedBook?.id,
-      'bookTitle': _selectedBook?.title,
-      'subject': _selectedBook?.subject,
-      'chapter': _selectedChapter,
+      'bookId': _selectedBook!.id, // AWS Book ID 사용
+      'bookTitle': _selectedBook!.title,
+      'subject': subjectString,
+      'chapter': chapterText,
       'startPage': int.tryParse(_startPageController.text),
       'endPage': int.tryParse(_endPageController.text),
       'description': _descriptionController.text,

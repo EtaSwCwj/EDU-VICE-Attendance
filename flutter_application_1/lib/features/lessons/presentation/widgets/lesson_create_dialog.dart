@@ -1,22 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../domain/entities/lesson.dart';
-
-/// 테스트용 책 데이터
-class _TestBook {
-  final String id;
-  final String title;
-  final String subject;
-  final List<String> chapters;
-
-  const _TestBook(this.id, this.title, this.subject, this.chapters);
-}
+import '../../../../models/ModelProvider.dart' as aws;
+import '../../../../core/di/injection_container.dart';
+import '../../../books/data/repositories/book_aws_repository.dart';
 
 /// 수업 추가 다이얼로그
 /// 학생 상세 페이지에서 호출됨 (학생은 이미 선택됨)
 class LessonCreateDialog extends StatefulWidget {
   final String? studentId; // 학생 ID (학생 상세에서 전달)
   final String? studentName; // 학생 이름
-  
+
   const LessonCreateDialog({
     super.key,
     this.studentId,
@@ -28,13 +22,15 @@ class LessonCreateDialog extends StatefulWidget {
 }
 
 class _LessonCreateDialogState extends State<LessonCreateDialog> {
+  final BookAwsRepository _bookRepo = getIt<BookAwsRepository>();
+
   // 일시
   DateTime _date = DateTime.now();
   TimeOfDay _startTime = const TimeOfDay(hour: 10, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 11, minute: 0);
 
   // 책/진도 정보
-  _TestBook? _selectedBook;
+  aws.Book? _selectedBook;
   String? _selectedChapter;
   final _startPageController = TextEditingController();
   final _endPageController = TextEditingController();
@@ -45,18 +41,44 @@ class _LessonCreateDialogState extends State<LessonCreateDialog> {
   int _occurrences = 4;
   final Set<int> _selectedDays = {};
 
-  // 테스트 책 데이터
-  final _testBooks = [
-    const _TestBook('book-math-01', '초등 수학의 정석', '수학', ['1단원 자연수', '2단원 분수', '3단원 소수', '4단원 도형', '5단원 측정']),
-    const _TestBook('book-eng-01', '초등 영어 첫걸음', '영어', ['Unit 1 Greetings', 'Unit 2 Family', 'Unit 3 School', 'Unit 4 Food']),
-    const _TestBook('book-sci-01', '초등 과학 탐구', '과학', ['1장 생물', '2장 화학', '3장 물리', '4장 지구과학']),
-    const _TestBook('book-kor-01', '초등 국어 독해력', '국어', ['1장 문장 이해', '2장 단락 파악', '3장 글의 구조']),
-  ];
+  // AWS Book 데이터
+  List<aws.Book> _books = [];
+  bool _loadingBooks = true;
+  String? _bookLoadError;
 
   @override
   void initState() {
     super.initState();
     _selectedDays.add(_date.weekday);
+    _loadBooks();
+  }
+
+  Future<void> _loadBooks() async {
+    setState(() {
+      _loadingBooks = true;
+      _bookLoadError = null;
+    });
+
+    try {
+      safePrint('[LessonCreateDialog] Loading books from AWS...');
+      final books = await _bookRepo.getAll();
+
+      if (mounted) {
+        setState(() {
+          _books = books;
+          _loadingBooks = false;
+        });
+        safePrint('[LessonCreateDialog] Loaded ${books.length} books');
+      }
+    } catch (e) {
+      safePrint('[LessonCreateDialog] Error loading books: $e');
+      if (mounted) {
+        setState(() {
+          _bookLoadError = '교재 목록을 불러오는데 실패했습니다: $e';
+          _loadingBooks = false;
+        });
+      }
+    }
   }
 
   @override
@@ -226,39 +248,90 @@ class _LessonCreateDialogState extends State<LessonCreateDialog> {
       children: [
         const Text('📚 교재/진도', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 12),
-        DropdownButtonFormField<_TestBook>(
-          decoration: const InputDecoration(
-            labelText: '교재 선택',
-            border: OutlineInputBorder(),
-          ),
-          items: _testBooks.map((book) {
-            return DropdownMenuItem(
-              value: book,
-              child: Text('${book.title} (${book.subject})'),
-            );
-          }).toList(),
-          onChanged: (book) {
-            setState(() {
-              _selectedBook = book;
-              _selectedChapter = null;
-            });
-          },
-        ),
-        if (_selectedBook != null) ...[
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
+
+        if (_loadingBooks)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (_bookLoadError != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(_bookLoadError!, style: const TextStyle(color: Colors.red)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadBooks,
+                  tooltip: '다시 시도',
+                ),
+              ],
+            ),
+          )
+        else if (_books.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '등록된 교재가 없습니다. 교재 관리 페이지에서 교재를 먼저 등록해주세요.',
+                    style: TextStyle(color: Colors.orange),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          DropdownButtonFormField<aws.Book>(
             decoration: const InputDecoration(
-              labelText: '챕터 선택',
+              labelText: '교재 선택',
               border: OutlineInputBorder(),
             ),
-            items: _selectedBook!.chapters.map((chapter) {
+            items: _books.map((book) {
+              final subjectName = _getSubjectName(book.subject);
+              final gradeName = _getGradeName(book.grade);
               return DropdownMenuItem(
-                value: chapter,
-                child: Text(chapter),
+                value: book,
+                child: Text('${book.title} ($subjectName, $gradeName)'),
               );
             }).toList(),
-            onChanged: (chapter) {
-              setState(() => _selectedChapter = chapter);
+            onChanged: (book) {
+              setState(() {
+                _selectedBook = book;
+                _selectedChapter = null;
+              });
+            },
+          ),
+
+        if (_selectedBook != null) ...[
+          const SizedBox(height: 12),
+          TextField(
+            decoration: const InputDecoration(
+              labelText: '챕터/단원 (예: 1단원, Unit 1)',
+              border: OutlineInputBorder(),
+              hintText: '챕터 또는 단원명 입력',
+            ),
+            onChanged: (value) {
+              _selectedChapter = value.isNotEmpty ? value : null;
             },
           ),
           const SizedBox(height: 12),
@@ -293,6 +366,30 @@ class _LessonCreateDialogState extends State<LessonCreateDialog> {
         ],
       ],
     );
+  }
+
+  String _getSubjectName(aws.Subject subject) {
+    switch (subject) {
+      case aws.Subject.MATH:
+        return '수학';
+      case aws.Subject.ENGLISH:
+        return '영어';
+      case aws.Subject.SCIENCE:
+        return '과학';
+      case aws.Subject.KOREAN:
+        return '국어';
+    }
+  }
+
+  String _getGradeName(aws.Grade grade) {
+    switch (grade) {
+      case aws.Grade.ELEMENTARY:
+        return '초등';
+      case aws.Grade.MIDDLE:
+        return '중등';
+      case aws.Grade.HIGH:
+        return '고등';
+    }
   }
 
   Widget _buildRecurringSection() {
@@ -418,11 +515,35 @@ class _LessonCreateDialogState extends State<LessonCreateDialog> {
   }
 
   void _submit() {
+    if (_selectedBook == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('교재를 선택해주세요')),
+      );
+      return;
+    }
+
     final progress = LessonProgress(
       chapterName: _selectedChapter,
       startPage: int.tryParse(_startPageController.text),
       endPage: int.tryParse(_endPageController.text),
     );
+
+    // AWS Book의 subject를 String으로 변환
+    String subjectString;
+    switch (_selectedBook!.subject) {
+      case aws.Subject.MATH:
+        subjectString = '수학';
+        break;
+      case aws.Subject.ENGLISH:
+        subjectString = '영어';
+        break;
+      case aws.Subject.SCIENCE:
+        subjectString = '과학';
+        break;
+      case aws.Subject.KOREAN:
+        subjectString = '국어';
+        break;
+    }
 
     final result = {
       'date': _date,
@@ -430,8 +551,8 @@ class _LessonCreateDialogState extends State<LessonCreateDialog> {
       'endTime': _endTime,
       'duration': _durationMinutes,
       'studentId': widget.studentId,
-      'bookId': _selectedBook?.id,
-      'subject': _selectedBook?.subject,
+      'bookId': _selectedBook!.id, // AWS Book ID 사용
+      'subject': subjectString,
       'progress': progress,
       'isRecurring': _isRecurring,
       if (_isRecurring) ...{

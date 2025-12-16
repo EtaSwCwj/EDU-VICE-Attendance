@@ -1,9 +1,10 @@
 // lib/features/books/presentation/pages/book_management_page.dart
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 
-import '../../data/repositories/book_local_repository.dart';
-import '../../domain/entities/book.dart';
+import '../../data/repositories/book_aws_repository.dart';
+import '../../../../models/ModelProvider.dart' as aws;
 
 /// 교재 관리 페이지 (하단 탭용)
 class BookManagementPage extends StatefulWidget {
@@ -14,9 +15,9 @@ class BookManagementPage extends StatefulWidget {
 }
 
 class _BookManagementPageState extends State<BookManagementPage> {
-  final _bookRepo = GetIt.instance<BookLocalRepository>();
+  final _bookRepo = GetIt.instance<BookAwsRepository>();
   String _filterSubject = '전체';
-  List<Book> _books = [];
+  List<aws.Book> _books = [];
   bool _loading = true;
 
   @override
@@ -45,17 +46,19 @@ class _BookManagementPageState extends State<BookManagementPage> {
     }
   }
 
-  List<Book> get _filteredBooks {
+  List<aws.Book> get _filteredBooks {
     if (_filterSubject == '전체') return _books;
-    return _books.where((b) => b.subject == _filterSubject).toList();
+    return _books.where((b) {
+      return subjectToKorean(b.subject) == _filterSubject;
+    }).toList();
   }
 
-  Future<void> _deleteBook(Book book) async {
+  Future<void> _deleteBook(aws.Book book) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('교재 삭제'),
-        content: Text('"${book.title}"을(를) 삭제하시겠습니까?'),
+        content: Text('"${book.title}"을(를) 삭제하시겠습니까?\n연결된 목차도 함께 삭제됩니다.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -71,7 +74,14 @@ class _BookManagementPageState extends State<BookManagementPage> {
     );
 
     if (confirmed == true && mounted) {
+      safePrint('[BookManagementPage] Deleting book: ${book.id}');
+
+      // 1. 먼저 연결된 목차 삭제
+      await _bookRepo.deleteChaptersByBookId(book.id);
+
+      // 2. 책 삭제
       await _bookRepo.deleteBook(book.id);
+
       await _loadBooks();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -127,7 +137,7 @@ class _BookManagementPageState extends State<BookManagementPage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final messenger = ScaffoldMessenger.of(context);
-          final result = await showDialog<Book>(
+          final result = await showDialog<aws.Book>(
             context: context,
             builder: (context) => const _BookAddDialog(),
           );
@@ -165,48 +175,83 @@ class _BookManagementPageState extends State<BookManagementPage> {
   }
 }
 
-class _BookCard extends StatelessWidget {
-  final Book book;
+class _BookCard extends StatefulWidget {
+  final aws.Book book;
   final VoidCallback? onDelete;
 
   const _BookCard({required this.book, this.onDelete});
 
-  Color _getSubjectColor(String subject) {
-    switch (subject) {
-      case '수학':
-        return Colors.blue;
-      case '영어':
-        return Colors.green;
-      case '과학':
-        return Colors.orange;
-      case '국어':
-        return Colors.purple;
-      default:
-        return Colors.grey;
+  @override
+  State<_BookCard> createState() => _BookCardState();
+}
+
+class _BookCardState extends State<_BookCard> {
+  final _bookRepo = GetIt.instance<BookAwsRepository>();
+  List<aws.Chapter> _chapters = [];
+  bool _chaptersLoaded = false;
+
+  Future<void> _loadChapters() async {
+    if (_chaptersLoaded) return; // 이미 로드했으면 스킵
+
+    safePrint('[BookManagementPage._BookCard] Loading chapters for book: ${widget.book.id}');
+
+    try {
+      final chapters = await _bookRepo.getChaptersByBookId(widget.book.id);
+
+      if (mounted) {
+        setState(() {
+          _chapters = chapters;
+          _chaptersLoaded = true;
+        });
+
+        safePrint('[BookManagementPage._BookCard] Loaded ${chapters.length} chapters');
+      }
+    } catch (e) {
+      safePrint('[BookManagementPage._BookCard] Error loading chapters: $e');
+      if (mounted) {
+        setState(() => _chaptersLoaded = true); // 에러여도 로드 완료로 표시
+      }
     }
+  }
+
+  Color _getSubjectColor(aws.Subject subject) {
+    return switch (subject) {
+      aws.Subject.MATH => Colors.blue,
+      aws.Subject.ENGLISH => Colors.green,
+      aws.Subject.SCIENCE => Colors.orange,
+      aws.Subject.KOREAN => Colors.purple,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
+    final subjectName = subjectToKorean(widget.book.subject);
+    final gradeName = gradeToKorean(widget.book.grade);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
+        onExpansionChanged: (expanded) {
+          if (expanded) {
+            _loadChapters(); // 펼칠 때만 목차 로드
+          }
+        },
         leading: CircleAvatar(
-          backgroundColor: _getSubjectColor(book.subject),
+          backgroundColor: _getSubjectColor(widget.book.subject),
           child: Text(
-            book.subject[0],
+            subjectName[0],
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
-        title: Text(book.title),
-        subtitle: Text('${book.grade ?? "전체"} · ${book.publishYear}년'),
+        title: Text(widget.book.title),
+        subtitle: Text('$gradeName · ${widget.book.year ?? 2024}년'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (onDelete != null)
+            if (widget.onDelete != null)
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: onDelete,
+                onPressed: widget.onDelete,
                 tooltip: '삭제',
               ),
             const Icon(Icons.expand_more),
@@ -222,35 +267,48 @@ class _BookCard extends StatelessWidget {
                   children: [
                     const Text('목차', style: TextStyle(fontWeight: FontWeight.bold)),
                     const Spacer(),
-                    Text('${book.chapters.length}개 챕터',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                    if (_chaptersLoaded)
+                      Text('${_chapters.length}개 챕터',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12))
+                    else
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                ...book.chapters.asMap().entries.map((entry) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 24,
-                          height: 24,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                            borderRadius: BorderRadius.circular(4),
+                if (_chaptersLoaded && _chapters.isNotEmpty)
+                  ..._chapters.map((chapter) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 24,
+                            height: 24,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '${chapter.orderIndex}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
                           ),
-                          child: Text(
-                            '${entry.key + 1}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(entry.value)),
-                      ],
-                    ),
-                  );
-                }),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(chapter.title)),
+                        ],
+                      ),
+                    );
+                  })
+                else if (_chaptersLoaded)
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text('등록된 목차가 없습니다', style: TextStyle(color: Colors.grey)),
+                  ),
               ],
             ),
           ),
@@ -269,11 +327,11 @@ class _BookAddDialog extends StatefulWidget {
 }
 
 class _BookAddDialogState extends State<_BookAddDialog> {
-  final _bookRepo = GetIt.instance<BookLocalRepository>();
+  final _bookRepo = GetIt.instance<BookAwsRepository>();
   final _titleController = TextEditingController();
   final _chapterController = TextEditingController();
-  String _selectedSubject = '수학';
-  String _selectedGrade = '초등';
+  aws.Subject _selectedSubject = aws.Subject.MATH;
+  aws.Grade _selectedGrade = aws.Grade.ELEMENTARY;
   int _publishYear = DateTime.now().year;
   final List<String> _chapters = [];
   bool _saving = false;
@@ -357,28 +415,34 @@ class _BookAddDialogState extends State<_BookAddDialog> {
         Row(
           children: [
             Expanded(
-              child: DropdownButtonFormField<String>(
+              child: DropdownButtonFormField<aws.Subject>(
                 value: _selectedSubject,
                 decoration: const InputDecoration(
                   labelText: '과목',
                   border: OutlineInputBorder(),
                 ),
-                items: ['수학', '영어', '과학', '국어'].map((s) {
-                  return DropdownMenuItem(value: s, child: Text(s));
+                items: aws.Subject.values.map((s) {
+                  return DropdownMenuItem(
+                    value: s,
+                    child: Text(subjectToKorean(s)),
+                  );
                 }).toList(),
                 onChanged: (v) => setState(() => _selectedSubject = v!),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: DropdownButtonFormField<String>(
+              child: DropdownButtonFormField<aws.Grade>(
                 value: _selectedGrade,
                 decoration: const InputDecoration(
                   labelText: '학년',
                   border: OutlineInputBorder(),
                 ),
-                items: ['초등', '중등', '고등'].map((g) {
-                  return DropdownMenuItem(value: g, child: Text(g));
+                items: aws.Grade.values.map((g) {
+                  return DropdownMenuItem(
+                    value: g,
+                    child: Text(gradeToKorean(g)),
+                  );
                 }).toList(),
                 onChanged: (v) => setState(() => _selectedGrade = v!),
               ),
@@ -528,25 +592,73 @@ class _BookAddDialogState extends State<_BookAddDialog> {
     setState(() => _saving = true);
 
     try {
-      final id = 'book-${_selectedSubject.toLowerCase()}-${DateTime.now().millisecondsSinceEpoch}';
+      safePrint('[BookManagementPage] Creating new book...');
+      safePrint('[BookManagementPage] Chapters to save: ${_chapters.length}');
 
-      final book = Book(
-        id: id,
-        academyId: 'default',
+      // 1. 먼저 Book 생성
+      final book = aws.Book(
         title: _titleController.text.trim(),
         subject: _selectedSubject,
         grade: _selectedGrade,
-        chapters: List<String>.from(_chapters),
-        publishYear: _publishYear,
-        createdAt: DateTime.now(),
+        year: _publishYear,
+        chapters: null, // Book 자체의 chapters 필드는 null (별도 Chapter 테이블 사용)
       );
 
-      await _bookRepo.addBook(book);
+      final result = await _bookRepo.addBook(book);
 
-      if (mounted) {
-        Navigator.pop(context, book);
+      if (result == null) {
+        safePrint('[BookManagementPage] Book creation failed: result is null');
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('저장 실패: 결과가 null입니다')),
+        );
+        return;
       }
-    } catch (e) {
+
+      safePrint('[BookManagementPage] Book created successfully: ${result.id}');
+
+      // 2. 목차(Chapter) 저장
+      if (_chapters.isNotEmpty) {
+        safePrint('[BookManagementPage] Saving ${_chapters.length} chapters...');
+        int successCount = 0;
+
+        for (int i = 0; i < _chapters.length; i++) {
+          final chapterTitle = _chapters[i];
+          final chapter = await _bookRepo.createChapter(
+            bookId: result.id,
+            title: chapterTitle,
+            orderIndex: i + 1, // 1부터 시작하는 순서
+          );
+
+          if (chapter != null) {
+            successCount++;
+            safePrint('[BookManagementPage] Chapter saved: $chapterTitle (order: ${i + 1})');
+          } else {
+            safePrint('[BookManagementPage] Failed to save chapter: $chapterTitle');
+          }
+        }
+
+        safePrint('[BookManagementPage] Chapters saved: $successCount/${_chapters.length}');
+
+        if (successCount != _chapters.length) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('경고: ${_chapters.length - successCount}개 목차 저장 실패'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+      }
+
+      if (!mounted) return;
+
+      safePrint('[BookManagementPage] Book and chapters saved successfully');
+      Navigator.pop(context, result);
+    } catch (e, stackTrace) {
+      safePrint('[BookManagementPage] Error creating book: $e');
+      safePrint('[BookManagementPage] Stack trace: $stackTrace');
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(

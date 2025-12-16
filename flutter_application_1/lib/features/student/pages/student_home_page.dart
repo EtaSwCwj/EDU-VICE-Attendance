@@ -1,6 +1,10 @@
 // lib/features/student/pages/student_home_page.dart
 import 'package:flutter/material.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
+import '../../../models/ModelProvider.dart' as aws;
+import '../../../core/di/injection_container.dart';
+import '../../lessons/data/repositories/lesson_aws_repository.dart';
+import '../../homework/data/repositories/assignment_aws_repository.dart';
 
 /// 학생용 홈 페이지: 오늘 수업/숙제 요약
 class StudentHomePage extends StatefulWidget {
@@ -11,32 +15,101 @@ class StudentHomePage extends StatefulWidget {
 }
 
 class _StudentHomePageState extends State<StudentHomePage> {
+  final LessonAwsRepository _lessonRepo = getIt<LessonAwsRepository>();
+  final AssignmentAwsRepository _assignmentRepo = getIt<AssignmentAwsRepository>();
+
   String _userName = '학생';
+  String? _studentUsername;
   bool _loading = true;
+  String? _error;
+
+  List<aws.Lesson> _todayLessons = [];
+  int _pendingHomeworkCount = 0;
+  int _dueSoonHomeworkCount = 0;
+  int _completedHomeworkCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadUserInfo();
+    _loadData();
   }
 
-  Future<void> _loadUserInfo() async {
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
     try {
+      // 현재 사용자 정보
       final user = await Amplify.Auth.getCurrentUser();
+      _studentUsername = user.username;
+
+      safePrint('[StudentHomePage] Loading data for student: $_studentUsername');
+
+      // 오늘 수업 조회
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final todayResult = await _lessonRepo.getLessonsByStudent(_studentUsername!, today);
+
+      // 숙제 현황 조회
+      final pendingCount = await _assignmentRepo.getPendingCount(_studentUsername!);
+
+      // 마감 임박 숙제 (3일 이내)
+      final allAssignments = await _assignmentRepo.getByStudent(_studentUsername!);
+
+      final lessons = todayResult.fold(
+        (f) => <aws.Lesson>[],
+        (l) => l.map((lesson) => _domainToAwsLesson(lesson)).toList(),
+      );
+
+      // 마감 임박 계산 (3일 이내)
+      final threeDaysLater = DateTime.now().add(const Duration(days: 3));
+      final dueSoonCount = allAssignments.where((a) {
+        if (a.status == aws.AssignmentStatus.DONE) return false;
+        if (a.dueDate == null) return false;
+        final dueDateTime = a.dueDate!.getDateTimeInUtc().toLocal();
+        return dueDateTime.isBefore(threeDaysLater);
+      }).length;
+
+      // 완료된 숙제 개수
+      final completedCount = allAssignments.where((a) => a.status == aws.AssignmentStatus.DONE).length;
+
       if (mounted) {
         setState(() {
-          _userName = user.username;
+          _userName = _studentUsername!;
+          _todayLessons = lessons;
+          _pendingHomeworkCount = pendingCount;
+          _dueSoonHomeworkCount = dueSoonCount;
+          _completedHomeworkCount = completedCount;
           _loading = false;
         });
+
+        safePrint('[StudentHomePage] Loaded: ${lessons.length} lessons, $pendingCount pending homework');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      safePrint('[StudentHomePage] Error loading data: $e');
+      safePrint('[StudentHomePage] Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
-          _userName = '학생';
+          _error = '데이터를 불러오는데 실패했습니다: $e';
           _loading = false;
         });
       }
     }
+  }
+
+  // Domain Lesson을 AWS Lesson으로 변환
+  aws.Lesson _domainToAwsLesson(dynamic domainLesson) {
+    return aws.Lesson(
+      title: domainLesson.subject ?? '수업',
+      subject: aws.Subject.MATH, // 기본값
+      teacherUsername: domainLesson.teacherId ?? '',
+      studentUsernames: domainLesson.studentIds ?? [],
+      scheduledDate: TemporalDate(domainLesson.scheduledAt),
+      startTime: TemporalTime(domainLesson.scheduledAt),
+      status: aws.LessonStatus.SCHEDULED,
+    );
   }
 
   @override
@@ -59,50 +132,83 @@ class _StudentHomePageState extends State<StudentHomePage> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: '새로고침',
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => _signOut(context),
             tooltip: '로그아웃',
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          // TODO: 데이터 새로고침
-        },
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // 오늘 수업 요약
-            _buildSectionCard(
-              context,
-              icon: Icons.school,
-              iconColor: Colors.blue,
-              title: '오늘의 수업',
-              child: _buildTodayLessons(context),
-            ),
-            const SizedBox(height: 16),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _loadData,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('다시 시도'),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // 오늘 수업 요약
+                      _buildSectionCard(
+                        context,
+                        icon: Icons.school,
+                        iconColor: Colors.blue,
+                        title: '오늘의 수업',
+                        child: _buildTodayLessons(context),
+                      ),
+                      const SizedBox(height: 16),
 
-            // 숙제 현황 요약
-            _buildSectionCard(
-              context,
-              icon: Icons.assignment,
-              iconColor: Colors.orange,
-              title: '숙제 현황',
-              child: _buildHomeworkSummary(context),
-            ),
-            const SizedBox(height: 16),
+                      // 숙제 현황 요약
+                      _buildSectionCard(
+                        context,
+                        icon: Icons.assignment,
+                        iconColor: Colors.orange,
+                        title: '숙제 현황',
+                        child: _buildHomeworkSummary(context),
+                      ),
+                      const SizedBox(height: 16),
 
-            // 진도 현황 요약
-            _buildSectionCard(
-              context,
-              icon: Icons.trending_up,
-              iconColor: Colors.green,
-              title: '학습 진도',
-              child: _buildProgressSummary(context),
-            ),
-          ],
-        ),
-      ),
+                      // 안내 메시지
+                      Card(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.blue[700]),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  '데이터는 AWS에서 실시간으로 조회됩니다',
+                                  style: TextStyle(color: Colors.blue[700]),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
     );
   }
 
@@ -140,13 +246,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
   }
 
   Widget _buildTodayLessons(BuildContext context) {
-    // TODO: 실제 데이터 연동
-    final mockLessons = [
-      {'subject': '수학', 'time': '10:00', 'status': 'upcoming'},
-      {'subject': '영어', 'time': '14:00', 'status': 'upcoming'},
-    ];
-
-    if (mockLessons.isEmpty) {
+    if (_todayLessons.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 8),
         child: Text('오늘 예정된 수업이 없습니다', style: TextStyle(color: Colors.grey)),
@@ -154,39 +254,35 @@ class _StudentHomePageState extends State<StudentHomePage> {
     }
 
     return Column(
-      children: mockLessons.map((lesson) {
+      children: _todayLessons.map((lesson) {
+        final subjectName = _getSubjectName(lesson.subject);
+        final time = lesson.startTime.getDateTime();
+
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: CircleAvatar(
-            backgroundColor: _getSubjectColor(lesson['subject'] as String),
+            backgroundColor: _getSubjectColor(lesson.subject),
             child: Text(
-              (lesson['subject'] as String)[0],
+              subjectName[0],
               style: const TextStyle(color: Colors.white),
             ),
           ),
-          title: Text(lesson['subject'] as String),
-          subtitle: Text('${lesson['time']} 예정'),
-          trailing: _buildStatusChip(lesson['status'] as String),
+          title: Text(lesson.title),
+          subtitle: Text('${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')} 예정'),
+          trailing: _buildStatusChip(lesson.status),
         );
       }).toList(),
     );
   }
 
   Widget _buildHomeworkSummary(BuildContext context) {
-    // TODO: 실제 데이터 연동
-    final summary = {
-      'pending': 3,
-      'dueSoon': 1,
-      'completed': 5,
-    };
-
     return Row(
       children: [
         Expanded(
           child: _buildStatItem(
             context,
             label: '진행중',
-            count: summary['pending']!,
+            count: _pendingHomeworkCount,
             color: Colors.blue,
           ),
         ),
@@ -194,7 +290,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
           child: _buildStatItem(
             context,
             label: '마감임박',
-            count: summary['dueSoon']!,
+            count: _dueSoonHomeworkCount,
             color: Colors.orange,
           ),
         ),
@@ -202,7 +298,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
           child: _buildStatItem(
             context,
             label: '완료',
-            count: summary['completed']!,
+            count: _completedHomeworkCount,
             color: Colors.green,
           ),
         ),
@@ -237,75 +333,23 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
-  Widget _buildProgressSummary(BuildContext context) {
-    // TODO: 실제 데이터 연동
-    final mockProgress = [
-      {'subject': '수학', 'book': '초등 수학의 정석', 'progress': 0.65},
-      {'subject': '영어', 'book': '초등 영어 첫걸음', 'progress': 0.40},
-    ];
-
-    if (mockProgress.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('진행 중인 교재가 없습니다', style: TextStyle(color: Colors.grey)),
-      );
-    }
-
-    return Column(
-      children: mockProgress.map((item) {
-        final progress = item['progress'] as double;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    item['book'] as String,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  Text(
-                    '${(progress * 100).toInt()}%',
-                    style: TextStyle(
-                      color: _getSubjectColor(item['subject'] as String),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation(
-                  _getSubjectColor(item['subject'] as String),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
+  Widget _buildStatusChip(aws.LessonStatus status) {
     Color color;
     String label;
 
     switch (status) {
-      case 'inProgress':
+      case aws.LessonStatus.IN_PROGRESS:
         color = Colors.blue;
         label = '진행중';
         break;
-      case 'completed':
+      case aws.LessonStatus.COMPLETED:
         color = Colors.green;
         label = '완료';
         break;
-      default:
+      case aws.LessonStatus.SCHEDULED:
         color = Colors.grey;
         label = '예정';
+        break;
     }
 
     return Container(
@@ -322,18 +366,29 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
-  Color _getSubjectColor(String subject) {
+  String _getSubjectName(aws.Subject subject) {
     switch (subject) {
-      case '수학':
+      case aws.Subject.MATH:
+        return '수학';
+      case aws.Subject.ENGLISH:
+        return '영어';
+      case aws.Subject.SCIENCE:
+        return '과학';
+      case aws.Subject.KOREAN:
+        return '국어';
+    }
+  }
+
+  Color _getSubjectColor(aws.Subject subject) {
+    switch (subject) {
+      case aws.Subject.MATH:
         return Colors.blue;
-      case '영어':
+      case aws.Subject.ENGLISH:
         return Colors.green;
-      case '과학':
+      case aws.Subject.SCIENCE:
         return Colors.orange;
-      case '국어':
+      case aws.Subject.KOREAN:
         return Colors.purple;
-      default:
-        return Colors.grey;
     }
   }
 

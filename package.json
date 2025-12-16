@@ -6,7 +6,8 @@
     "pack:flutter": "powershell -ExecutionPolicy Bypass -File ./scripts/pack_flutter_save.ps1",
     "dev:scrcpy": "powershell -ExecutionPolicy Bypass -File ./scripts/scrcpy_dev.ps1",
     "analyze": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ./flutter_application_1; flutter analyze\"",
-    "claude": "powershell -ExecutionPolicy Bypass -File ./scripts/claude_code.ps1"
+    "claude": "powershell -ExecutionPolicy Bypass -File ./scripts/claude_code.ps1",
+    "build:apk": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ./flutter_application_1; flutter build apk --release\""
   },
   "devDependencies": {
     "gh-pages": "^6.3.0"

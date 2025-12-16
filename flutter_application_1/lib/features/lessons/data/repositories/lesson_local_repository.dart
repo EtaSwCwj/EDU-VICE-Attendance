@@ -81,17 +81,22 @@ class LessonLocalRepository implements LessonRepository {
 
   @override
   Future<Either<Failure, List<Lesson>>> getLessonsByDateRange({
-    required String teacherId,
+    String? teacherId, // Optional: null이면 모든 선생님의 수업 조회
     required DateTime startDate,
     required DateTime endDate,
   }) async {
     try {
+      // teacherId가 있으면 필터에 포함, 없으면 날짜만 필터링
+      final filters = <Filter>[
+        Filter.greaterThanOrEquals('scheduledAt', startDate.toIso8601String()),
+        Filter.lessThanOrEquals('scheduledAt', endDate.toIso8601String()),
+      ];
+      if (teacherId != null) {
+        filters.add(Filter.equals('teacherId', teacherId));
+      }
+
       final finder = Finder(
-        filter: Filter.and([
-          Filter.equals('teacherId', teacherId),
-          Filter.greaterThanOrEquals('scheduledAt', startDate.toIso8601String()),
-          Filter.lessThanOrEquals('scheduledAt', endDate.toIso8601String()),
-        ]),
+        filter: Filter.and(filters),
         sortOrders: [SortOrder('scheduledAt')],
       );
 

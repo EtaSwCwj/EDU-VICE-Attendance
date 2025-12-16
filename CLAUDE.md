@@ -4,3 +4,17 @@
 - 모든 대화는 한국어로 진행합니다
 - 고유 명령어나 기술 용어는 "한글(영어)" 형식으로 표기합니다 (예: 빌드(build), 커밋(commit))
 - 질문과 설명도 모두 한국어로 작성합니다
+
+## 프로젝트 구조
+- Flutter 앱 (lib/features/)
+- AWS Amplify 백엔드 (amplify/)
+- Clean Architecture 패턴
+
+## 역할
+- owners: 원장
+- teachers: 선생님  
+- students: 학생
+
+## 주의사항
+- amplify push는 직접 실행
+- 한글 주석 사용

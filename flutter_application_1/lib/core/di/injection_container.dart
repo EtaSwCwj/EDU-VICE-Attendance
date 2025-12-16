@@ -3,14 +3,21 @@ import 'package:get_it/get_it.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logger/logger.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 
 import '../../config/app_config.dart';
 import '../network/network_info.dart';
 import '../network/sync_manager.dart';
 import '../../data/local/sembast_database.dart';
 
-// Features
+// Features - AWS Repositories
 import '../../features/lessons/domain/repositories/lesson_repository.dart';
+import '../../features/lessons/data/repositories/lesson_aws_repository.dart';
+import '../../features/books/data/repositories/book_aws_repository.dart';
+import '../../features/homework/data/repositories/assignment_aws_repository.dart';
+import '../../features/users/data/repositories/student_aws_repository.dart';
+
+// Features - Local Repositories (fallback)
 import '../../features/lessons/data/repositories/lesson_local_repository.dart';
 import '../../features/books/data/repositories/book_local_repository.dart';
 
@@ -50,43 +57,51 @@ Future<void> setupDependencies({AppConfig? config}) async {
   final sharedPreferences = await SharedPreferences.getInstance();
   getIt.registerLazySingleton<SharedPreferences>(() => sharedPreferences);
 
-  // Local Database
+  // Local Database (로컬 캐시/fallback용)
   final database = AppDatabase();
-  await database.database; // DB 초기화
+  await database.database;
   getIt.registerLazySingleton<AppDatabase>(() => database);
 
-  // ========== Data Sources ==========
-  // TODO: 각 feature의 data source 등록
-  // 예: getIt.registerLazySingleton<AttendanceLocalDataSource>(...)
-
-  // ========== Repositories ==========
-  // Lesson Repository
   final db = await database.database;
   getIt.registerLazySingleton(() => db);
-  
-  getIt.registerLazySingleton<LessonRepository>(
+
+  // ========== Amplify API 사용 (DataStore 대신 GraphQL API) ==========
+  // DataStore는 Windows 미지원, GraphQL API는 모든 플랫폼 지원
+
+  // ========== AWS Repositories ==========
+  // Book Repository (AWS)
+  getIt.registerLazySingleton<BookAwsRepository>(() => BookAwsRepository());
+
+  // Lesson Repository (AWS - implements LessonRepository interface)
+  getIt.registerLazySingleton<LessonRepository>(() => LessonAwsRepository());
+  getIt.registerLazySingleton<LessonAwsRepository>(() => LessonAwsRepository());
+
+  // Assignment Repository (AWS)
+  getIt.registerLazySingleton<AssignmentAwsRepository>(() => AssignmentAwsRepository());
+
+  // Student Repository (AWS)
+  getIt.registerLazySingleton<StudentAwsRepository>(() => StudentAwsRepository());
+
+  // ========== Local Repositories (fallback/offline용) ==========
+  // BookLocalRepository는 로컬 캐시/fallback 용도로만 사용
+  // seedDefaultBooks()는 제거 - AWS에서 실제 데이터 사용
+  getIt.registerLazySingleton<BookLocalRepository>(() => BookLocalRepository(db));
+
+  getIt.registerLazySingleton<LessonLocalRepository>(
     () => LessonLocalRepository(getIt()),
   );
 
-  // Book Repository
-  final bookRepo = BookLocalRepository(db);
-  await bookRepo.seedDefaultBooks(); // 기본 교재 데이터 시드
-  getIt.registerLazySingleton<BookLocalRepository>(() => bookRepo);
-
-  // ========== Use Cases ==========
-  // TODO: 각 feature의 use case 등록
-  // 예: getIt.registerLazySingleton<RecordAttendance>(...)
-
-  // ========== Providers / Notifiers ==========
-  // TODO: 각 feature의 provider 등록
-  // 주의: Provider는 Factory로 등록 (매번 새 인스턴스 생성)
-  // 예: getIt.registerFactory<AttendanceNotifier>(...)
+  safePrint('[DI] Dependencies initialized with AWS repositories');
 }
 
 /// 의존성 주입 정리
 Future<void> disposeDependencies() async {
-  final syncManager = getIt<SyncManager>();
-  syncManager.dispose();
+  try {
+    final syncManager = getIt<SyncManager>();
+    syncManager.dispose();
+  } catch (e) {
+    safePrint('[DI] SyncManager dispose error: $e');
+  }
 
   await getIt.reset();
 }

@@ -23,8 +23,9 @@ class _TeacherClassesPageState extends State<TeacherClassesPage> {
   }
 
   void _loadLessons() {
+    // teacherId를 null로 전달하여 모든 선생님의 수업 조회
     context.read<LessonProvider>().loadLessonsByDate(
-      teacherId: 'teacher-001',
+      teacherId: null, // 선생님 필터 없이 날짜로만 조회
       date: _selectedDate,
     );
   }

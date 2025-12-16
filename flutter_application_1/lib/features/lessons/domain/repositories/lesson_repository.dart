@@ -8,7 +8,7 @@ abstract class LessonRepository {
   Future<Either<Failure, List<Lesson>>> getLessonsByStudent(String studentId, DateTime date);
   Future<Either<Failure, Lesson>> getLessonById(String id);
   Future<Either<Failure, List<Lesson>>> getLessonsByDateRange({
-    required String teacherId,
+    String? teacherId, // Optional: null이면 모든 선생님의 수업 조회
     required DateTime startDate,
     required DateTime endDate,
   });

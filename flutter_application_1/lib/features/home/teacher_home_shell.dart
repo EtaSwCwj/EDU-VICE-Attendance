@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../home/dashboard_pages.dart';
-import '../teacher_homework/teacher_homework_page.dart';
+import '../teacher_homework/teacher_homework_page_aws.dart';
 
 /// 교사용 홈 쉘:
 /// - 하단 탭: [대시보드, 과제]
@@ -21,7 +21,7 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       const TeacherDashboardPage(),
-      const TeacherHomeworkPage(),
+      const TeacherHomeworkPageAws(),
     ];
 
     final titles = <String>["교사 대시보드", "과제"];

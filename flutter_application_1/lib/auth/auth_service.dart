@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import '../shared/services/user_sync_service.dart';
 
 class AuthService {
   const AuthService();
@@ -19,6 +20,28 @@ class AuthService {
     final res = await Amplify.Auth.signIn(username: username, password: password);
     if (!res.isSignedIn) {
       throw StateError('Sign-in challenge or failure');
+    }
+
+    // Cognito 로그인 성공 후 DynamoDB에 동기화
+    safePrint('[Auth] Sign-in successful, syncing user to DynamoDB...');
+    try {
+      final syncService = UserSyncService();
+      final syncResult = await syncService.syncCurrentUser();
+
+      if (syncResult.success) {
+        if (syncResult.isNew) {
+          safePrint('[Auth] ✅ User synced to DynamoDB (newly created)');
+        } else {
+          safePrint('[Auth] ✅ User already exists in DynamoDB');
+        }
+      } else {
+        safePrint('[Auth] ⚠️ WARNING: User sync failed: ${syncResult.message}');
+        // 동기화 실패해도 로그인은 성공으로 처리 (사용자는 이미 Cognito 인증됨)
+      }
+    } catch (e, stackTrace) {
+      safePrint('[Auth] ❌ EXCEPTION during user sync: $e');
+      safePrint('[Auth] Stack trace: $stackTrace');
+      // 동기화 실패해도 로그인은 성공으로 처리
     }
   }
 

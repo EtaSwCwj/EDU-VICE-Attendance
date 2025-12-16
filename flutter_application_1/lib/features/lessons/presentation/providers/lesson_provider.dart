@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../domain/entities/lesson.dart';
 import '../../domain/usecases/get_today_lessons.dart';
 import '../../domain/usecases/create_recurring_lessons.dart';
@@ -61,7 +62,7 @@ class LessonProvider extends ChangeNotifier {
 
   // 특정 날짜의 수업 로드
   Future<void> loadLessonsByDate({
-    required String teacherId,
+    String? teacherId, // Optional: null이면 모든 선생님의 수업 조회
     required DateTime date,
   }) async {
     _isLoading = true;
@@ -86,6 +87,22 @@ class LessonProvider extends ChangeNotifier {
         _upcoming = lessons.where((l) => l.status == LessonStatus.scheduled && !l.shouldWarn).toList();
         _completed = lessons.where((l) => l.status == LessonStatus.completed).toList();
         _warnings = lessons.where((l) => l.status == LessonStatus.scheduled && l.shouldWarn).toList();
+
+        safePrint('[LessonProvider] Lessons classified:');
+        safePrint('[LessonProvider]   - In Progress: ${_inProgress.length}');
+        safePrint('[LessonProvider]   - Upcoming: ${_upcoming.length}');
+        safePrint('[LessonProvider]   - Completed: ${_completed.length}');
+        safePrint('[LessonProvider]   - Warnings: ${_warnings.length}');
+
+        if (_warnings.isNotEmpty) {
+          safePrint('[LessonProvider] Warning lessons (past scheduled time):');
+          for (final lesson in _warnings) {
+            final scheduledEnd = lesson.scheduledAt.add(Duration(minutes: lesson.durationMinutes));
+            final now = DateTime.now();
+            safePrint('[LessonProvider]   - ${lesson.subject} at ${lesson.scheduledAt} (ended at $scheduledEnd, now: $now, isPast: ${lesson.isPast}, shouldWarn: ${lesson.shouldWarn})');
+          }
+        }
+
         _isLoading = false;
         notifyListeners();
       },

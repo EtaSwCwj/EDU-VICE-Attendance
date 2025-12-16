@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../lessons/presentation/providers/lesson_provider.dart';
 import '../../lessons/presentation/widgets/lesson_card.dart';
 import '../../lessons/presentation/widgets/evaluation_dialog.dart';
@@ -15,16 +16,39 @@ class TeacherHomePage extends StatefulWidget {
 }
 
 class _TeacherHomePageState extends State<TeacherHomePage> {
+  String? _teacherUsername;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadLessons();
+      _initializeAndLoadLessons();
     });
   }
 
+  Future<void> _initializeAndLoadLessons() async {
+    await _loadTeacherUsername();
+    _loadLessons();
+  }
+
+  Future<void> _loadTeacherUsername() async {
+    try {
+      final user = await Amplify.Auth.getCurrentUser();
+      setState(() {
+        _teacherUsername = user.username;
+      });
+      safePrint('[TeacherHomePage] Teacher username: $_teacherUsername');
+    } catch (e) {
+      safePrint('[TeacherHomePage] Error getting username: $e');
+    }
+  }
+
   void _loadLessons() {
-    context.read<LessonProvider>().loadTodayLessons('teacher-001');
+    if (_teacherUsername == null) {
+      safePrint('[TeacherHomePage] Cannot load lessons: teacherUsername is null');
+      return;
+    }
+    context.read<LessonProvider>().loadTodayLessons(_teacherUsername!);
   }
 
   @override
@@ -269,15 +293,22 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
   }
 
   Future<void> _addTestData() async {
+    if (_teacherUsername == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('선생님 정보를 가져올 수 없습니다')),
+      );
+      return;
+    }
+
     final repository = context.read<LessonProvider>();
     final now = DateTime.now();
-    
+
     // 오늘 오전 10시 수업 (진행중)
     await repository.createRecurring(
       template: Lesson(
         id: 'test-lesson-1',
         academyId: 'academy-dev',
-        teacherId: 'teacher-001',
+        teacherId: _teacherUsername!,
         studentIds: ['student-001', 'student-002'],
         bookId: 'book-math-01',
         subject: '수학',
@@ -305,7 +336,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
       template: Lesson(
         id: 'test-lesson-2',
         academyId: 'academy-dev',
-        teacherId: 'teacher-001',
+        teacherId: _teacherUsername!,
         studentIds: ['student-003'],
         bookId: 'book-english-01',
         subject: '영어',
@@ -333,7 +364,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
       template: Lesson(
         id: 'test-lesson-3',
         academyId: 'academy-dev',
-        teacherId: 'teacher-001',
+        teacherId: _teacherUsername!,
         studentIds: ['student-001', 'student-003'],
         bookId: 'book-science-01',
         subject: '과학',

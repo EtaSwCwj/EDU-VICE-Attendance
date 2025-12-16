@@ -1,5 +1,9 @@
 // lib/features/student/pages/student_homework_page.dart
 import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import '../../../models/ModelProvider.dart' as aws;
+import '../../../core/di/injection_container.dart';
+import '../../homework/data/repositories/assignment_aws_repository.dart';
 
 /// 학생용 숙제 페이지: 내 숙제 목록 (진행중/완료)
 class StudentHomeworkPage extends StatefulWidget {
@@ -13,10 +17,20 @@ class _StudentHomeworkPageState extends State<StudentHomeworkPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  final AssignmentAwsRepository _assignmentRepo = getIt<AssignmentAwsRepository>();
+
+  List<aws.Assignment> _pendingAssignments = [];
+  List<aws.Assignment> _completedAssignments = [];
+
+  bool _isLoading = true;
+  String? _error;
+  String? _studentUsername;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadData();
   }
 
   @override
@@ -25,80 +39,164 @@ class _StudentHomeworkPageState extends State<StudentHomeworkPage>
     super.dispose();
   }
 
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      // 현재 학생 username 가져오기
+      _studentUsername = await _getCurrentUsername();
+      safePrint('[StudentHomeworkPage] Student username: $_studentUsername');
+
+      if (_studentUsername == null) {
+        setState(() {
+          _error = '로그인 정보를 가져올 수 없습니다';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 진행중 숙제 (ASSIGNED + IN_PROGRESS)
+      final assignedFuture = _assignmentRepo.getByStudentAndStatus(
+        _studentUsername!,
+        aws.AssignmentStatus.ASSIGNED,
+      );
+      final inProgressFuture = _assignmentRepo.getByStudentAndStatus(
+        _studentUsername!,
+        aws.AssignmentStatus.IN_PROGRESS,
+      );
+
+      // 완료 숙제
+      final doneFuture = _assignmentRepo.getByStudentAndStatus(
+        _studentUsername!,
+        aws.AssignmentStatus.DONE,
+      );
+
+      final results = await Future.wait([assignedFuture, inProgressFuture, doneFuture]);
+
+      setState(() {
+        _pendingAssignments = [...results[0], ...results[1]];
+        // 마감일 기준 오름차순 정렬
+        _pendingAssignments.sort((a, b) {
+          if (a.dueDate == null && b.dueDate == null) return 0;
+          if (a.dueDate == null) return 1;
+          if (b.dueDate == null) return -1;
+          return a.dueDate!.compareTo(b.dueDate!);
+        });
+        _completedAssignments = results[2];
+        _isLoading = false;
+      });
+
+      safePrint('[StudentHomeworkPage] Loaded: ${_pendingAssignments.length} pending, ${_completedAssignments.length} completed');
+    } catch (e) {
+      safePrint('[StudentHomeworkPage] Error: $e');
+      setState(() {
+        _error = '데이터를 불러오는데 실패했습니다: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<String?> _getCurrentUsername() async {
+    try {
+      final user = await Amplify.Auth.getCurrentUser();
+      return user.username;
+    } catch (e) {
+      safePrint('[StudentHomeworkPage] Error getting username: $e');
+      return null;
+    }
+  }
+
+  // 숙제 상태 계산 (overdue, dueSoon, pending)
+  String _getHomeworkStatus(aws.Assignment assignment) {
+    if (assignment.status == aws.AssignmentStatus.DONE) {
+      return 'completed';
+    }
+
+    if (assignment.dueDate == null) {
+      return 'pending';
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dueDateTime = assignment.dueDate!.getDateTimeInUtc().toLocal();
+    final dueDate = DateTime(dueDateTime.year, dueDateTime.month, dueDateTime.day);
+    final diff = dueDate.difference(today).inDays;
+
+    if (diff < 0) return 'overdue';
+    if (diff <= 1) return 'dueSoon';
+    return 'pending';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('내 숙제'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: '진행중'),
-            Tab(text: '완료'),
-          ],
-        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () => _showFilterDialog(context),
-            tooltip: '필터',
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: '새로고침',
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: '진행중 (${_pendingAssignments.length})'),
+            Tab(text: '완료 (${_completedAssignments.length})'),
+          ],
+        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildPendingTab(),
-          _buildCompletedTab(),
-        ],
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _loadData,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('다시 시도'),
+                      ),
+                    ],
+                  ),
+                )
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildPendingTab(),
+                    _buildCompletedTab(),
+                  ],
+                ),
     );
   }
 
   Widget _buildPendingTab() {
-    // TODO: 실제 데이터 연동
-    final mockHomework = [
-      _MockHomework(
-        subject: '수학',
-        book: '초등 수학의 정석',
-        range: 'p.45-52',
-        dueDate: DateTime.now().add(const Duration(days: 1)),
-        status: 'dueSoon',
-      ),
-      _MockHomework(
-        subject: '영어',
-        book: '초등 영어 첫걸음',
-        range: 'Unit 4 단어 암기',
-        dueDate: DateTime.now().add(const Duration(days: 3)),
-        status: 'pending',
-      ),
-      _MockHomework(
-        subject: '과학',
-        book: '초등 과학 탐구',
-        range: '2단원 문제풀이',
-        dueDate: DateTime.now().subtract(const Duration(days: 1)),
-        status: 'overdue',
-      ),
-    ];
-
-    if (mockHomework.isEmpty) {
+    if (_pendingAssignments.isEmpty) {
       return _buildEmptyState('진행중인 숙제가 없습니다');
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        // TODO: 새로고침
-      },
+      onRefresh: _loadData,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // 현황 요약
-          _buildSummaryRow(mockHomework),
+          _buildSummaryRow(_pendingAssignments),
           const SizedBox(height: 16),
           // 숙제 목록
-          ...mockHomework.map((hw) => _HomeworkCard(
-                homework: hw,
-                onToggle: () => _toggleHomework(hw),
+          ..._pendingAssignments.map((hw) => _HomeworkCard(
+                assignment: hw,
+                status: _getHomeworkStatus(hw),
+                onToggle: () => _markAsCompleted(hw),
               )),
         ],
       ),
@@ -106,48 +204,44 @@ class _StudentHomeworkPageState extends State<StudentHomeworkPage>
   }
 
   Widget _buildCompletedTab() {
-    // TODO: 실제 데이터 연동
-    final mockHomework = [
-      _MockHomework(
-        subject: '수학',
-        book: '초등 수학의 정석',
-        range: 'p.30-44',
-        dueDate: DateTime.now().subtract(const Duration(days: 3)),
-        status: 'completed',
-        checkResult: 'pass',
-      ),
-      _MockHomework(
-        subject: '국어',
-        book: '초등 국어 독해력',
-        range: '1장 문장 이해하기',
-        dueDate: DateTime.now().subtract(const Duration(days: 5)),
-        status: 'completed',
-        checkResult: 'pass',
-      ),
-    ];
-
-    if (mockHomework.isEmpty) {
+    if (_completedAssignments.isEmpty) {
       return _buildEmptyState('완료된 숙제가 없습니다');
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        // TODO: 새로고침
-      },
+      onRefresh: _loadData,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: mockHomework.length,
+        itemCount: _completedAssignments.length,
         itemBuilder: (context, index) {
-          return _HomeworkCard(homework: mockHomework[index]);
+          return _HomeworkCard(
+            assignment: _completedAssignments[index],
+            status: 'completed',
+          );
         },
       ),
     );
   }
 
-  Widget _buildSummaryRow(List<_MockHomework> homework) {
-    final overdue = homework.where((h) => h.status == 'overdue').length;
-    final dueSoon = homework.where((h) => h.status == 'dueSoon').length;
-    final pending = homework.where((h) => h.status == 'pending').length;
+  Widget _buildSummaryRow(List<aws.Assignment> assignments) {
+    int overdue = 0;
+    int dueSoon = 0;
+    int pending = 0;
+
+    for (final hw in assignments) {
+      final status = _getHomeworkStatus(hw);
+      switch (status) {
+        case 'overdue':
+          overdue++;
+          break;
+        case 'dueSoon':
+          dueSoon++;
+          break;
+        case 'pending':
+          pending++;
+          break;
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -209,104 +303,55 @@ class _StudentHomeworkPageState extends State<StudentHomeworkPage>
     );
   }
 
-  void _toggleHomework(_MockHomework homework) {
-    // TODO: 실제 데이터 업데이트
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('"${homework.range}" 제출 상태가 변경되었습니다')),
-    );
-  }
+  Future<void> _markAsCompleted(aws.Assignment assignment) async {
+    safePrint('[StudentHomeworkPage] Marking assignment as completed');
+    safePrint('[StudentHomeworkPage]   - Assignment ID: ${assignment.id}');
+    safePrint('[StudentHomeworkPage]   - Title: ${assignment.title}');
+    safePrint('[StudentHomeworkPage]   - Current status: ${assignment.status}');
+    safePrint('[StudentHomeworkPage]   - Student username: ${assignment.studentUsername}');
+    safePrint('[StudentHomeworkPage]   - Current user: $_studentUsername');
 
-  void _showFilterDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '필터',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilterChip(
-                  label: const Text('전체'),
-                  selected: true,
-                  onSelected: (_) => Navigator.pop(context),
-                ),
-                FilterChip(
-                  label: const Text('수학'),
-                  selected: false,
-                  onSelected: (_) => Navigator.pop(context),
-                ),
-                FilterChip(
-                  label: const Text('영어'),
-                  selected: false,
-                  onSelected: (_) => Navigator.pop(context),
-                ),
-                FilterChip(
-                  label: const Text('과학'),
-                  selected: false,
-                  onSelected: (_) => Navigator.pop(context),
-                ),
-                FilterChip(
-                  label: const Text('국어'),
-                  selected: false,
-                  onSelected: (_) => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-          ],
+    final success = await _assignmentRepo.updateStatus(
+      assignment.id,
+      aws.AssignmentStatus.DONE,
+    );
+
+    safePrint('[StudentHomeworkPage] Update result: ${success ? "SUCCESS" : "FAILED"}');
+
+    if (!mounted) return;
+
+    if (success) {
+      safePrint('[StudentHomeworkPage] ✅ Assignment marked as completed successfully');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"${assignment.title}" 완료 처리되었습니다')),
+      );
+      _loadData(); // 새로고침
+    } else {
+      safePrint('[StudentHomeworkPage] ❌ Failed to mark assignment as completed');
+      safePrint('[StudentHomeworkPage] 가능한 원인:');
+      safePrint('[StudentHomeworkPage]   1. 네트워크 오류');
+      safePrint('[StudentHomeworkPage]   2. GraphQL mutation 실패 (AssignmentAwsRepository 로그 확인)');
+      safePrint('[StudentHomeworkPage]   3. 권한 문제 (@auth 규칙 확인 - 학생은 update 권한 있어야 함)');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('상태 업데이트에 실패했습니다. 로그를 확인하세요.'),
+          backgroundColor: Colors.red,
         ),
-      ),
-    );
+      );
+    }
   }
-}
-
-class _MockHomework {
-  final String subject;
-  final String book;
-  final String range;
-  final DateTime dueDate;
-  final String status; // pending, dueSoon, overdue, completed
-  final String? checkResult; // pass, fail, partial
-
-  _MockHomework({
-    required this.subject,
-    required this.book,
-    required this.range,
-    required this.dueDate,
-    required this.status,
-    this.checkResult,
-  });
 }
 
 class _HomeworkCard extends StatelessWidget {
-  final _MockHomework homework;
+  final aws.Assignment assignment;
+  final String status; // pending, dueSoon, overdue, completed
   final VoidCallback? onToggle;
 
-  const _HomeworkCard({required this.homework, this.onToggle});
-
-  Color _getSubjectColor(String subject) {
-    switch (subject) {
-      case '수학':
-        return Colors.blue;
-      case '영어':
-        return Colors.green;
-      case '과학':
-        return Colors.orange;
-      case '국어':
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
-  }
+  const _HomeworkCard({
+    required this.assignment,
+    required this.status,
+    this.onToggle,
+  });
 
   Color _getStatusColor(String status) {
     switch (status) {
@@ -334,7 +379,10 @@ class _HomeworkCard extends StatelessWidget {
     }
   }
 
-  String _formatDate(DateTime date) {
+  String _formatDate(TemporalDateTime? temporalDate) {
+    if (temporalDate == null) return '마감일 없음';
+
+    final date = temporalDate.getDateTimeInUtc().toLocal();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final targetDate = DateTime(date.year, date.month, date.day);
@@ -349,9 +397,8 @@ class _HomeworkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subjectColor = _getSubjectColor(homework.subject);
-    final statusColor = _getStatusColor(homework.status);
-    final isCompleted = homework.status == 'completed';
+    final statusColor = _getStatusColor(status);
+    final isCompleted = status == 'completed';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -363,10 +410,10 @@ class _HomeworkCard extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: subjectColor,
+                  backgroundColor: Colors.blue,
                   radius: 18,
                   child: Text(
-                    homework.subject[0],
+                    assignment.title[0],
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -376,15 +423,16 @@ class _HomeworkCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        homework.book,
+                        assignment.title,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                       ),
-                      Text(
-                        homework.subject,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                      ),
+                      if (assignment.book != null)
+                        Text(
+                          assignment.book!,
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        ),
                     ],
                   ),
                 ),
@@ -396,7 +444,7 @@ class _HomeworkCard extends StatelessWidget {
                     border: Border.all(color: statusColor.withValues(alpha: 0.5)),
                   ),
                   child: Text(
-                    _getStatusLabel(homework.status),
+                    _getStatusLabel(status),
                     style: TextStyle(
                       color: statusColor,
                       fontSize: 12,
@@ -406,33 +454,35 @@ class _HomeworkCard extends StatelessWidget {
                 ),
               ],
             ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                const Icon(Icons.bookmark, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    homework.range,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            if (assignment.range != null || assignment.description != null) ...[
+              const Divider(height: 24),
+              Row(
+                children: [
+                  const Icon(Icons.bookmark, size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      assignment.range ?? assignment.description ?? '',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             Row(
               children: [
                 Icon(
                   Icons.event,
                   size: 16,
-                  color: homework.status == 'overdue' ? Colors.red : Colors.grey,
+                  color: status == 'overdue' ? Colors.red : Colors.grey,
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '마감: ${_formatDate(homework.dueDate)}',
+                  '마감: ${_formatDate(assignment.dueDate)}',
                   style: TextStyle(
                     fontSize: 13,
-                    color: homework.status == 'overdue' ? Colors.red : Colors.grey[600],
+                    color: status == 'overdue' ? Colors.red : Colors.grey[600],
                   ),
                 ),
               ],
@@ -448,7 +498,7 @@ class _HomeworkCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (homework.checkResult != null) ...[
+            if (isCompleted) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -456,13 +506,13 @@ class _HomeworkCard extends StatelessWidget {
                   color: Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.check_circle, size: 18, color: Colors.green),
-                    const SizedBox(width: 8),
-                    const Text(
-                      '선생님 확인 완료',
+                    Icon(Icons.check_circle, size: 18, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text(
+                      '완료됨',
                       style: TextStyle(
                         color: Colors.green,
                         fontWeight: FontWeight.w600,
