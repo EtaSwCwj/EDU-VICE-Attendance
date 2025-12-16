@@ -7,7 +7,7 @@ import '../shared/services/auth_state.dart';
 import '../features/auth/login_page.dart';
 import '../features/teacher/teacher_shell.dart';
 import '../features/student/student_shell.dart';
-import '../features/home/owner_home_shell.dart';
+import '../features/owner/owner_home_shell.dart';
 import '../features/teacher_homework/teacher_homework_page_aws.dart';
 
 /// 역할 가드 & 홈쉘 분리 라우터

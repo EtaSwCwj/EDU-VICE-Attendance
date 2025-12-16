@@ -168,9 +168,11 @@ class AuthState extends ChangeNotifier {
       final cognitoUser = await Amplify.Auth.getCurrentUser();
       final groups = await _getGroups();
 
-      // 역할 결정 (owners/teachers -> teacher, 나머지 -> student)
-      String role = 'student';
-      if (groups.contains('owners') || groups.contains('teachers')) {
+      // 역할 결정 (owners -> owner, teachers -> teacher, students -> student)
+      String role = 'student'; // 기본값
+      if (groups.contains('owners')) {
+        role = 'owner';
+      } else if (groups.contains('teachers')) {
         role = 'teacher';
       } else if (groups.contains('students')) {
         role = 'student';
@@ -192,7 +194,7 @@ class AuthState extends ChangeNotifier {
 
       _current = _user!.memberships.first;
 
-      safePrint('[AuthState] User loaded: ${_user!.name}, role: $role');
+      safePrint('[AuthState] User loaded: ${_user!.name}, role: $role, groups: $groups');
     } catch (e) {
       safePrint('[AuthState] _loadUserInfo error: $e');
     }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:provider/provider.dart';
 import '../../../models/ModelProvider.dart' as aws;
 import '../../../core/di/injection_container.dart';
 import '../../users/data/repositories/student_aws_repository.dart';
@@ -9,6 +10,8 @@ import '../../books/data/repositories/book_aws_repository.dart';
 import '../../homework/data/repositories/assignment_aws_repository.dart';
 import '../../lessons/presentation/widgets/lesson_create_dialog.dart';
 import '../../homework/presentation/widgets/homework_create_dialog.dart';
+import '../../../shared/services/auth_state.dart';
+import '../../../shared/services/permission_service.dart';
 
 class TeacherStudentsPage extends StatefulWidget {
   const TeacherStudentsPage({super.key});
@@ -47,20 +50,33 @@ class _TeacherStudentsPageState extends State<TeacherStudentsPage> {
     });
 
     try {
-      // 현재 선생님 username 가져오기
-      _teacherUsername = await _studentRepo.getCurrentTeacherUsername();
-      safePrint('[TeacherStudentsPage] Teacher username: $_teacherUsername');
+      // 현재 사용자의 역할 확인
+      final role = context.read<AuthState>().currentMembership?.role;
+      safePrint('[TeacherStudentsPage] Current role: $role');
 
-      if (_teacherUsername == null) {
-        setState(() {
-          _error = '로그인 정보를 가져올 수 없습니다';
-          _isLoading = false;
-        });
-        return;
+      List<aws.Student> students;
+
+      if (PermissionService.canViewAllStudents(role)) {
+        // Owner: 전체 학생 조회
+        safePrint('[TeacherStudentsPage] Loading all students (Owner)');
+        students = await _studentRepo.getAll();
+        _teacherUsername = null; // Owner는 teacherUsername 불필요
+      } else {
+        // Teacher: 배정된 학생만 조회
+        _teacherUsername = await _studentRepo.getCurrentTeacherUsername();
+        safePrint('[TeacherStudentsPage] Teacher username: $_teacherUsername');
+
+        if (_teacherUsername == null) {
+          setState(() {
+            _error = '로그인 정보를 가져올 수 없습니다';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        students = await _studentRepo.getStudentsByTeacher(_teacherUsername!);
       }
 
-      // AWS에서 학생 목록 가져오기
-      final students = await _studentRepo.getStudentsByTeacher(_teacherUsername!);
       safePrint('[TeacherStudentsPage] Loaded ${students.length} students');
 
       setState(() {
@@ -136,11 +152,19 @@ class _TeacherStudentsPageState extends State<TeacherStudentsPage> {
     }
 
     final filteredStudents = _filteredStudents;
+    final role = context.watch<AuthState>().currentMembership?.role;
+    final canAssignStudent = PermissionService.canAssignStudent(role);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('학생 관리'),
         actions: [
+          // 새로고침 버튼
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadStudents,
+            tooltip: '새로고침',
+          ),
           // 필터 버튼
           PopupMenuButton<String>(
             icon: Icon(
@@ -248,54 +272,64 @@ class _TeacherStudentsPageState extends State<TeacherStudentsPage> {
               ),
             // 학생 목록
             Expanded(
-              child: filteredStudents.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+              child: RefreshIndicator(
+                onRefresh: _loadStudents,
+                child: filteredStudents.isEmpty
+                    ? ListView(
                         children: [
-                          Icon(
-                            _filterType != 'all' ? Icons.filter_alt_off : Icons.search_off,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _filterType != 'all'
-                                ? '조건에 맞는 학생이 없습니다'
-                                : (_query.isEmpty ? '등록된 학생이 없습니다' : '검색 결과가 없습니다'),
-                          ),
-                          if (_query.isEmpty && _filterType == 'all') ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              '학생 연결 버튼으로 학생을 추가하세요',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+                          Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _filterType != 'all' ? Icons.filter_alt_off : Icons.search_off,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _filterType != 'all'
+                                      ? '조건에 맞는 학생이 없습니다'
+                                      : (_query.isEmpty ? '등록된 학생이 없습니다' : '검색 결과가 없습니다'),
+                                ),
+                                if (_query.isEmpty && _filterType == 'all') ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '학생 연결 버튼으로 학생을 추가하세요',
+                                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                  ),
+                                ],
+                              ],
                             ),
-                          ],
+                          ),
                         ],
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                        itemCount: filteredStudents.length,
+                        itemBuilder: (context, index) {
+                          final student = filteredStudents[index];
+                          return _StudentCard(
+                            student: student,
+                            hasTodayLesson: _studentsWithTodayLesson.contains(student.username),
+                            hasHomework: _studentsWithHomework.contains(student.username),
+                            onTap: () => setState(() => _selectedStudent = student),
+                          );
+                        },
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-                      itemCount: filteredStudents.length,
-                      itemBuilder: (context, index) {
-                        final student = filteredStudents[index];
-                        return _StudentCard(
-                          student: student,
-                          hasTodayLesson: _studentsWithTodayLesson.contains(student.username),
-                          hasHomework: _studentsWithHomework.contains(student.username),
-                          onTap: () => setState(() => _selectedStudent = student),
-                        );
-                      },
-                    ),
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showSearchStudentDialog(),
-        icon: const Icon(Icons.person_add),
-        label: const Text('학생 연결'),
-      ),
+      floatingActionButton: canAssignStudent
+          ? FloatingActionButton.extended(
+              onPressed: () => _showSearchStudentDialog(),
+              icon: const Icon(Icons.person_add),
+              label: const Text('학생 연결'),
+            )
+          : null,
     );
   }
 

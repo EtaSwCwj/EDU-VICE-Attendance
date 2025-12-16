@@ -285,4 +285,96 @@ class StudentAwsRepository {
       return [];
     }
   }
+
+  /// 학생 생성 (Owner 전용)
+  Future<Student?> createStudent({
+    required String username,
+    required String name,
+    String? grade,
+  }) async {
+    try {
+      safePrint('[StudentAwsRepository] Creating student: $username');
+
+      final student = Student(
+        username: username,
+        name: name,
+        grade: grade,
+      );
+
+      final request = ModelMutations.create(student);
+      final response = await Amplify.API.mutate(request: request).response;
+
+      if (response.hasErrors) {
+        safePrint('[StudentAwsRepository] createStudent errors: ${response.errors}');
+        return null;
+      }
+
+      if (response.data != null) {
+        safePrint('[StudentAwsRepository] Student created successfully: ${response.data!.id}');
+        return response.data;
+      }
+
+      return null;
+    } catch (e) {
+      safePrint('[StudentAwsRepository] createStudent error: $e');
+      return null;
+    }
+  }
+
+  /// 학생 수정 (Owner 전용)
+  Future<Student?> updateStudent(Student student) async {
+    try {
+      safePrint('[StudentAwsRepository] Updating student: ${student.id}');
+
+      final request = ModelMutations.update(student);
+      final response = await Amplify.API.mutate(request: request).response;
+
+      if (response.hasErrors) {
+        safePrint('[StudentAwsRepository] updateStudent errors: ${response.errors}');
+        return null;
+      }
+
+      if (response.data != null) {
+        safePrint('[StudentAwsRepository] Student updated successfully');
+        return response.data;
+      }
+
+      return null;
+    } catch (e) {
+      safePrint('[StudentAwsRepository] updateStudent error: $e');
+      return null;
+    }
+  }
+
+  /// 학생 삭제 (Owner 전용)
+  Future<bool> deleteStudent(String id) async {
+    try {
+      safePrint('[StudentAwsRepository] Deleting student: $id');
+
+      // 먼저 Student 객체 조회
+      final student = await getById(id);
+      if (student == null) {
+        safePrint('[StudentAwsRepository] Student not found: $id');
+        return false;
+      }
+
+      final request = ModelMutations.delete(student);
+      final response = await Amplify.API.mutate(request: request).response;
+
+      if (response.hasErrors) {
+        safePrint('[StudentAwsRepository] deleteStudent errors: ${response.errors}');
+        return false;
+      }
+
+      if (response.data != null) {
+        safePrint('[StudentAwsRepository] Student deleted successfully');
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      safePrint('[StudentAwsRepository] deleteStudent error: $e');
+      return false;
+    }
+  }
 }
