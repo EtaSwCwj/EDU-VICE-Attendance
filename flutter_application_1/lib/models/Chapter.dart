@@ -29,8 +29,11 @@ class Chapter extends amplify_core.Model {
   final String id;
   final String? _title;
   final int? _orderIndex;
+  final String? _parentId;
+  final int? _level;
   final int? _startPage;
   final int? _endPage;
+  final String? _answerImageUrl;
   final Book? _book;
   final amplify_core.TemporalDateTime? _createdAt;
   final amplify_core.TemporalDateTime? _updatedAt;
@@ -74,12 +77,24 @@ class Chapter extends amplify_core.Model {
     }
   }
   
+  String? get parentId {
+    return _parentId;
+  }
+  
+  int? get level {
+    return _level;
+  }
+  
   int? get startPage {
     return _startPage;
   }
   
   int? get endPage {
     return _endPage;
+  }
+  
+  String? get answerImageUrl {
+    return _answerImageUrl;
   }
   
   Book? get book {
@@ -94,15 +109,18 @@ class Chapter extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const Chapter._internal({required this.id, required title, required orderIndex, startPage, endPage, book, createdAt, updatedAt}): _title = title, _orderIndex = orderIndex, _startPage = startPage, _endPage = endPage, _book = book, _createdAt = createdAt, _updatedAt = updatedAt;
+  const Chapter._internal({required this.id, required title, required orderIndex, parentId, level, startPage, endPage, answerImageUrl, book, createdAt, updatedAt}): _title = title, _orderIndex = orderIndex, _parentId = parentId, _level = level, _startPage = startPage, _endPage = endPage, _answerImageUrl = answerImageUrl, _book = book, _createdAt = createdAt, _updatedAt = updatedAt;
   
-  factory Chapter({String? id, required String title, required int orderIndex, int? startPage, int? endPage, Book? book, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
+  factory Chapter({String? id, required String title, required int orderIndex, String? parentId, int? level, int? startPage, int? endPage, String? answerImageUrl, Book? book, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
     return Chapter._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
       title: title,
       orderIndex: orderIndex,
+      parentId: parentId,
+      level: level,
       startPage: startPage,
       endPage: endPage,
+      answerImageUrl: answerImageUrl,
       book: book,
       createdAt: createdAt,
       updatedAt: updatedAt);
@@ -119,8 +137,11 @@ class Chapter extends amplify_core.Model {
       id == other.id &&
       _title == other._title &&
       _orderIndex == other._orderIndex &&
+      _parentId == other._parentId &&
+      _level == other._level &&
       _startPage == other._startPage &&
       _endPage == other._endPage &&
+      _answerImageUrl == other._answerImageUrl &&
       _book == other._book &&
       _createdAt == other._createdAt &&
       _updatedAt == other._updatedAt;
@@ -137,8 +158,11 @@ class Chapter extends amplify_core.Model {
     buffer.write("id=" + "$id" + ", ");
     buffer.write("title=" + "$_title" + ", ");
     buffer.write("orderIndex=" + (_orderIndex != null ? _orderIndex!.toString() : "null") + ", ");
+    buffer.write("parentId=" + "$_parentId" + ", ");
+    buffer.write("level=" + (_level != null ? _level!.toString() : "null") + ", ");
     buffer.write("startPage=" + (_startPage != null ? _startPage!.toString() : "null") + ", ");
     buffer.write("endPage=" + (_endPage != null ? _endPage!.toString() : "null") + ", ");
+    buffer.write("answerImageUrl=" + "$_answerImageUrl" + ", ");
     buffer.write("book=" + (_book != null ? _book!.toString() : "null") + ", ");
     buffer.write("createdAt=" + (_createdAt != null ? _createdAt!.format() : "null") + ", ");
     buffer.write("updatedAt=" + (_updatedAt != null ? _updatedAt!.format() : "null"));
@@ -147,13 +171,16 @@ class Chapter extends amplify_core.Model {
     return buffer.toString();
   }
   
-  Chapter copyWith({String? title, int? orderIndex, int? startPage, int? endPage, Book? book, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
+  Chapter copyWith({String? title, int? orderIndex, String? parentId, int? level, int? startPage, int? endPage, String? answerImageUrl, Book? book, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
     return Chapter._internal(
       id: id,
       title: title ?? this.title,
       orderIndex: orderIndex ?? this.orderIndex,
+      parentId: parentId ?? this.parentId,
+      level: level ?? this.level,
       startPage: startPage ?? this.startPage,
       endPage: endPage ?? this.endPage,
+      answerImageUrl: answerImageUrl ?? this.answerImageUrl,
       book: book ?? this.book,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt);
@@ -162,8 +189,11 @@ class Chapter extends amplify_core.Model {
   Chapter copyWithModelFieldValues({
     ModelFieldValue<String>? title,
     ModelFieldValue<int>? orderIndex,
+    ModelFieldValue<String?>? parentId,
+    ModelFieldValue<int?>? level,
     ModelFieldValue<int?>? startPage,
     ModelFieldValue<int?>? endPage,
+    ModelFieldValue<String?>? answerImageUrl,
     ModelFieldValue<Book?>? book,
     ModelFieldValue<amplify_core.TemporalDateTime?>? createdAt,
     ModelFieldValue<amplify_core.TemporalDateTime?>? updatedAt
@@ -172,8 +202,11 @@ class Chapter extends amplify_core.Model {
       id: id,
       title: title == null ? this.title : title.value,
       orderIndex: orderIndex == null ? this.orderIndex : orderIndex.value,
+      parentId: parentId == null ? this.parentId : parentId.value,
+      level: level == null ? this.level : level.value,
       startPage: startPage == null ? this.startPage : startPage.value,
       endPage: endPage == null ? this.endPage : endPage.value,
+      answerImageUrl: answerImageUrl == null ? this.answerImageUrl : answerImageUrl.value,
       book: book == null ? this.book : book.value,
       createdAt: createdAt == null ? this.createdAt : createdAt.value,
       updatedAt: updatedAt == null ? this.updatedAt : updatedAt.value
@@ -184,8 +217,11 @@ class Chapter extends amplify_core.Model {
     : id = json['id'],
       _title = json['title'],
       _orderIndex = (json['orderIndex'] as num?)?.toInt(),
+      _parentId = json['parentId'],
+      _level = (json['level'] as num?)?.toInt(),
       _startPage = (json['startPage'] as num?)?.toInt(),
       _endPage = (json['endPage'] as num?)?.toInt(),
+      _answerImageUrl = json['answerImageUrl'],
       _book = json['book'] != null
         ? json['book']['serializedData'] != null
           ? Book.fromJson(new Map<String, dynamic>.from(json['book']['serializedData']))
@@ -195,15 +231,18 @@ class Chapter extends amplify_core.Model {
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'title': _title, 'orderIndex': _orderIndex, 'startPage': _startPage, 'endPage': _endPage, 'book': _book?.toJson(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'title': _title, 'orderIndex': _orderIndex, 'parentId': _parentId, 'level': _level, 'startPage': _startPage, 'endPage': _endPage, 'answerImageUrl': _answerImageUrl, 'book': _book?.toJson(), 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
   };
   
   Map<String, Object?> toMap() => {
     'id': id,
     'title': _title,
     'orderIndex': _orderIndex,
+    'parentId': _parentId,
+    'level': _level,
     'startPage': _startPage,
     'endPage': _endPage,
+    'answerImageUrl': _answerImageUrl,
     'book': _book,
     'createdAt': _createdAt,
     'updatedAt': _updatedAt
@@ -213,8 +252,11 @@ class Chapter extends amplify_core.Model {
   static final ID = amplify_core.QueryField(fieldName: "id");
   static final TITLE = amplify_core.QueryField(fieldName: "title");
   static final ORDERINDEX = amplify_core.QueryField(fieldName: "orderIndex");
+  static final PARENTID = amplify_core.QueryField(fieldName: "parentId");
+  static final LEVEL = amplify_core.QueryField(fieldName: "level");
   static final STARTPAGE = amplify_core.QueryField(fieldName: "startPage");
   static final ENDPAGE = amplify_core.QueryField(fieldName: "endPage");
+  static final ANSWERIMAGEURL = amplify_core.QueryField(fieldName: "answerImageUrl");
   static final BOOK = amplify_core.QueryField(
     fieldName: "book",
     fieldType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.model, ofModelName: 'Book'));
@@ -276,6 +318,18 @@ class Chapter extends amplify_core.Model {
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: Chapter.PARENTID,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: Chapter.LEVEL,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.int)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
       key: Chapter.STARTPAGE,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.int)
@@ -285,6 +339,12 @@ class Chapter extends amplify_core.Model {
       key: Chapter.ENDPAGE,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.int)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: Chapter.ANSWERIMAGEURL,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.belongsTo(

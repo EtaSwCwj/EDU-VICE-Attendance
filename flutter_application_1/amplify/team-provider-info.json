@@ -17,6 +17,15 @@
       },
       "api": {
         "evattendance": {}
+      },
+      "function": {
+        "S3Triggere1360b3d": {
+          "deploymentBucketName": "amplify-evattendance-dev-5bc13-deployment",
+          "s3Key": "amplify-builds/S3Triggere1360b3d-64675679634668627835-build.zip"
+        }
+      },
+      "storage": {
+        "eduviceStorage": {}
       }
     }
   }

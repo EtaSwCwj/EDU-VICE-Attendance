@@ -5,6 +5,7 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 
 import '../../data/repositories/book_aws_repository.dart';
 import '../../../../models/ModelProvider.dart' as aws;
+import '../../../book/pages/chapter_management_page.dart';
 
 /// 교재 관리 페이지 (하단 탭용)
 class BookManagementPage extends StatefulWidget {
@@ -248,6 +249,21 @@ class _BookCardState extends State<_BookCard> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              icon: const Icon(Icons.list_alt, color: Colors.indigo),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChapterManagementPage(
+                      bookId: widget.book.id,
+                      bookTitle: widget.book.title,
+                    ),
+                  ),
+                );
+              },
+              tooltip: '단원 관리',
+            ),
             if (widget.onDelete != null)
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),

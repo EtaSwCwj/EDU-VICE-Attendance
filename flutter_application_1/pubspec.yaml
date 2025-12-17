@@ -40,10 +40,12 @@ dependencies:
   amplify_api: 2.6.1
   amplify_auth_cognito: 2.6.1
   amplify_datastore: 2.6.1
+  amplify_storage_s3: 2.6.1
   
   # Utilities
   geolocator: ^14.0.2
   image_picker: ^1.2.1
+  file_picker: ^8.0.0
   equatable: ^2.0.5
   intl: ^0.20.2
   connectivity_plus: ^6.1.5

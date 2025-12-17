@@ -127,8 +127,11 @@ type Chapter
     @index(name: "byBook", queryField: "chaptersByBook", sortKeyFields: ["orderIndex"])
   title: String!
   orderIndex: Int!
+  parentId: String          # 상위 단원 ID (계층 구조)
+  level: Int                # 1=대단원, 2=중단원, 3=소단원
   startPage: Int
   endPage: Int
+  answerImageUrl: String    # S3 답안지 이미지 URL
   book: Book @belongsTo(fields: ["bookId"])
   createdAt: AWSDateTime
   updatedAt: AWSDateTime
