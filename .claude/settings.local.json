@@ -7,7 +7,15 @@
       "Bash(flutter run:*)",
       "Bash(flutter build:*)",
       "Bash(grep:*)",
-      "Bash(amplify push:*)"
+      "Bash(amplify push:*)",
+      "Bash(aws cognito-idp create-group:*)",
+      "Bash(aws cognito-idp admin-add-user-to-group:*)",
+      "Bash(aws dynamodb create-table:*)",
+      "Bash(aws dynamodb put-item:*)",
+      "Bash(aws dynamodb delete-table:*)",
+      "Bash(aws dynamodb scan:*)",
+      "Bash(flutter devices:*)",
+      "Bash(taskkill:*)"
     ]
   }
 }

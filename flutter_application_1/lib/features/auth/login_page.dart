@@ -270,6 +270,19 @@ class _LoginPageState extends State<LoginPage> {
                               style: TextStyle(fontSize: 16),
                             ),
                     ),
+                    const SizedBox(height: 16),
+
+                    // 회원가입 버튼
+                    OutlinedButton(
+                      onPressed: _busy ? null : () => context.go('/register'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text(
+                        '회원가입',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ),
                     const SizedBox(height: 24),
                   ],
                 ),

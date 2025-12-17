@@ -12,6 +12,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # State Management
   provider: ^6.1.5+1
@@ -43,9 +45,10 @@ dependencies:
   geolocator: ^14.0.2
   image_picker: ^1.2.1
   equatable: ^2.0.5
-  intl: ^0.19.0
+  intl: ^0.20.2
   connectivity_plus: ^6.1.5
-  
+  qr_flutter: ^4.1.0
+
   # Logging
   logger: ^2.0.2
 

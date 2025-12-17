@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/account.dart';
-import '../models/academy.dart';
+import '../models/academy.dart' as local_models;
 import 'user_sync_service.dart';
+import '../../models/ModelProvider.dart';
 
 /// Amplify Auth 기반 AuthState
 class AuthState extends ChangeNotifier {
@@ -17,8 +19,8 @@ class AuthState extends ChangeNotifier {
   Membership? _current;
   Membership? get currentMembership => _current;
 
-  List<Academy> _academies = const [];
-  List<Academy> get academies => _academies;
+  List<local_models.Academy> _academies = const [];
+  List<local_models.Academy> get academies => _academies;
 
   // 마지막 에러 메시지
   String? _lastError;
@@ -26,59 +28,40 @@ class AuthState extends ChangeNotifier {
 
   /// 로그인 (Amplify Auth 사용)
   Future<bool> signIn(String username, String password, {bool saveCredentials = false, bool autoLogin = false}) async {
-    _lastError = null; // 에러 초기화
+    _lastError = null;
 
     try {
-      safePrint('[AuthState] Attempting sign in for user: $username');
+      safePrint('[AuthState] 로그인 시도: $username');
 
       // 기존 세션 확인 및 로그아웃
       try {
-        final currentUser = await Amplify.Auth.getCurrentUser();
-        safePrint('[AuthState] Current user already signed in: ${currentUser.username}');
-        safePrint('[AuthState] Signing out before new login...');
-
+        await Amplify.Auth.getCurrentUser();
         await Amplify.Auth.signOut();
-        safePrint('[AuthState] Previous session signed out successfully');
-      } on AuthException catch (e) {
-        // 로그인된 사용자가 없으면 AuthException 발생 (정상)
-        safePrint('[AuthState] No current user session (expected): ${e.message}');
+      } on AuthException catch (_) {
+        // 세션 없음 (정상)
       }
 
       // Amplify 로그인
       final result = await Amplify.Auth.signIn(username: username, password: password);
 
-      safePrint('[AuthState] Sign-in result: isSignedIn=${result.isSignedIn}, nextStep=${result.nextStep.signInStep}');
-
       if (!result.isSignedIn) {
-        _lastError = 'Sign-in challenge or additional step required: ${result.nextStep.signInStep}';
-        safePrint('[AuthState] $_lastError');
+        _lastError = '추가 인증 필요: ${result.nextStep.signInStep}';
+        safePrint('[AuthState] ERROR: $_lastError');
         return false;
       }
 
       // DynamoDB 동기화
-      safePrint('[AuthState] Sign-in successful, syncing user to DynamoDB...');
       try {
         final syncService = UserSyncService();
-        final syncResult = await syncService.syncCurrentUser();
-
-        if (syncResult.success) {
-          if (syncResult.isNew) {
-            safePrint('[AuthState] ✅ User synced to DynamoDB (newly created)');
-          } else {
-            safePrint('[AuthState] ✅ User already exists in DynamoDB');
-          }
-        } else {
-          safePrint('[AuthState] ⚠️ WARNING: User sync failed: ${syncResult.message}');
-        }
-      } catch (e, stackTrace) {
-        safePrint('[AuthState] ❌ EXCEPTION during user sync: $e');
-        safePrint('[AuthState] Stack trace: $stackTrace');
+        await syncService.syncCurrentUser();
+      } catch (e) {
+        safePrint('[AuthState] WARNING: 사용자 동기화 실패 - $e');
       }
 
-      // 사용자 정보 및 역할 가져오기
+      // 사용자 정보 로드
       await _loadUserInfo();
 
-      // 로그인 정보 저장 (옵션)
+      // 로그인 정보 저장
       if (saveCredentials || autoLogin) {
         await _saveCredentials(username, password, saveCredentials, autoLogin);
       }
@@ -87,13 +70,11 @@ class AuthState extends ChangeNotifier {
       return true;
     } on AuthException catch (e) {
       _lastError = e.message;
-      safePrint('[AuthState] AuthException: ${e.message}');
-      safePrint('[AuthState] Error details: ${e.underlyingException}');
+      safePrint('[AuthState] ERROR: ${e.message}');
       return false;
-    } catch (e, stackTrace) {
-      _lastError = 'Unexpected error: $e';
-      safePrint('[AuthState] signIn error: $e');
-      safePrint('[AuthState] Stack trace: $stackTrace');
+    } catch (e) {
+      _lastError = '예상치 못한 오류: $e';
+      safePrint('[AuthState] ERROR: $e');
       return false;
     }
   }
@@ -101,31 +82,27 @@ class AuthState extends ChangeNotifier {
   /// 저장된 credential로 자동 로그인 시도
   Future<bool> tryAutoLogin() async {
     try {
-      safePrint('[AuthState] Checking for existing session...');
+      safePrint('[AuthState] 세션 확인 중...');
 
-      // 먼저 기존 세션이 유효한지 확인
+      // 기존 세션 확인
       try {
         final session = await Amplify.Auth.fetchAuthSession();
         if (session.isSignedIn) {
-          safePrint('[AuthState] Valid session found, loading user info...');
-
-          // 기존 세션이 유효하면 사용자 정보만 로드
           await _loadUserInfo();
           notifyListeners();
-
-          safePrint('[AuthState] Auto login successful with existing session');
+          safePrint('[AuthState] 자동 로그인 성공 (기존 세션)');
           return true;
         }
-      } on AuthException catch (e) {
-        safePrint('[AuthState] No valid session: ${e.message}');
+      } on AuthException catch (_) {
+        // 세션 없음
       }
 
-      // 기존 세션이 없으면 저장된 credential로 로그인 시도
+      // 저장된 credential 확인
       final prefs = await SharedPreferences.getInstance();
       final autoLogin = prefs.getBool('auto_login') ?? false;
 
       if (!autoLogin) {
-        safePrint('[AuthState] Auto login is disabled');
+        safePrint('[AuthState] 자동 로그인 비활성화');
         return false;
       }
 
@@ -133,16 +110,13 @@ class AuthState extends ChangeNotifier {
       final password = prefs.getString('saved_password');
 
       if (username == null || password == null) {
-        safePrint('[AuthState] No saved credentials found');
         return false;
       }
 
-      safePrint('[AuthState] Attempting auto login with saved credentials for user: $username');
-
-      // 자동 로그인 시도 (저장 옵션은 유지)
+      safePrint('[AuthState] 저장된 계정으로 로그인: $username');
       return await signIn(username, password, saveCredentials: true, autoLogin: true);
     } catch (e) {
-      safePrint('[AuthState] tryAutoLogin error: $e');
+      safePrint('[AuthState] ERROR: 자동 로그인 실패 - $e');
       return false;
     }
   }
@@ -157,46 +131,201 @@ class AuthState extends ChangeNotifier {
         'autoLogin': prefs.getBool('auto_login')?.toString() ?? 'false',
       };
     } catch (e) {
-      safePrint('[AuthState] loadSavedCredentials error: $e');
+      safePrint('[AuthState] ERROR: 저장된 계정 로드 실패 - $e');
       return {};
     }
   }
 
   /// 사용자 정보 및 역할 로드
+  /// AppUser, AcademyMember, Academy 테이블에서 조회
+  /// Cognito 그룹은 fallback으로 사용
   Future<void> _loadUserInfo() async {
     try {
+      safePrint('[AuthState] Step 1: Cognito 사용자 조회');
       final cognitoUser = await Amplify.Auth.getCurrentUser();
-      final groups = await _getGroups();
+      final cognitoUsername = cognitoUser.username;
+      final cognitoUserId = cognitoUser.userId;
 
-      // 역할 결정 (owners -> owner, teachers -> teacher, students -> student)
-      String role = 'student'; // 기본값
-      if (groups.contains('owners')) {
-        role = 'owner';
-      } else if (groups.contains('teachers')) {
-        role = 'teacher';
-      } else if (groups.contains('students')) {
-        role = 'student';
+      safePrint('[AuthState] Step 2: AppUser 조회');
+      final appUser = await _getAppUserByUsername(cognitoUsername);
+      String userName = cognitoUsername;
+      String? appUserId;
+
+      if (appUser != null) {
+        userName = appUser['name'] ?? cognitoUsername;
+        appUserId = appUser['id'];
+        safePrint('[AuthState]   AppUser: $userName');
       }
 
-      // Account 및 Membership 생성
-      _user = Account(
-        id: cognitoUser.userId,
-        name: cognitoUser.username,
-        username: cognitoUser.username,
-        password: '', // Cognito에서 관리하므로 빈 문자열
-        memberships: [
-          Membership(
-            academyId: 'default',
-            role: role,
-          ),
-        ],
+      safePrint('[AuthState] Step 3: AcademyMember 조회');
+      String role = 'student';
+      String academyId = 'default-academy';
+
+      if (appUserId != null) {
+        final membership = await _getAcademyMemberByUserId(appUserId);
+        if (membership != null) {
+          role = membership['role'] ?? 'student';
+          academyId = membership['academyId'] ?? 'default-academy';
+          safePrint('[AuthState]   role=$role, academyId=$academyId');
+        } else {
+          final groups = await _getGroups();
+          if (groups.contains('owners')) {
+            role = 'owner';
+          } else if (groups.contains('teachers')) {
+            role = 'teacher';
+          }
+        }
+      } else {
+        final groups = await _getGroups();
+        if (groups.contains('owners')) {
+          role = 'owner';
+        } else if (groups.contains('teachers')) {
+          role = 'teacher';
+        }
+      }
+
+      safePrint('[AuthState] Step 4: Academy 조회');
+      local_models.Academy? academyInfo;
+
+      if (academyId != 'default-academy') {
+        final academy = await _getAcademyById(academyId);
+        if (academy != null) {
+          academyInfo = local_models.Academy(
+            id: academy['id'] ?? academyId,
+            name: academy['name'] ?? 'Unknown',
+            code: academy['code'],
+            address: academy['address'],
+            phone: academy['phone'],
+            description: academy['description'],
+          );
+          safePrint('[AuthState]   Academy: ${academyInfo.name}');
+        }
+      }
+
+      academyInfo ??= const local_models.Academy(
+        id: 'default-academy',
+        name: 'EDU-VICE',
+        code: 'EDUVICE',
       );
 
-      _current = _user!.memberships.first;
+      final membershipList = <Membership>[
+        Membership(academyId: academyInfo.id, role: role),
+      ];
 
-      safePrint('[AuthState] User loaded: ${_user!.name}, role: $role, groups: $groups');
+      _user = Account(
+        id: appUserId ?? cognitoUserId,
+        name: userName,
+        username: cognitoUsername,
+        password: '',
+        memberships: membershipList,
+      );
+
+      _academies = [academyInfo];
+      _current = membershipList.first;
+
+      safePrint('[AuthState] Summary: user=$userName, role=$role, academy=${academyInfo.name}');
     } catch (e) {
-      safePrint('[AuthState] _loadUserInfo error: $e');
+      safePrint('[AuthState] ERROR: 사용자 정보 로드 실패 - $e');
+
+      try {
+        final cognitoUser = await Amplify.Auth.getCurrentUser();
+        _user = Account(
+          id: cognitoUser.userId,
+          name: cognitoUser.username,
+          username: cognitoUser.username,
+          password: '',
+          memberships: [],
+        );
+      } catch (_) {
+        _user = null;
+      }
+      _current = null;
+      _academies = const [];
+    }
+  }
+
+  /// AppUser 테이블에서 cognitoUsername으로 조회
+  Future<Map<String, dynamic>?> _getAppUserByUsername(String username) async {
+    try {
+      final request = ModelQueries.list(
+        AppUser.classType,
+        where: AppUser.COGNITOUSERNAME.eq(username),
+      );
+      final response = await Amplify.API.query(request: request).response;
+
+      if (response.hasErrors || response.data == null) return null;
+
+      final users = response.data!.items.whereType<AppUser>().toList();
+      if (users.isNotEmpty) {
+        final u = users.first;
+        return {
+          'id': u.id,
+          'name': u.name,
+          'email': u.email,
+          'cognitoUsername': u.cognitoUsername,
+        };
+      }
+      return null;
+    } catch (e) {
+      safePrint('[AuthState] ERROR: AppUser 조회 실패 - $e');
+      return null;
+    }
+  }
+
+  /// AcademyMember 테이블에서 userId로 조회
+  Future<Map<String, dynamic>?> _getAcademyMemberByUserId(String userId) async {
+    try {
+      final request = ModelQueries.list(
+        AcademyMember.classType,
+        where: AcademyMember.USERID.eq(userId),
+      );
+      final response = await Amplify.API.query(request: request).response;
+
+      if (response.hasErrors || response.data == null) return null;
+
+      final members = response.data!.items.whereType<AcademyMember>().toList();
+      if (members.isNotEmpty) {
+        final m = members.first;
+        return {
+          'id': m.id,
+          'academyId': m.academyId,
+          'userId': m.userId,
+          'role': m.role,
+        };
+      }
+      return null;
+    } catch (e) {
+      safePrint('[AuthState] ERROR: AcademyMember 조회 실패 - $e');
+      return null;
+    }
+  }
+
+  /// Academy 테이블에서 id로 조회
+  Future<Map<String, dynamic>?> _getAcademyById(String id) async {
+    try {
+      final request = ModelQueries.get(
+        Academy.classType,
+        AcademyModelIdentifier(id: id),
+      );
+      final response = await Amplify.API.query(request: request).response;
+
+      if (response.hasErrors || response.data == null) return null;
+
+      final academy = response.data;
+      if (academy != null) {
+        return {
+          'id': academy.id,
+          'name': academy.name,
+          'code': academy.code,
+          'address': academy.address,
+          'phone': academy.phone,
+          'description': academy.description,
+        };
+      }
+      return null;
+    } catch (e) {
+      safePrint('[AuthState] ERROR: Academy 조회 실패 - $e');
+      return null;
     }
   }
 
@@ -217,7 +346,7 @@ class AuthState extends ChangeNotifier {
       }
       return const [];
     } catch (e) {
-      safePrint('[AuthState] getGroups error: $e');
+      safePrint('[AuthState] ERROR: Cognito 그룹 조회 실패 - $e');
       return const [];
     }
   }
@@ -245,10 +374,8 @@ class AuthState extends ChangeNotifier {
       }
 
       await prefs.setBool('auto_login', autoLogin);
-
-      safePrint('[AuthState] Credentials saved: saveCredentials=$saveCredentials, autoLogin=$autoLogin');
     } catch (e) {
-      safePrint('[AuthState] _saveCredentials error: $e');
+      safePrint('[AuthState] ERROR: 계정 저장 실패 - $e');
     }
   }
 
@@ -270,7 +397,6 @@ class AuthState extends ChangeNotifier {
     try {
       await Amplify.Auth.signOut();
 
-      // autoLogin만 false로 설정 (아이디/비밀번호는 유지)
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('auto_login', false);
 
@@ -279,9 +405,9 @@ class AuthState extends ChangeNotifier {
       _academies = const [];
       notifyListeners();
 
-      safePrint('[AuthState] Signed out successfully');
+      safePrint('[AuthState] 로그아웃 완료');
     } catch (e) {
-      safePrint('[AuthState] signOut error: $e');
+      safePrint('[AuthState] ERROR: 로그아웃 실패 - $e');
     }
   }
 
@@ -291,7 +417,7 @@ class AuthState extends ChangeNotifier {
   }
 
   /// 현재 membership의 academy 객체를 반환(없으면 null)
-  Academy? get currentAcademy {
+  local_models.Academy? get currentAcademy {
     final id = _current?.academyId;
     if (id == null) return null;
     final list = _academies.where((a) => a.id == id);

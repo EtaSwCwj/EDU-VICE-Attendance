@@ -9,17 +9,14 @@ class TeacherAwsRepository {
   /// 전체 선생 조회
   Future<List<aws.Teacher>> getAllTeachers() async {
     try {
-      safePrint('[TeacherAwsRepository] Fetching all teachers...');
-
       final request = ModelQueries.list(aws.Teacher.classType);
       final response = await Amplify.API.query(request: request).response;
 
       final teachers = response.data?.items.whereType<aws.Teacher>().toList() ?? [];
-
-      safePrint('[TeacherAwsRepository] Fetched ${teachers.length} teachers');
+      safePrint('[TeacherAwsRepository] 결과: ${teachers.length}명');
       return teachers;
     } catch (e) {
-      safePrint('[TeacherAwsRepository] Error fetching teachers: $e');
+      safePrint('[TeacherAwsRepository] ERROR: $e');
       return [];
     }
   }
@@ -27,14 +24,11 @@ class TeacherAwsRepository {
   /// 선생 조회 (ID로)
   Future<aws.Teacher?> getById(String id) async {
     try {
-      safePrint('[TeacherAwsRepository] Fetching teacher by ID: $id');
-
       final request = ModelQueries.get(aws.Teacher.classType, aws.TeacherModelIdentifier(id: id));
       final response = await Amplify.API.query(request: request).response;
-
       return response.data;
     } catch (e) {
-      safePrint('[TeacherAwsRepository] Error fetching teacher: $e');
+      safePrint('[TeacherAwsRepository] ERROR: ID 조회 실패 - $e');
       return null;
     }
   }
@@ -45,8 +39,6 @@ class TeacherAwsRepository {
     required String name,
   }) async {
     try {
-      safePrint('[TeacherAwsRepository] Creating teacher: $username');
-
       final teacher = aws.Teacher(
         username: username,
         name: name,
@@ -56,14 +48,12 @@ class TeacherAwsRepository {
       final response = await Amplify.API.mutate(request: request).response;
 
       if (response.data != null) {
-        safePrint('[TeacherAwsRepository] Teacher created successfully: ${response.data!.id}');
+        safePrint('[TeacherAwsRepository] 선생 생성 완료: $username');
         return response.data;
-      } else {
-        safePrint('[TeacherAwsRepository] Failed to create teacher: ${response.errors}');
-        return null;
       }
+      return null;
     } catch (e) {
-      safePrint('[TeacherAwsRepository] Error creating teacher: $e');
+      safePrint('[TeacherAwsRepository] ERROR: 생성 실패 - $e');
       return null;
     }
   }
@@ -71,20 +61,16 @@ class TeacherAwsRepository {
   /// 선생 수정
   Future<aws.Teacher?> updateTeacher(aws.Teacher teacher) async {
     try {
-      safePrint('[TeacherAwsRepository] Updating teacher: ${teacher.id}');
-
       final request = ModelMutations.update(teacher);
       final response = await Amplify.API.mutate(request: request).response;
 
       if (response.data != null) {
-        safePrint('[TeacherAwsRepository] Teacher updated successfully');
+        safePrint('[TeacherAwsRepository] 선생 수정 완료: ${teacher.id}');
         return response.data;
-      } else {
-        safePrint('[TeacherAwsRepository] Failed to update teacher: ${response.errors}');
-        return null;
       }
+      return null;
     } catch (e) {
-      safePrint('[TeacherAwsRepository] Error updating teacher: $e');
+      safePrint('[TeacherAwsRepository] ERROR: 수정 실패 - $e');
       return null;
     }
   }
@@ -92,27 +78,19 @@ class TeacherAwsRepository {
   /// 선생 삭제
   Future<bool> deleteTeacher(String id) async {
     try {
-      safePrint('[TeacherAwsRepository] Deleting teacher: $id');
-
-      // 먼저 Teacher 객체 조회
       final teacher = await getById(id);
-      if (teacher == null) {
-        safePrint('[TeacherAwsRepository] Teacher not found: $id');
-        return false;
-      }
+      if (teacher == null) return false;
 
       final request = ModelMutations.delete(teacher);
       final response = await Amplify.API.mutate(request: request).response;
 
       if (response.data != null) {
-        safePrint('[TeacherAwsRepository] Teacher deleted successfully');
+        safePrint('[TeacherAwsRepository] 선생 삭제 완료: $id');
         return true;
-      } else {
-        safePrint('[TeacherAwsRepository] Failed to delete teacher: ${response.errors}');
-        return false;
       }
+      return false;
     } catch (e) {
-      safePrint('[TeacherAwsRepository] Error deleting teacher: $e');
+      safePrint('[TeacherAwsRepository] ERROR: 삭제 실패 - $e');
       return false;
     }
   }
@@ -120,8 +98,6 @@ class TeacherAwsRepository {
   /// username으로 선생 조회
   Future<aws.Teacher?> getByUsername(String username) async {
     try {
-      safePrint('[TeacherAwsRepository] Fetching teacher by username: $username');
-
       final request = ModelQueries.list(
         aws.Teacher.classType,
         where: aws.Teacher.USERNAME.eq(username),
@@ -129,15 +105,9 @@ class TeacherAwsRepository {
       final response = await Amplify.API.query(request: request).response;
 
       final teachers = response.data?.items.whereType<aws.Teacher>().toList() ?? [];
-
-      if (teachers.isNotEmpty) {
-        return teachers.first;
-      }
-
-      safePrint('[TeacherAwsRepository] Teacher not found with username: $username');
-      return null;
+      return teachers.isNotEmpty ? teachers.first : null;
     } catch (e) {
-      safePrint('[TeacherAwsRepository] Error fetching teacher by username: $e');
+      safePrint('[TeacherAwsRepository] ERROR: username 조회 실패 - $e');
       return null;
     }
   }

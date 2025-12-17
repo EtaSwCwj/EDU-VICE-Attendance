@@ -23,13 +23,17 @@ import 'ModelProvider.dart';
 import 'package:amplify_core/amplify_core.dart' as amplify_core;
 
 
-/** This is an auto generated class representing the Student type in your schema. */
-class Student extends amplify_core.Model {
-  static const classType = const _StudentModelType();
+/** This is an auto generated class representing the AppUser type in your schema. */
+class AppUser extends amplify_core.Model {
+  static const classType = const _AppUserModelType();
   final String id;
-  final String? _username;
+  final String? _cognitoUsername;
+  final String? _email;
   final String? _name;
-  final String? _grade;
+  final String? _birthDate;
+  final String? _gender;
+  final String? _phone;
+  final String? _profileImageUrl;
   final amplify_core.TemporalDateTime? _createdAt;
   final amplify_core.TemporalDateTime? _updatedAt;
 
@@ -40,15 +44,28 @@ class Student extends amplify_core.Model {
   @override
   String getId() => id;
   
-  StudentModelIdentifier get modelIdentifier {
-      return StudentModelIdentifier(
+  AppUserModelIdentifier get modelIdentifier {
+      return AppUserModelIdentifier(
         id: id
       );
   }
   
-  String get username {
+  String get cognitoUsername {
     try {
-      return _username!;
+      return _cognitoUsername!;
+    } catch(e) {
+      throw amplify_core.AmplifyCodeGenModelException(
+          amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
+          recoverySuggestion:
+            amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastRecoverySuggestion,
+          underlyingException: e.toString()
+          );
+    }
+  }
+  
+  String get email {
+    try {
+      return _email!;
     } catch(e) {
       throw amplify_core.AmplifyCodeGenModelException(
           amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
@@ -72,8 +89,20 @@ class Student extends amplify_core.Model {
     }
   }
   
-  String? get grade {
-    return _grade;
+  String? get birthDate {
+    return _birthDate;
+  }
+  
+  String? get gender {
+    return _gender;
+  }
+  
+  String? get phone {
+    return _phone;
+  }
+  
+  String? get profileImageUrl {
+    return _profileImageUrl;
   }
   
   amplify_core.TemporalDateTime? get createdAt {
@@ -84,14 +113,18 @@ class Student extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const Student._internal({required this.id, required username, required name, grade, createdAt, updatedAt}): _username = username, _name = name, _grade = grade, _createdAt = createdAt, _updatedAt = updatedAt;
+  const AppUser._internal({required this.id, required cognitoUsername, required email, required name, birthDate, gender, phone, profileImageUrl, createdAt, updatedAt}): _cognitoUsername = cognitoUsername, _email = email, _name = name, _birthDate = birthDate, _gender = gender, _phone = phone, _profileImageUrl = profileImageUrl, _createdAt = createdAt, _updatedAt = updatedAt;
   
-  factory Student({String? id, required String username, required String name, String? grade, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
-    return Student._internal(
+  factory AppUser({String? id, required String cognitoUsername, required String email, required String name, String? birthDate, String? gender, String? phone, String? profileImageUrl, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
+    return AppUser._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
-      username: username,
+      cognitoUsername: cognitoUsername,
+      email: email,
       name: name,
-      grade: grade,
+      birthDate: birthDate,
+      gender: gender,
+      phone: phone,
+      profileImageUrl: profileImageUrl,
       createdAt: createdAt,
       updatedAt: updatedAt);
   }
@@ -103,11 +136,15 @@ class Student extends amplify_core.Model {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is Student &&
+    return other is AppUser &&
       id == other.id &&
-      _username == other._username &&
+      _cognitoUsername == other._cognitoUsername &&
+      _email == other._email &&
       _name == other._name &&
-      _grade == other._grade &&
+      _birthDate == other._birthDate &&
+      _gender == other._gender &&
+      _phone == other._phone &&
+      _profileImageUrl == other._profileImageUrl &&
       _createdAt == other._createdAt &&
       _updatedAt == other._updatedAt;
   }
@@ -119,11 +156,15 @@ class Student extends amplify_core.Model {
   String toString() {
     var buffer = new StringBuffer();
     
-    buffer.write("Student {");
+    buffer.write("AppUser {");
     buffer.write("id=" + "$id" + ", ");
-    buffer.write("username=" + "$_username" + ", ");
+    buffer.write("cognitoUsername=" + "$_cognitoUsername" + ", ");
+    buffer.write("email=" + "$_email" + ", ");
     buffer.write("name=" + "$_name" + ", ");
-    buffer.write("grade=" + "$_grade" + ", ");
+    buffer.write("birthDate=" + "$_birthDate" + ", ");
+    buffer.write("gender=" + "$_gender" + ", ");
+    buffer.write("phone=" + "$_phone" + ", ");
+    buffer.write("profileImageUrl=" + "$_profileImageUrl" + ", ");
     buffer.write("createdAt=" + (_createdAt != null ? _createdAt!.format() : "null") + ", ");
     buffer.write("updatedAt=" + (_updatedAt != null ? _updatedAt!.format() : "null"));
     buffer.write("}");
@@ -131,64 +172,88 @@ class Student extends amplify_core.Model {
     return buffer.toString();
   }
   
-  Student copyWith({String? username, String? name, String? grade, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
-    return Student._internal(
+  AppUser copyWith({String? cognitoUsername, String? email, String? name, String? birthDate, String? gender, String? phone, String? profileImageUrl, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
+    return AppUser._internal(
       id: id,
-      username: username ?? this.username,
+      cognitoUsername: cognitoUsername ?? this.cognitoUsername,
+      email: email ?? this.email,
       name: name ?? this.name,
-      grade: grade ?? this.grade,
+      birthDate: birthDate ?? this.birthDate,
+      gender: gender ?? this.gender,
+      phone: phone ?? this.phone,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt);
   }
   
-  Student copyWithModelFieldValues({
-    ModelFieldValue<String>? username,
+  AppUser copyWithModelFieldValues({
+    ModelFieldValue<String>? cognitoUsername,
+    ModelFieldValue<String>? email,
     ModelFieldValue<String>? name,
-    ModelFieldValue<String?>? grade,
+    ModelFieldValue<String?>? birthDate,
+    ModelFieldValue<String?>? gender,
+    ModelFieldValue<String?>? phone,
+    ModelFieldValue<String?>? profileImageUrl,
     ModelFieldValue<amplify_core.TemporalDateTime?>? createdAt,
     ModelFieldValue<amplify_core.TemporalDateTime?>? updatedAt
   }) {
-    return Student._internal(
+    return AppUser._internal(
       id: id,
-      username: username == null ? this.username : username.value,
+      cognitoUsername: cognitoUsername == null ? this.cognitoUsername : cognitoUsername.value,
+      email: email == null ? this.email : email.value,
       name: name == null ? this.name : name.value,
-      grade: grade == null ? this.grade : grade.value,
+      birthDate: birthDate == null ? this.birthDate : birthDate.value,
+      gender: gender == null ? this.gender : gender.value,
+      phone: phone == null ? this.phone : phone.value,
+      profileImageUrl: profileImageUrl == null ? this.profileImageUrl : profileImageUrl.value,
       createdAt: createdAt == null ? this.createdAt : createdAt.value,
       updatedAt: updatedAt == null ? this.updatedAt : updatedAt.value
     );
   }
   
-  Student.fromJson(Map<String, dynamic> json)  
+  AppUser.fromJson(Map<String, dynamic> json)  
     : id = json['id'],
-      _username = json['username'],
+      _cognitoUsername = json['cognitoUsername'],
+      _email = json['email'],
       _name = json['name'],
-      _grade = json['grade'],
+      _birthDate = json['birthDate'],
+      _gender = json['gender'],
+      _phone = json['phone'],
+      _profileImageUrl = json['profileImageUrl'],
       _createdAt = json['createdAt'] != null ? amplify_core.TemporalDateTime.fromString(json['createdAt']) : null,
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'username': _username, 'name': _name, 'grade': _grade, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'cognitoUsername': _cognitoUsername, 'email': _email, 'name': _name, 'birthDate': _birthDate, 'gender': _gender, 'phone': _phone, 'profileImageUrl': _profileImageUrl, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
   };
   
   Map<String, Object?> toMap() => {
     'id': id,
-    'username': _username,
+    'cognitoUsername': _cognitoUsername,
+    'email': _email,
     'name': _name,
-    'grade': _grade,
+    'birthDate': _birthDate,
+    'gender': _gender,
+    'phone': _phone,
+    'profileImageUrl': _profileImageUrl,
     'createdAt': _createdAt,
     'updatedAt': _updatedAt
   };
 
-  static final amplify_core.QueryModelIdentifier<StudentModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<StudentModelIdentifier>();
+  static final amplify_core.QueryModelIdentifier<AppUserModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<AppUserModelIdentifier>();
   static final ID = amplify_core.QueryField(fieldName: "id");
-  static final USERNAME = amplify_core.QueryField(fieldName: "username");
+  static final COGNITOUSERNAME = amplify_core.QueryField(fieldName: "cognitoUsername");
+  static final EMAIL = amplify_core.QueryField(fieldName: "email");
   static final NAME = amplify_core.QueryField(fieldName: "name");
-  static final GRADE = amplify_core.QueryField(fieldName: "grade");
+  static final BIRTHDATE = amplify_core.QueryField(fieldName: "birthDate");
+  static final GENDER = amplify_core.QueryField(fieldName: "gender");
+  static final PHONE = amplify_core.QueryField(fieldName: "phone");
+  static final PROFILEIMAGEURL = amplify_core.QueryField(fieldName: "profileImageUrl");
   static final CREATEDAT = amplify_core.QueryField(fieldName: "createdAt");
   static final UPDATEDAT = amplify_core.QueryField(fieldName: "updatedAt");
   static var schema = amplify_core.Model.defineSchema(define: (amplify_core.ModelSchemaDefinition modelSchemaDefinition) {
-    modelSchemaDefinition.name = "Student";
-    modelSchemaDefinition.pluralName = "Students";
+    modelSchemaDefinition.name = "AppUser";
+    modelSchemaDefinition.pluralName = "AppUsers";
     
     modelSchemaDefinition.authRules = [
       amplify_core.AuthRule(
@@ -204,7 +269,7 @@ class Student extends amplify_core.Model {
         ]),
       amplify_core.AuthRule(
         authStrategy: amplify_core.AuthStrategy.OWNER,
-        ownerField: "username",
+        ownerField: "cognitoUsername",
         identityClaim: "cognito:username",
         provider: amplify_core.AuthRuleProvider.USERPOOLS,
         operations: const [
@@ -213,76 +278,98 @@ class Student extends amplify_core.Model {
           amplify_core.ModelOperation.UPDATE
         ]),
       amplify_core.AuthRule(
-        authStrategy: amplify_core.AuthStrategy.GROUPS,
-        groupClaim: "cognito:groups",
-        groups: [ "teachers" ],
-        provider: amplify_core.AuthRuleProvider.USERPOOLS,
+        authStrategy: amplify_core.AuthStrategy.PRIVATE,
         operations: const [
           amplify_core.ModelOperation.READ
         ])
     ];
     
     modelSchemaDefinition.indexes = [
-      amplify_core.ModelIndex(fields: const ["username"], name: "byStudentUsernameV3")
+      amplify_core.ModelIndex(fields: const ["cognitoUsername"], name: "byCognitoUsername"),
+      amplify_core.ModelIndex(fields: const ["email"], name: "byEmail")
     ];
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.id());
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.USERNAME,
+      key: AppUser.COGNITOUSERNAME,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.NAME,
+      key: AppUser.EMAIL,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.GRADE,
+      key: AppUser.NAME,
+      isRequired: true,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: AppUser.BIRTHDATE,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.CREATEDAT,
+      key: AppUser.GENDER,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: AppUser.PHONE,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: AppUser.PROFILEIMAGEURL,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: AppUser.CREATEDAT,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.dateTime)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.UPDATEDAT,
+      key: AppUser.UPDATEDAT,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.dateTime)
     ));
   });
 }
 
-class _StudentModelType extends amplify_core.ModelType<Student> {
-  const _StudentModelType();
+class _AppUserModelType extends amplify_core.ModelType<AppUser> {
+  const _AppUserModelType();
   
   @override
-  Student fromJson(Map<String, dynamic> jsonData) {
-    return Student.fromJson(jsonData);
+  AppUser fromJson(Map<String, dynamic> jsonData) {
+    return AppUser.fromJson(jsonData);
   }
   
   @override
   String modelName() {
-    return 'Student';
+    return 'AppUser';
   }
 }
 
 /**
  * This is an auto generated class representing the model identifier
- * of [Student] in your schema.
+ * of [AppUser] in your schema.
  */
-class StudentModelIdentifier implements amplify_core.ModelIdentifier<Student> {
+class AppUserModelIdentifier implements amplify_core.ModelIdentifier<AppUser> {
   final String id;
 
-  /** Create an instance of StudentModelIdentifier using [id] the primary key. */
-  const StudentModelIdentifier({
+  /** Create an instance of AppUserModelIdentifier using [id] the primary key. */
+  const AppUserModelIdentifier({
     required this.id});
   
   @override
@@ -300,7 +387,7 @@ class StudentModelIdentifier implements amplify_core.ModelIdentifier<Student> {
   String serializeAsString() => serializeAsMap().values.join('#');
   
   @override
-  String toString() => 'StudentModelIdentifier(id: $id)';
+  String toString() => 'AppUserModelIdentifier(id: $id)';
   
   @override
   bool operator ==(Object other) {
@@ -308,7 +395,7 @@ class StudentModelIdentifier implements amplify_core.ModelIdentifier<Student> {
       return true;
     }
     
-    return other is StudentModelIdentifier &&
+    return other is AppUserModelIdentifier &&
       id == other.id;
   }
   

@@ -209,6 +209,7 @@ class Teacher extends amplify_core.Model {
         identityClaim: "cognito:username",
         provider: amplify_core.AuthRuleProvider.USERPOOLS,
         operations: const [
+          amplify_core.ModelOperation.CREATE,
           amplify_core.ModelOperation.READ,
           amplify_core.ModelOperation.UPDATE
         ]),

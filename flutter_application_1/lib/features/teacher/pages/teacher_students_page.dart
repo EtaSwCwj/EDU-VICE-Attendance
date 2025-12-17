@@ -50,21 +50,14 @@ class _TeacherStudentsPageState extends State<TeacherStudentsPage> {
     });
 
     try {
-      // 현재 사용자의 역할 확인
       final role = context.read<AuthState>().currentMembership?.role;
-      safePrint('[TeacherStudentsPage] Current role: $role');
-
       List<aws.Student> students;
 
       if (PermissionService.canViewAllStudents(role)) {
-        // Owner: 전체 학생 조회
-        safePrint('[TeacherStudentsPage] Loading all students (Owner)');
         students = await _studentRepo.getAll();
-        _teacherUsername = null; // Owner는 teacherUsername 불필요
+        _teacherUsername = null;
       } else {
-        // Teacher: 배정된 학생만 조회
         _teacherUsername = await _studentRepo.getCurrentTeacherUsername();
-        safePrint('[TeacherStudentsPage] Teacher username: $_teacherUsername');
 
         if (_teacherUsername == null) {
           setState(() {
@@ -77,14 +70,14 @@ class _TeacherStudentsPageState extends State<TeacherStudentsPage> {
         students = await _studentRepo.getStudentsByTeacher(_teacherUsername!);
       }
 
-      safePrint('[TeacherStudentsPage] Loaded ${students.length} students');
+      safePrint('[TeacherStudentsPage] 데이터 로드: ${students.length}명');
 
       setState(() {
         _students = students;
         _isLoading = false;
       });
     } catch (e) {
-      safePrint('[TeacherStudentsPage] Error loading students: $e');
+      safePrint('[TeacherStudentsPage] ERROR: $e');
       setState(() {
         _error = '학생 목록을 불러오는데 실패했습니다: $e';
         _isLoading = false;
@@ -415,14 +408,9 @@ class _SearchStudentDialogState extends State<_SearchStudentDialog> {
     });
 
     try {
-      safePrint('[SearchStudentDialog] Loading all students...');
       final students = await _studentRepo.getAll();
 
-      safePrint('[SearchStudentDialog] Total students from AWS: ${students.length}');
-      safePrint('[SearchStudentDialog] Already connected students: ${widget.connectedStudentUsernames.length}');
-
       setState(() {
-        // 이미 연결된 학생 제외
         _allStudents = students
             .where((s) => !widget.connectedStudentUsernames.contains(s.username))
             .toList();
@@ -430,14 +418,9 @@ class _SearchStudentDialogState extends State<_SearchStudentDialog> {
         _isLoading = false;
       });
 
-      safePrint('[SearchStudentDialog] Available students (not connected): ${_allStudents.length}');
-
-      if (students.isEmpty) {
-        safePrint('[SearchStudentDialog] WARNING: No students found in AWS database!');
-      }
-    } catch (e, stackTrace) {
-      safePrint('[SearchStudentDialog] Error loading students: $e');
-      safePrint('[SearchStudentDialog] Stack trace: $stackTrace');
+      safePrint('[SearchStudentDialog] 데이터 로드: ${_allStudents.length}명');
+    } catch (e) {
+      safePrint('[SearchStudentDialog] ERROR: $e');
       setState(() {
         _error = '학생 목록을 불러오는데 실패했습니다: $e';
         _isLoading = false;
@@ -759,9 +742,7 @@ class _StudentDetailViewState extends State<_StudentDetailView>
 
     try {
       final studentUsername = widget.student.username;
-      safePrint('[StudentDetail] Loading data for student: $studentUsername');
 
-      // 병렬로 데이터 로드
       final results = await Future.wait([
         _loadLessons(studentUsername),
         _bookRepo.getAll(),
@@ -777,9 +758,9 @@ class _StudentDetailViewState extends State<_StudentDetailView>
         _isLoading = false;
       });
 
-      safePrint('[StudentDetail] Loaded: ${_recentLessons.length} lessons, ${_books.length} books, ${_pendingAssignments.length} pending, ${_completedAssignments.length} completed');
+      safePrint('[StudentDetail] 데이터 로드: 수업 ${_recentLessons.length}, 숙제 ${_pendingAssignments.length}/${_completedAssignments.length}');
     } catch (e) {
-      safePrint('[StudentDetail] Error loading data: $e');
+      safePrint('[StudentDetail] ERROR: $e');
       setState(() {
         _error = '데이터를 불러오는데 실패했습니다: $e';
         _isLoading = false;
@@ -789,26 +770,21 @@ class _StudentDetailViewState extends State<_StudentDetailView>
 
   Future<List<aws.Lesson>> _loadLessons(String studentUsername) async {
     try {
-      // 최근 30일간의 수업 조회
       final endDate = DateTime.now();
       final startDate = endDate.subtract(const Duration(days: 30));
 
       final result = await _lessonRepo.getLessonsByDateRange(
-        teacherId: '', // 모든 선생님
+        teacherId: '',
         startDate: startDate,
         endDate: endDate,
       );
 
       return result.fold(
         (failure) => <aws.Lesson>[],
-        (lessons) {
-          // 학생 필터링 (studentUsernames에 포함된 것만)
-          // AWS Lesson 모델은 domain.Lesson이 아닌 aws.Lesson으로 변환 필요
-          return <aws.Lesson>[];
-        },
+        (lessons) => <aws.Lesson>[],
       );
     } catch (e) {
-      safePrint('[StudentDetail] Error loading lessons: $e');
+      safePrint('[StudentDetail] ERROR: 수업 로드 실패 - $e');
       return [];
     }
   }
@@ -1332,14 +1308,10 @@ class _StudentDetailViewState extends State<_StudentDetailView>
     );
 
     if (result != null && mounted) {
-      safePrint('[StudentDetail] Lesson dialog result: $result');
-
       try {
-        // 현재 선생님 username 가져오기
         final user = await Amplify.Auth.getCurrentUser();
         final teacherUsername = user.username;
 
-        // 날짜+시간 조합
         final date = result['date'] as DateTime;
         final startTime = result['startTime'] as TimeOfDay;
         final scheduledAt = DateTime(
@@ -1350,10 +1322,9 @@ class _StudentDetailViewState extends State<_StudentDetailView>
           startTime.minute,
         );
 
-        // domain.Lesson 생성
         final lesson = Lesson(
           id: UUID.getUUID(),
-          academyId: 'default', // TODO: 실제 academy ID 사용
+          academyId: 'default',
           teacherId: teacherUsername,
           studentIds: [widget.student.username],
           bookId: result['bookId'] as String,
@@ -1366,16 +1337,12 @@ class _StudentDetailViewState extends State<_StudentDetailView>
           createdAt: DateTime.now(),
         );
 
-        safePrint('[StudentDetail] Creating lesson: ${lesson.id}');
-
-        // 반복 수업 여부에 따라 분기
         if (result['isRecurring'] == true) {
           final rule = result['recurrenceRule'] as RecurrenceRule;
           final createResult = await _lessonRepo.createRecurringLessons(lesson, rule);
 
           createResult.fold(
             (failure) {
-              safePrint('[StudentDetail] Failed to create recurring lessons: $failure');
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('반복 수업 생성에 실패했습니다: $failure')),
@@ -1383,12 +1350,12 @@ class _StudentDetailViewState extends State<_StudentDetailView>
               }
             },
             (lessons) {
-              safePrint('[StudentDetail] Successfully created ${lessons.length} recurring lessons');
+              safePrint('[StudentDetail] 수업 생성: ${lessons.length}회');
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('${widget.student.name} 학생에게 ${lessons.length}회 수업이 추가되었습니다')),
                 );
-                _loadData(); // 새로고침
+                _loadData();
               }
             },
           );
@@ -1397,7 +1364,6 @@ class _StudentDetailViewState extends State<_StudentDetailView>
 
           createResult.fold(
             (failure) {
-              safePrint('[StudentDetail] Failed to create lesson: $failure');
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('수업 생성에 실패했습니다: $failure')),
@@ -1405,18 +1371,18 @@ class _StudentDetailViewState extends State<_StudentDetailView>
               }
             },
             (createdLesson) {
-              safePrint('[StudentDetail] Successfully created lesson: ${createdLesson.id}');
+              safePrint('[StudentDetail] 수업 생성 완료');
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('${widget.student.name} 학생에게 수업이 추가되었습니다')),
                 );
-                _loadData(); // 새로고침
+                _loadData();
               }
             },
           );
         }
       } catch (e) {
-        safePrint('[StudentDetail] Error creating lesson: $e');
+        safePrint('[StudentDetail] ERROR: 수업 생성 실패 - $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('수업 생성 중 오류가 발생했습니다: $e')),
@@ -1436,20 +1402,15 @@ class _StudentDetailViewState extends State<_StudentDetailView>
     );
 
     if (result != null && mounted) {
-      safePrint('[StudentDetail] Homework dialog result: $result');
-
       try {
-        // 현재 선생님 username 가져오기
         final user = await Amplify.Auth.getCurrentUser();
         final teacherUsername = user.username;
 
-        // 제목 생성 (교재명 + 범위)
         String title = result['bookTitle'] as String;
         if (result['chapter'] != null) {
           title += ' - ${result['chapter']}';
         }
 
-        // 범위 생성 (시작페이지~끝페이지)
         String? range;
         final startPage = result['startPage'] as int?;
         final endPage = result['endPage'] as int?;
@@ -1459,7 +1420,6 @@ class _StudentDetailViewState extends State<_StudentDetailView>
           range = 'p.$startPage~';
         }
 
-        // aws.Assignment 생성
         final assignment = aws.Assignment(
           title: title,
           description: result['description'] as String?,
@@ -1473,20 +1433,17 @@ class _StudentDetailViewState extends State<_StudentDetailView>
               : null,
         );
 
-        safePrint('[StudentDetail] Creating assignment: ${assignment.title}');
-
         final createdAssignment = await _assignmentRepo.create(assignment);
 
         if (createdAssignment != null) {
-          safePrint('[StudentDetail] Successfully created assignment: ${createdAssignment.id}');
+          safePrint('[StudentDetail] 숙제 발급 완료');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('${widget.student.name} 학생에게 숙제가 발급되었습니다')),
             );
-            _loadData(); // 새로고침
+            _loadData();
           }
         } else {
-          safePrint('[StudentDetail] Failed to create assignment');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('숙제 발급에 실패했습니다')),
@@ -1494,7 +1451,7 @@ class _StudentDetailViewState extends State<_StudentDetailView>
           }
         }
       } catch (e) {
-        safePrint('[StudentDetail] Error creating assignment: $e');
+        safePrint('[StudentDetail] ERROR: 숙제 발급 실패 - $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('숙제 발급 중 오류가 발생했습니다: $e')),

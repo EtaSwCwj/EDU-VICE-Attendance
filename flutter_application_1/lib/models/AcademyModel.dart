@@ -23,32 +23,34 @@ import 'ModelProvider.dart';
 import 'package:amplify_core/amplify_core.dart' as amplify_core;
 
 
-/** This is an auto generated class representing the Student type in your schema. */
-class Student extends amplify_core.Model {
-  static const classType = const _StudentModelType();
+/** This is an auto generated class representing the Academy type in your schema. */
+class AcademyModel extends amplify_core.Model {
+  static const classType = const _AcademyModelModelType();
   final String id;
-  final String? _username;
+  final String? _code;
   final String? _name;
-  final String? _grade;
+  final String? _address;
+  final String? _phone;
+  final String? _description;
   final amplify_core.TemporalDateTime? _createdAt;
   final amplify_core.TemporalDateTime? _updatedAt;
 
   @override
   getInstanceType() => classType;
-  
+
   @Deprecated('[getId] is being deprecated in favor of custom primary key feature. Use getter [modelIdentifier] to get model identifier.')
   @override
   String getId() => id;
-  
-  StudentModelIdentifier get modelIdentifier {
-      return StudentModelIdentifier(
+
+  AcademyModelModelIdentifier get modelIdentifier {
+      return AcademyModelModelIdentifier(
         id: id
       );
   }
-  
-  String get username {
+
+  String get code {
     try {
-      return _username!;
+      return _code!;
     } catch(e) {
       throw amplify_core.AmplifyCodeGenModelException(
           amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
@@ -58,7 +60,7 @@ class Student extends amplify_core.Model {
           );
     }
   }
-  
+
   String get name {
     try {
       return _name!;
@@ -71,247 +73,283 @@ class Student extends amplify_core.Model {
           );
     }
   }
-  
-  String? get grade {
-    return _grade;
+
+  String? get address {
+    return _address;
   }
-  
+
+  String? get phone {
+    return _phone;
+  }
+
+  String? get description {
+    return _description;
+  }
+
   amplify_core.TemporalDateTime? get createdAt {
     return _createdAt;
   }
-  
+
   amplify_core.TemporalDateTime? get updatedAt {
     return _updatedAt;
   }
-  
-  const Student._internal({required this.id, required username, required name, grade, createdAt, updatedAt}): _username = username, _name = name, _grade = grade, _createdAt = createdAt, _updatedAt = updatedAt;
-  
-  factory Student({String? id, required String username, required String name, String? grade, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
-    return Student._internal(
+
+  const AcademyModel._internal({
+    required this.id,
+    required code,
+    required name,
+    address,
+    phone,
+    description,
+    createdAt,
+    updatedAt
+  }): _code = code,
+      _name = name,
+      _address = address,
+      _phone = phone,
+      _description = description,
+      _createdAt = createdAt,
+      _updatedAt = updatedAt;
+
+  factory AcademyModel({
+    String? id,
+    required String code,
+    required String name,
+    String? address,
+    String? phone,
+    String? description,
+    amplify_core.TemporalDateTime? createdAt,
+    amplify_core.TemporalDateTime? updatedAt
+  }) {
+    return AcademyModel._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
-      username: username,
+      code: code,
       name: name,
-      grade: grade,
+      address: address,
+      phone: phone,
+      description: description,
       createdAt: createdAt,
       updatedAt: updatedAt);
   }
-  
+
   bool equals(Object other) {
     return this == other;
   }
-  
+
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is Student &&
+    return other is AcademyModel &&
       id == other.id &&
-      _username == other._username &&
+      _code == other._code &&
       _name == other._name &&
-      _grade == other._grade &&
+      _address == other._address &&
+      _phone == other._phone &&
+      _description == other._description &&
       _createdAt == other._createdAt &&
       _updatedAt == other._updatedAt;
   }
-  
+
   @override
   int get hashCode => toString().hashCode;
-  
+
   @override
   String toString() {
     var buffer = new StringBuffer();
-    
-    buffer.write("Student {");
+
+    buffer.write("AcademyModel {");
     buffer.write("id=" + "$id" + ", ");
-    buffer.write("username=" + "$_username" + ", ");
+    buffer.write("code=" + "$_code" + ", ");
     buffer.write("name=" + "$_name" + ", ");
-    buffer.write("grade=" + "$_grade" + ", ");
+    buffer.write("address=" + "$_address" + ", ");
+    buffer.write("phone=" + "$_phone" + ", ");
+    buffer.write("description=" + "$_description" + ", ");
     buffer.write("createdAt=" + (_createdAt != null ? _createdAt!.format() : "null") + ", ");
     buffer.write("updatedAt=" + (_updatedAt != null ? _updatedAt!.format() : "null"));
     buffer.write("}");
-    
+
     return buffer.toString();
   }
-  
-  Student copyWith({String? username, String? name, String? grade, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
-    return Student._internal(
+
+  AcademyModel copyWith({
+    String? code,
+    String? name,
+    String? address,
+    String? phone,
+    String? description,
+    amplify_core.TemporalDateTime? createdAt,
+    amplify_core.TemporalDateTime? updatedAt
+  }) {
+    return AcademyModel._internal(
       id: id,
-      username: username ?? this.username,
+      code: code ?? this.code,
       name: name ?? this.name,
-      grade: grade ?? this.grade,
+      address: address ?? this.address,
+      phone: phone ?? this.phone,
+      description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt);
   }
-  
-  Student copyWithModelFieldValues({
-    ModelFieldValue<String>? username,
-    ModelFieldValue<String>? name,
-    ModelFieldValue<String?>? grade,
-    ModelFieldValue<amplify_core.TemporalDateTime?>? createdAt,
-    ModelFieldValue<amplify_core.TemporalDateTime?>? updatedAt
-  }) {
-    return Student._internal(
-      id: id,
-      username: username == null ? this.username : username.value,
-      name: name == null ? this.name : name.value,
-      grade: grade == null ? this.grade : grade.value,
-      createdAt: createdAt == null ? this.createdAt : createdAt.value,
-      updatedAt: updatedAt == null ? this.updatedAt : updatedAt.value
-    );
-  }
-  
-  Student.fromJson(Map<String, dynamic> json)  
+
+  AcademyModel.fromJson(Map<String, dynamic> json)
     : id = json['id'],
-      _username = json['username'],
+      _code = json['code'],
       _name = json['name'],
-      _grade = json['grade'],
+      _address = json['address'],
+      _phone = json['phone'],
+      _description = json['description'],
       _createdAt = json['createdAt'] != null ? amplify_core.TemporalDateTime.fromString(json['createdAt']) : null,
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
-  
+
   Map<String, dynamic> toJson() => {
-    'id': id, 'username': _username, 'name': _name, 'grade': _grade, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id,
+    'code': _code,
+    'name': _name,
+    'address': _address,
+    'phone': _phone,
+    'description': _description,
+    'createdAt': _createdAt?.format(),
+    'updatedAt': _updatedAt?.format()
   };
-  
+
   Map<String, Object?> toMap() => {
     'id': id,
-    'username': _username,
+    'code': _code,
     'name': _name,
-    'grade': _grade,
+    'address': _address,
+    'phone': _phone,
+    'description': _description,
     'createdAt': _createdAt,
     'updatedAt': _updatedAt
   };
 
-  static final amplify_core.QueryModelIdentifier<StudentModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<StudentModelIdentifier>();
+  static final amplify_core.QueryModelIdentifier<AcademyModelModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<AcademyModelModelIdentifier>();
   static final ID = amplify_core.QueryField(fieldName: "id");
-  static final USERNAME = amplify_core.QueryField(fieldName: "username");
+  static final CODE = amplify_core.QueryField(fieldName: "code");
   static final NAME = amplify_core.QueryField(fieldName: "name");
-  static final GRADE = amplify_core.QueryField(fieldName: "grade");
+  static final ADDRESS = amplify_core.QueryField(fieldName: "address");
+  static final PHONE = amplify_core.QueryField(fieldName: "phone");
+  static final DESCRIPTION = amplify_core.QueryField(fieldName: "description");
   static final CREATEDAT = amplify_core.QueryField(fieldName: "createdAt");
   static final UPDATEDAT = amplify_core.QueryField(fieldName: "updatedAt");
+
   static var schema = amplify_core.Model.defineSchema(define: (amplify_core.ModelSchemaDefinition modelSchemaDefinition) {
-    modelSchemaDefinition.name = "Student";
-    modelSchemaDefinition.pluralName = "Students";
-    
+    modelSchemaDefinition.name = "Academy";
+    modelSchemaDefinition.pluralName = "Academies";
+
     modelSchemaDefinition.authRules = [
       amplify_core.AuthRule(
         authStrategy: amplify_core.AuthStrategy.GROUPS,
         groupClaim: "cognito:groups",
-        groups: [ "owners" ],
-        provider: amplify_core.AuthRuleProvider.USERPOOLS,
-        operations: const [
-          amplify_core.ModelOperation.CREATE,
-          amplify_core.ModelOperation.READ,
-          amplify_core.ModelOperation.UPDATE,
-          amplify_core.ModelOperation.DELETE
-        ]),
-      amplify_core.AuthRule(
-        authStrategy: amplify_core.AuthStrategy.OWNER,
-        ownerField: "username",
-        identityClaim: "cognito:username",
-        provider: amplify_core.AuthRuleProvider.USERPOOLS,
-        operations: const [
-          amplify_core.ModelOperation.CREATE,
-          amplify_core.ModelOperation.READ,
-          amplify_core.ModelOperation.UPDATE
-        ]),
-      amplify_core.AuthRule(
-        authStrategy: amplify_core.AuthStrategy.GROUPS,
-        groupClaim: "cognito:groups",
-        groups: [ "teachers" ],
+        groups: [ "users" ],
         provider: amplify_core.AuthRuleProvider.USERPOOLS,
         operations: const [
           amplify_core.ModelOperation.READ
         ])
     ];
-    
+
     modelSchemaDefinition.indexes = [
-      amplify_core.ModelIndex(fields: const ["username"], name: "byStudentUsernameV3")
+      amplify_core.ModelIndex(fields: const ["code"], name: "byCode")
     ];
-    
+
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.id());
-    
+
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.USERNAME,
+      key: AcademyModel.CODE,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
-    
+
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.NAME,
+      key: AcademyModel.NAME,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
-    
+
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.GRADE,
+      key: AcademyModel.ADDRESS,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
-    
+
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.CREATEDAT,
+      key: AcademyModel.PHONE,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: AcademyModel.DESCRIPTION,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: AcademyModel.CREATEDAT,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.dateTime)
     ));
-    
+
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Student.UPDATEDAT,
+      key: AcademyModel.UPDATEDAT,
       isRequired: false,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.dateTime)
     ));
   });
 }
 
-class _StudentModelType extends amplify_core.ModelType<Student> {
-  const _StudentModelType();
-  
+class _AcademyModelModelType extends amplify_core.ModelType<AcademyModel> {
+  const _AcademyModelModelType();
+
   @override
-  Student fromJson(Map<String, dynamic> jsonData) {
-    return Student.fromJson(jsonData);
+  AcademyModel fromJson(Map<String, dynamic> jsonData) {
+    return AcademyModel.fromJson(jsonData);
   }
-  
+
   @override
   String modelName() {
-    return 'Student';
+    return 'Academy';
   }
 }
 
 /**
  * This is an auto generated class representing the model identifier
- * of [Student] in your schema.
+ * of [AcademyModel] in your schema.
  */
-class StudentModelIdentifier implements amplify_core.ModelIdentifier<Student> {
+class AcademyModelModelIdentifier implements amplify_core.ModelIdentifier<AcademyModel> {
   final String id;
 
-  /** Create an instance of StudentModelIdentifier using [id] the primary key. */
-  const StudentModelIdentifier({
+  /** Create an instance of AcademyModelModelIdentifier using [id] the primary key. */
+  const AcademyModelModelIdentifier({
     required this.id});
-  
+
   @override
   Map<String, dynamic> serializeAsMap() => (<String, dynamic>{
     'id': id
   });
-  
+
   @override
   List<Map<String, dynamic>> serializeAsList() => serializeAsMap()
     .entries
     .map((entry) => (<String, dynamic>{ entry.key: entry.value }))
     .toList();
-  
+
   @override
   String serializeAsString() => serializeAsMap().values.join('#');
-  
+
   @override
-  String toString() => 'StudentModelIdentifier(id: $id)';
-  
+  String toString() => 'AcademyModelModelIdentifier(id: $id)';
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) {
       return true;
     }
-    
-    return other is StudentModelIdentifier &&
+
+    return other is AcademyModelModelIdentifier &&
       id == other.id;
   }
-  
+
   @override
   int get hashCode =>
     id.hashCode;
