@@ -15,7 +15,27 @@
       "Bash(aws dynamodb delete-table:*)",
       "Bash(aws dynamodb scan:*)",
       "Bash(flutter devices:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(cd:*)",
+      "Bash(adb devices:*)",
+      "Bash(brew install:*)",
+      "Bash(flutter config:*)",
+      "Bash(yes:*)",
+      "Bash(flutter doctor:*)",
+      "Bash(sdkmanager:*)",
+      "Bash(java --version:*)",
+      "Bash(/usr/libexec/java_home:*)",
+      "Bash(/opt/homebrew/share/android-commandlinetools/platform-tools/adb devices)",
+      "Bash(/opt/homebrew/share/android-commandlinetools/platform-tools/adb kill-server)",
+      "Bash(/opt/homebrew/share/android-commandlinetools/platform-tools/adb start-server)",
+      "Bash(system_profiler:*)",
+      "Bash(export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home)",
+      "Bash(npm install:*)",
+      "Bash(aws sts get-caller-identity:*)",
+      "Bash(amplify status:*)",
+      "Bash(amplify pull:*)",
+      "Bash(/opt/homebrew/share/android-commandlinetools/platform-tools/adb uninstall com.eduvice.edu_vice_attendance)",
+      "Bash(git add:*)"
     ]
   }
 }
