@@ -2,22 +2,105 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../shared/services/auth_state.dart';
 import '../../shared/services/mock_storage.dart';
+import '../../shared/services/s3_storage_service.dart';
+import '../../shared/widgets/profile_image_picker.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   final String role;
   const SettingsPage({required this.role, super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final S3StorageService _storageService = S3StorageService();
+  String? _profileImageUrl;
+  bool _isLoadingImage = true;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[SettingsPage] 진입');
+    _loadProfileImage();
+  }
+
+  Future<void> _loadProfileImage() async {
+    final auth = context.read<AuthState>();
+    final userId = auth.user?.id;
+
+    if (userId != null) {
+      final url = await _storageService.getProfileImageUrl(userId);
+      if (mounted) {
+        setState(() {
+          _profileImageUrl = url;
+          _isLoadingImage = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoadingImage = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
 
-    return ListView(
-      children: [
-        // 사용자 정보
-        ListTile(
-          leading: const CircleAvatar(child: Icon(Icons.person)),
-          title: Text(auth.user?.name ?? ''),
-          subtitle: Text(_getRoleText(role)),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('설정'),
+      ),
+      body: ListView(
+        children: [
+        // 프로필 이미지 및 사용자 정보
+        Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              if (_isLoadingImage)
+                const SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else
+                ProfileImagePicker(
+                  currentImageUrl: _profileImageUrl,
+                  userId: auth.user?.id ?? '',
+                  size: 100,
+                  editable: true,
+                  onImageUploaded: (url) {
+                    setState(() {
+                      _profileImageUrl = url;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('프로필 사진이 업데이트되었습니다')),
+                    );
+                  },
+                  onError: (msg) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(msg)),
+                    );
+                  },
+                ),
+              const SizedBox(height: 16),
+              Text(
+                auth.user?.name ?? '',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _getRoleText(widget.role),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
         ),
         const Divider(),
 
@@ -25,7 +108,7 @@ class SettingsPage extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            '⚙️ 설정',
+            '설정',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
@@ -60,7 +143,8 @@ class SettingsPage extends StatelessWidget {
           title: const Text('로그아웃', style: TextStyle(color: Colors.red)),
           onTap: () => context.read<AuthState>().signOut(),
         ),
-      ],
+        ],
+      ),
     );
   }
 

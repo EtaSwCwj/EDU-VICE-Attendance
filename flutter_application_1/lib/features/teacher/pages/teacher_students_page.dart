@@ -318,6 +318,7 @@ class _TeacherStudentsPageState extends State<TeacherStudentsPage> {
       ),
       floatingActionButton: canAssignStudent
           ? FloatingActionButton.extended(
+              heroTag: 'teacher_students_search_fab',
               onPressed: () => _showSearchStudentDialog(),
               icon: const Icon(Icons.person_add),
               label: const Text('학생 연결'),
@@ -852,6 +853,7 @@ class _StudentDetailViewState extends State<_StudentDetailView>
                   ),
                 ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'teacher_students_lesson_fab',
         onPressed: () => _showAddLessonDialog(),
         icon: const Icon(Icons.add),
         label: const Text('수업 추가'),

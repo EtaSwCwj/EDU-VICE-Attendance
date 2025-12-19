@@ -7,6 +7,7 @@ import 'pages/student_home_page.dart';
 import 'pages/student_lessons_page.dart';
 import 'pages/student_homework_page.dart';
 import '../../shared/services/auth_state.dart';
+import '../../shared/widgets/profile_avatar.dart';
 
 /// 학생용 앱 쉘: 하단 탭 네비게이션(홈/수업/숙제)
 /// - IndexedStack으로 탭 상태 유지
@@ -65,6 +66,7 @@ class _StudentShellState extends State<StudentShell> {
       appBar: AppBar(
         title: Text(_pageTitles[_index]),
         actions: [
+          const ProfileAvatar(),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: '로그아웃',

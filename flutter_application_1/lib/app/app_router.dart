@@ -12,6 +12,7 @@ import '../features/owner/owner_home_shell.dart';
 import '../features/teacher_homework/teacher_homework_page_aws.dart';
 import '../features/home/no_academy_shell.dart';
 import '../features/home/academy_selector_page.dart';
+import '../features/settings/settings_page.dart';
 
 /// 역할 가드 & 홈쉘 분리 라우터
 class AppRouter {
@@ -86,6 +87,15 @@ class AppRouter {
                 // 알 수 없는 역할 → NoAcademyShell
                 return const NoAcademyShell();
             }
+          },
+        ),
+
+        // ── 설정 페이지 ─────────────────────────────────────────────────
+        GoRoute(
+          path: '/settings/:role',
+          builder: (context, state) {
+            final role = state.pathParameters['role'] ?? 'student';
+            return SettingsPage(role: role);
           },
         ),
 

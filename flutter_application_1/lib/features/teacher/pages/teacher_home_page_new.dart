@@ -167,6 +167,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'teacher_home_new_fab',
         onPressed: () => _showAddTestDataDialog(),
         icon: const Icon(Icons.science),
         label: const Text('테스트 데이터'),

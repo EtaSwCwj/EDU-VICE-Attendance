@@ -145,6 +145,7 @@ class _TeacherHomeworkPageAwsState extends State<TeacherHomeworkPageAws> {
       floatingActionButton: _selectedStudent == null
           ? null
           : FloatingActionButton.extended(
+              heroTag: 'teacher_homework_aws_fab',
               onPressed: _showCreateAssignmentDialog,
               icon: const Icon(Icons.add),
               label: const Text('새 과제'),

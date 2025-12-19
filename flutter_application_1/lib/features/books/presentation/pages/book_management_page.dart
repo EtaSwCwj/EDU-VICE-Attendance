@@ -136,6 +136,7 @@ class _BookManagementPageState extends State<BookManagementPage> {
                   ),
                 ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'book_management_fab',
         onPressed: () async {
           final messenger = ScaffoldMessenger.of(context);
           final result = await showDialog<aws.Book>(

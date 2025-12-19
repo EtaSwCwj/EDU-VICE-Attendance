@@ -96,6 +96,7 @@ class _ChapterManagementPageState extends State<ChapterManagementPage> {
       ),
       body: _buildBody(),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'chapter_management_fab',
         onPressed: () => _showAddChapterDialog(null),
         tooltip: '대단원 추가',
         child: const Icon(Icons.add),

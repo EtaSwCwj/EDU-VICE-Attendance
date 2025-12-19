@@ -71,6 +71,7 @@ class _TeacherHomeworkView extends StatelessWidget {
       floatingActionButton: vm.selectedStudentId == null
           ? null
           : FloatingActionButton.extended(
+              heroTag: 'teacher_homework_fab',
               onPressed: () {
                 // Provider 인스턴스를 직접 시트에 주입
                 final provider = context.read<TeacherHomeworkProvider>();

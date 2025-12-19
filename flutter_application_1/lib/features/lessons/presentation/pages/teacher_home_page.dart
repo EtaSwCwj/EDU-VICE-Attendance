@@ -118,6 +118,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'lessons_teacher_home_fab',
         onPressed: () {
           // TODO: 수업 추가 페이지로 이동
           ScaffoldMessenger.of(context).showSnackBar(

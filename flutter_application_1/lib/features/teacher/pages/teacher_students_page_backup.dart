@@ -46,6 +46,7 @@ class _TeacherStudentsPageState extends State<TeacherStudentsPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'teacher_students_backup_fab',
         onPressed: () {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('학생 추가 UI는 다음 단계에서 연결됩니다.')),

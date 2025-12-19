@@ -8,6 +8,7 @@ import 'pages/teacher_students_page.dart';
 import '../teacher_homework/teacher_homework_page_aws.dart';
 import '../books/presentation/pages/book_management_page.dart';
 import '../../shared/services/auth_state.dart';
+import '../../shared/widgets/profile_avatar.dart';
 
 /// 교사용 앱 쉘: 하단 탭 네비게이션(홈/수업/학생/숙제/교재)
 /// - IndexedStack으로 탭 상태 유지
@@ -70,6 +71,7 @@ class _TeacherShellState extends State<TeacherShell> {
       appBar: AppBar(
         title: Text(_pageTitles[_index]),
         actions: [
+          const ProfileAvatar(),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: '로그아웃',
