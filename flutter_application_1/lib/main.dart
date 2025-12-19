@@ -26,6 +26,9 @@ import 'features/lessons/domain/repositories/lesson_repository.dart';
 import 'app/app_router.dart';
 import 'shared/services/auth_state.dart';
 
+// Theme
+import 'app/theme/app_theme.dart';
+
 Future<void> main() async {
   safePrint('[main] 진입');
   WidgetsFlutterBinding.ensureInitialized();
@@ -98,10 +101,7 @@ class EVAttendanceApp extends StatelessWidget {
               Locale('en', 'US'),
             ],
             locale: const Locale('ko', 'KR'),
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-              useMaterial3: true,
-            ),
+            theme: AppTheme.light,
             routerConfig: AppRouter.create(authState),
           );
         },

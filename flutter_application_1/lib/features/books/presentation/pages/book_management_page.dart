@@ -135,8 +135,9 @@ class _BookManagementPageState extends State<BookManagementPage> {
                     },
                   ),
                 ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         heroTag: 'book_management_fab',
+        tooltip: '교재 추가',
         onPressed: () async {
           final messenger = ScaffoldMessenger.of(context);
           final result = await showDialog<aws.Book>(
@@ -150,8 +151,7 @@ class _BookManagementPageState extends State<BookManagementPage> {
             );
           }
         },
-        icon: const Icon(Icons.add),
-        label: const Text('교재 추가'),
+        child: const Icon(Icons.add),
       ),
     );
   }

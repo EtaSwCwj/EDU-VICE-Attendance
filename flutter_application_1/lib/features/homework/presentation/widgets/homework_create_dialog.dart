@@ -155,19 +155,22 @@ class _HomeworkCreateDialogState extends State<HomeworkCreateDialog> {
   }
 
   Widget _buildHeader() {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.orange[50],
+        color: theme.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.assignment_add, color: Colors.orange),
+          Icon(Icons.assignment_add, color: theme.colorScheme.primary),
           const SizedBox(width: 8),
           Text(
             '숙제 발급',
-            style: Theme.of(context).textTheme.titleLarge,
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
           ),
         ],
       ),
@@ -491,14 +494,10 @@ class _HomeworkCreateDialogState extends State<HomeworkCreateDialog> {
             child: const Text('취소'),
           ),
           const SizedBox(width: 8),
-          ElevatedButton.icon(
+          FilledButton.icon(
             onPressed: isValid ? _submit : null,
             icon: const Icon(Icons.send),
             label: const Text('발급'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-            ),
           ),
         ],
       ),

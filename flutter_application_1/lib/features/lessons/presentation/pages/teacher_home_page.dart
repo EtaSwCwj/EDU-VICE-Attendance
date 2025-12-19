@@ -117,7 +117,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         heroTag: 'lessons_teacher_home_fab',
         onPressed: () {
           // TODO: 수업 추가 페이지로 이동
@@ -125,8 +125,8 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
             const SnackBar(content: Text('수업 추가 기능은 다음 단계에서 구현됩니다')),
           );
         },
-        icon: const Icon(Icons.add),
-        label: const Text('수업 추가'),
+        tooltip: '수업 추가',
+        child: const Icon(Icons.add),
       ),
     );
   }
