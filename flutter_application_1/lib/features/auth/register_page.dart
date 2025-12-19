@@ -24,7 +24,6 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _isLoading = false;
   bool _needConfirmation = false;
   String? _tempUsername;
-  String? _tempPassword;
   final _confirmationCodeController = TextEditingController();
 
   final _userRepo = AppUserAwsRepository();
@@ -138,7 +137,6 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() {
           _needConfirmation = true;
           _tempUsername = email;
-          _tempPassword = password;
           _isLoading = false;
         });
       }
@@ -378,7 +376,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
               // 성별
               DropdownButtonFormField<String>(
-                value: _selectedGender,
+                initialValue: _selectedGender,
                 decoration: const InputDecoration(
                   labelText: '성별',
                   prefixIcon: Icon(Icons.wc),

@@ -432,7 +432,7 @@ class _BookAddDialogState extends State<_BookAddDialog> {
           children: [
             Expanded(
               child: DropdownButtonFormField<aws.Subject>(
-                value: _selectedSubject,
+                initialValue: _selectedSubject,
                 decoration: const InputDecoration(
                   labelText: '과목',
                   border: OutlineInputBorder(),
@@ -449,7 +449,7 @@ class _BookAddDialogState extends State<_BookAddDialog> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<aws.Grade>(
-                value: _selectedGrade,
+                initialValue: _selectedGrade,
                 decoration: const InputDecoration(
                   labelText: '학년',
                   border: OutlineInputBorder(),
@@ -467,7 +467,7 @@ class _BookAddDialogState extends State<_BookAddDialog> {
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
-          value: _publishYear,
+          initialValue: _publishYear,
           decoration: const InputDecoration(
             labelText: '출판연도',
             border: OutlineInputBorder(),
@@ -621,6 +621,8 @@ class _BookAddDialogState extends State<_BookAddDialog> {
       );
 
       final result = await _bookRepo.addBook(book);
+
+      if (!mounted) return;
 
       if (result == null) {
         safePrint('[BookManagementPage] Book creation failed: result is null');

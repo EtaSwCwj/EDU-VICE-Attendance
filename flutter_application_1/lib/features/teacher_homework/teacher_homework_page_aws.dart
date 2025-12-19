@@ -186,7 +186,7 @@ class _TeacherHomeworkPageAwsState extends State<TeacherHomeworkPageAws> {
               labelText: '학생 선택',
               border: OutlineInputBorder(),
             ),
-            value: _selectedStudent,
+            initialValue: _selectedStudent,
             items: _students.map((student) {
               return DropdownMenuItem(
                 value: student,
@@ -457,6 +457,8 @@ class _TeacherHomeworkPageAwsState extends State<TeacherHomeworkPageAws> {
     try {
       final success = await _assignmentRepo.updateStatus(assignment.id, newStatus);
 
+      if (!mounted) return;
+
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('상태가 업데이트되었습니다')),
@@ -468,6 +470,7 @@ class _TeacherHomeworkPageAwsState extends State<TeacherHomeworkPageAws> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('오류: $e')),
       );
@@ -672,7 +675,7 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                   labelText: '교재 *',
                   border: OutlineInputBorder(),
                 ),
-                value: _selectedBook,
+                initialValue: _selectedBook,
                 items: widget.books.map((book) {
                   return DropdownMenuItem(
                     value: book,
@@ -716,7 +719,7 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                               labelText: '챕터 (선택사항)',
                               border: OutlineInputBorder(),
                             ),
-                            value: _selectedChapter,
+                            initialValue: _selectedChapter,
                             items: _chapters.map((chapter) {
                               return DropdownMenuItem(
                                 value: chapter,

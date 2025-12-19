@@ -385,7 +385,7 @@ class _HomeworkCreateDialogState extends State<HomeworkCreateDialog> {
                 labelText: '챕터 선택',
                 border: OutlineInputBorder(),
               ),
-              value: _selectedChapter,
+              initialValue: _selectedChapter,
               items: _chapters.map((chapter) {
                 return DropdownMenuItem(
                   value: chapter,

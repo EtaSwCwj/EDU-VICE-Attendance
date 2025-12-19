@@ -1,7 +1,6 @@
 // lib/features/users/data/repositories/app_user_aws_repository.dart
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_api/amplify_api.dart';
-import '../../../../models/AppUser.dart';
 import '../../../../models/ModelProvider.dart';
 
 /// AWS와 연동하는 AppUser Repository
