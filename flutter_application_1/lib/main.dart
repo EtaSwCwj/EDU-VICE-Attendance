@@ -27,20 +27,26 @@ import 'app/app_router.dart';
 import 'shared/services/auth_state.dart';
 
 Future<void> main() async {
+  safePrint('[main] 진입');
   WidgetsFlutterBinding.ensureInitialized();
 
   // Amplify 초기화
+  safePrint('[main] Amplify 초기화 시작');
   await _initAmplifyOnce();
+  safePrint('[main] Amplify 초기화 완료');
 
   // DI 초기화 (선택적)
   try {
+    safePrint('[main] DI 초기화 시작');
     final config = AppConfig.development(); // 개발 환경
     await setupDependencies(config: config);
+    safePrint('[main] DI 초기화 완료');
   } catch (e) {
     // DI 초기화 실패해도 앱은 실행되도록
     safePrint('[DI] Failed to initialize: $e');
   }
 
+  safePrint('[main] EVAttendanceApp 실행');
   runApp(const EVAttendanceApp());
 }
 

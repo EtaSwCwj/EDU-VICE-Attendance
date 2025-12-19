@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 
 import '../services/s3_storage_service.dart';
 
@@ -63,6 +64,7 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
   Future<void> _showImageSourceDialog() async {
     if (!widget.editable || _isUploading) return;
 
+    safePrint('[ProfileImagePicker] 이미지 선택 다이얼로그 표시');
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (context) => SafeArea(
@@ -90,12 +92,14 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
     );
 
     if (source != null) {
+      safePrint('[ProfileImagePicker] 이미지 소스 선택: ${source == ImageSource.camera ? "카메라" : "갤러리"}');
       await _pickAndUploadImage(source);
     }
   }
 
   Future<void> _pickAndUploadImage(ImageSource source) async {
     try {
+      safePrint('[ProfileImagePicker] 이미지 선택 시작');
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: source,
         maxWidth: 1024,
@@ -104,9 +108,11 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
       );
 
       if (pickedFile == null) {
+        safePrint('[ProfileImagePicker] 이미지 선택 취소');
         return;
       }
 
+      safePrint('[ProfileImagePicker] 이미지 업로드 시작');
       setState(() {
         _isUploading = true;
       });
@@ -124,14 +130,17 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
           _displayImageUrl = uploadedUrl;
           _isUploading = false;
         });
+        safePrint('[ProfileImagePicker] 이미지 업로드 완료');
         widget.onImageUploaded?.call(uploadedUrl);
       } else {
         setState(() {
           _isUploading = false;
         });
+        safePrint('[ProfileImagePicker] 이미지 업로드 실패');
         widget.onError?.call('이미지 업로드에 실패했습니다.');
       }
     } catch (e) {
+      safePrint('[ProfileImagePicker] ERROR: $e');
       if (!mounted) return;
       setState(() {
         _isUploading = false;

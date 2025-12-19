@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../lessons/presentation/providers/lesson_provider.dart';
 import '../../lessons/presentation/widgets/lesson_card.dart';
 import '../../lessons/domain/entities/lesson.dart';
@@ -17,6 +18,7 @@ class _TeacherClassesPageState extends State<TeacherClassesPage> {
   @override
   void initState() {
     super.initState();
+    safePrint('[TeacherClassesPage] 진입');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadLessons();
     });

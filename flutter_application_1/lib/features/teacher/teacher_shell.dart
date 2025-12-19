@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 
 import 'pages/teacher_home_page_new.dart';
 import 'pages/teacher_classes_page.dart';
@@ -38,7 +39,14 @@ class _TeacherShellState extends State<TeacherShell> {
     '교재',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    safePrint('[TeacherShell] 진입');
+  }
+
   Future<void> _handleLogout() async {
+    safePrint('[TeacherShell] 버튼 클릭: 로그아웃');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -82,7 +90,10 @@ class _TeacherShellState extends State<TeacherShell> {
       body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          safePrint('[TeacherShell] 탭 변경: ${_pageTitles[i]}');
+          setState(() => _index = i);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),

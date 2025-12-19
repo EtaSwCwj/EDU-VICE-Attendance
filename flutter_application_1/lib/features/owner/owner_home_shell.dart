@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 
 import '../teacher/pages/teacher_home_page_new.dart';
 import '../teacher/pages/teacher_classes_page.dart';
@@ -43,7 +44,14 @@ class _OwnerHomeShellState extends State<OwnerHomeShell> {
     '관리',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    safePrint('[OwnerHomeShell] 진입');
+  }
+
   Future<void> _handleLogout() async {
+    safePrint('[OwnerHomeShell] 버튼 클릭: 로그아웃');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -197,7 +205,10 @@ class _OwnerHomeShellState extends State<OwnerHomeShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          safePrint('[OwnerHomeShell] 탭 변경: ${_pageTitles[i]}');
+          setState(() => _index = i);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),

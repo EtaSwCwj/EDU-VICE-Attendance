@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../shared/services/auth_state.dart';
 import '../../shared/services/mock_storage.dart';
 import '../../shared/services/s3_storage_service.dart';
@@ -21,7 +22,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    debugPrint('[SettingsPage] 진입');
+    safePrint('[SettingsPage] 진입');
     _loadProfileImage();
   }
 
@@ -74,6 +75,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   size: 100,
                   editable: true,
                   onImageUploaded: (url) {
+                    safePrint('[SettingsPage] 프로필 이미지 업로드 성공');
                     setState(() {
                       _profileImageUrl = url;
                     });
@@ -82,6 +84,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     );
                   },
                   onError: (msg) {
+                    safePrint('[SettingsPage] ERROR: 프로필 이미지 업로드 실패 - $msg');
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(msg)),
                     );
@@ -119,6 +122,7 @@ class _SettingsPageState extends State<SettingsPage> {
           leading: const Icon(Icons.refresh),
           title: const Text('데이터 새로고침'),
           onTap: () async {
+            safePrint('[SettingsPage] 버튼 클릭: 데이터 새로고침');
             await context.read<AuthState>().reloadFromStorage();
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -141,7 +145,10 @@ class _SettingsPageState extends State<SettingsPage> {
         ListTile(
           leading: const Icon(Icons.logout, color: Colors.red),
           title: const Text('로그아웃', style: TextStyle(color: Colors.red)),
-          onTap: () => context.read<AuthState>().signOut(),
+          onTap: () {
+            safePrint('[SettingsPage] 버튼 클릭: 로그아웃');
+            context.read<AuthState>().signOut();
+          },
         ),
         ],
       ),

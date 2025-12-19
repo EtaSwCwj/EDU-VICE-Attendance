@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 
 import '../services/auth_state.dart';
 import '../services/s3_storage_service.dart';
@@ -27,10 +28,12 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
   @override
   void initState() {
     super.initState();
+    safePrint('[ProfileAvatar] 위젯 생성');
     _loadProfileImage();
   }
 
   Future<void> _loadProfileImage() async {
+    safePrint('[ProfileAvatar] 프로필 이미지 로드 시작');
     final auth = context.read<AuthState>();
     final userId = auth.user?.id;
 
@@ -41,12 +44,14 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
           _profileImageUrl = url;
           _isLoading = false;
         });
+        safePrint('[ProfileAvatar] 프로필 이미지 로드 완료: ${url != null ? "있음" : "없음"}');
       }
     } else {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
+        safePrint('[ProfileAvatar] 프로필 이미지 로드 실패: userId 없음');
       }
     }
   }
@@ -61,6 +66,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       padding: const EdgeInsets.only(right: 8.0),
       child: GestureDetector(
         onTap: () {
+          safePrint('[ProfileAvatar] 프로필 아바타 탭됨');
           final role = auth.currentMembership?.role ?? 'student';
           context.push('/settings/$role');
         },

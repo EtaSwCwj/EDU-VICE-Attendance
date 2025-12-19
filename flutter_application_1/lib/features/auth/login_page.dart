@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../shared/services/auth_state.dart';
 
 class LoginPage extends StatefulWidget {
@@ -23,6 +24,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    safePrint('[LoginPage] 진입');
     _loadSavedCredentials();
   }
 
@@ -35,6 +37,7 @@ class _LoginPageState extends State<LoginPage> {
 
   /// 저장된 credential 불러오기
   Future<void> _loadSavedCredentials() async {
+    safePrint('[LoginPage] 저장된 자격증명 로드 시작');
     final authState = context.read<AuthState>();
     final saved = await authState.loadSavedCredentials();
 
@@ -52,10 +55,12 @@ class _LoginPageState extends State<LoginPage> {
       _autoLogin = true;
     }
 
+    safePrint('[LoginPage] 저장된 자격증명 로드 완료');
     setState(() {});
   }
 
   Future<void> _doLogin() async {
+    safePrint('[LoginPage] 버튼 클릭: 로그인');
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -67,6 +72,7 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     setState(() => _busy = true);
+    safePrint('[LoginPage] 로그인 시작: username=$username');
 
     // saveCredentials는 username/password 기억하기 중 하나라도 체크되어 있으면 true
     final saveCredentials = _rememberUsername || _rememberPassword;
@@ -83,10 +89,12 @@ class _LoginPageState extends State<LoginPage> {
 
     if (!mounted) return;
     if (ok) {
+      safePrint('[LoginPage] 로그인 성공');
       context.go('/home');
     } else {
       // 실제 에러 메시지 표시
       final errorMessage = authState.lastError ?? '알 수 없는 오류가 발생했습니다';
+      safePrint('[LoginPage] 로그인 실패: $errorMessage');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('로그인 실패: $errorMessage'),
