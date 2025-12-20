@@ -10,6 +10,8 @@
 # sum add
 flutter_application_1_*.zip
 
+# Node.js
+node_modules/
 
 # Flutter repo-specific
 /bin/cache/
