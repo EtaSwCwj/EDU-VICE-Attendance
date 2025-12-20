@@ -30,6 +30,7 @@ class Account {
   final String name;
   final String username;
   final String password;   // 임시 환경: 평문 (실서비스에선 해시)
+  final String? email;     // 이메일 추가
   final String? globalRole; // super_admin 등
   final List<Membership> memberships;
 
@@ -39,6 +40,7 @@ class Account {
     required this.username,
     required this.password,
     required this.memberships,
+    this.email,
     this.globalRole,
   });
 
@@ -47,6 +49,7 @@ class Account {
         name: j['name'] as String,
         username: j['username'] as String,
         password: j['password'] as String,
+        email: j['email'] as String?,
         globalRole: j['globalRole'] as String?,
         memberships: (j['memberships'] as List? ?? [])
             .map((e) => Membership.fromJson(e as Map<String, dynamic>))
@@ -58,6 +61,7 @@ class Account {
         'name': name,
         'username': username,
         'password': password,
+        'email': email,
         'globalRole': globalRole,
         'memberships': memberships.map((e) => e.toJson()).toList(),
       };

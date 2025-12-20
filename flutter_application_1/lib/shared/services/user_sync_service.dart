@@ -1,21 +1,21 @@
 // lib/shared/services/user_sync_service.dart
+import 'dart:convert';
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 
 /// Cognito User Pool 정보 조회 서비스
 ///
 /// 역할:
 /// 1. 로그인 시 Cognito 사용자 정보 확인
 /// 2. Cognito 그룹(students, teachers, owners) 조회
-/// 3. 레거시 Student/Teacher 테이블 동기화는 제거됨 (더 이상 사용 안 함)
+/// 3. AppUser가 없으면 자동 생성
 class UserSyncService {
   /// 현재 로그인한 사용자를 DynamoDB에 동기화
   ///
   /// 로그인 성공 후 호출:
   /// - Cognito 사용자 속성 조회
-  /// - Cognito 그룹 조회
-  /// - 그룹에 따라 Student 또는 Teacher 테이블에 추가
-  /// - 이미 존재하면 업데이트하거나 skip
+  /// - AppUser 조회 (API 사용 - 실시간 데이터)
+  /// - AppUser가 없으면 생성
+  /// - 있으면 스킵
   Future<SyncResult> syncCurrentUser() async {
     try {
       safePrint('');
@@ -27,65 +27,128 @@ class UserSyncService {
       // 1. 현재 사용자 정보
       safePrint('[UserSyncService] Step 1: Getting current user...');
       final user = await Amplify.Auth.getCurrentUser();
-      final username = user.username;
+      final cognitoUsername = user.username;
       final userId = user.userId;
 
-      safePrint('[UserSyncService] ✓ Current user: username=$username, userId=$userId');
+      safePrint('[UserSyncService] ✓ Cognito user: username=$cognitoUsername, userId=$userId');
 
       // 2. 사용자 속성 조회
       safePrint('[UserSyncService] Step 2: Fetching user attributes...');
       final attributes = await Amplify.Auth.fetchUserAttributes();
       safePrint('[UserSyncService] ✓ Found ${attributes.length} attributes');
 
+      String? email;
       String? name;
 
       for (final attr in attributes) {
         final key = attr.userAttributeKey.key;
-        safePrint('[UserSyncService]   - $key: ${attr.value}');
-        if (key == 'name' || key == 'preferred_username') {
+        if (key == 'email') {
+          email = attr.value;
+        } else if (key == 'name' || key == 'preferred_username') {
           name = attr.value;
         }
+        safePrint('[UserSyncService]   - $key: ${attr.value}');
       }
 
-      name ??= username; // name이 없으면 username 사용
+      email ??= cognitoUsername;
+      name ??= cognitoUsername.split('@').first;
 
-      safePrint('[UserSyncService] ✓ Resolved name: $name');
+      safePrint('[UserSyncService] ✓ Resolved email: $email, name: $name');
 
-      // 3. Cognito 그룹 조회
-      safePrint('[UserSyncService] Step 3: Getting Cognito groups...');
-      final groups = await _getGroups();
-      safePrint('[UserSyncService] ✓ Groups: $groups (count: ${groups.length})');
+      // 3. AppUser 조회 (API 사용 - 실시간 데이터)
+      safePrint('[UserSyncService] Step 3: Checking if AppUser exists...');
 
-      // 4. 역할 판단
-      safePrint('[UserSyncService] Step 4: Determining role...');
-      final isStudent = groups.contains('students');
-      final isTeacher = groups.contains('teachers') || groups.contains('owners');
+      const listUsersQuery = '''
+        query ListAppUsers(\$filter: ModelAppUserFilterInput) {
+          listAppUsers(filter: \$filter) {
+            items {
+              id
+              cognitoUsername
+              name
+              email
+            }
+          }
+        }
+      ''';
 
-      safePrint('[UserSyncService]   - isStudent: $isStudent');
-      safePrint('[UserSyncService]   - isTeacher: $isTeacher');
+      final usersResponse = await Amplify.API.query(
+        request: GraphQLRequest<String>(
+          document: listUsersQuery,
+          variables: {
+            'filter': {
+              'email': {'eq': email.toLowerCase()}
+            }
+          },
+        ),
+      ).response;
 
-      if (!isStudent && !isTeacher) {
-        safePrint('[UserSyncService] ℹ️  역할 없음 - 초대 대기 상태');
-        safePrint('[UserSyncService] ℹ️  레거시 테이블에 자동 생성하지 않음');
+      if (usersResponse.data == null) {
+        throw Exception('Failed to query AppUser');
+      }
+
+      final usersJson = json.decode(usersResponse.data!);
+      final usersList = usersJson['listAppUsers']['items'] as List;
+
+      // 4. AppUser가 이미 존재하면 스킵
+      if (usersList.isNotEmpty) {
+        final existingUser = usersList.first;
+        final existingUserId = existingUser['id'] as String;
+        safePrint('[UserSyncService] ✓ AppUser already exists: id=$existingUserId');
         safePrint('========================================');
         safePrint('');
         return SyncResult(
           success: true,
-          message: '역할 없음 - 초대 대기 상태',
+          message: 'AppUser already exists',
           isNew: false,
         );
       }
 
-      // 5. DynamoDB에 추가 (레거시 테이블은 더 이상 사용 안 함)
-      safePrint('[UserSyncService] Step 5: 레거시 테이블 동기화 스킵');
-      safePrint('[UserSyncService] ℹ️  Student/Teacher 테이블은 더 이상 사용하지 않음');
-      safePrint('[UserSyncService] ℹ️  AppUser, AcademyMember 테이블만 사용');
+      // 5. AppUser 생성
+      safePrint('[UserSyncService] Step 4: Creating AppUser...');
+
+      const createUserMutation = '''
+        mutation CreateAppUser(\$input: CreateAppUserInput!) {
+          createAppUser(input: \$input) {
+            id
+            cognitoUsername
+            name
+            email
+          }
+        }
+      ''';
+
+      final createResponse = await Amplify.API.mutate(
+        request: GraphQLRequest<String>(
+          document: createUserMutation,
+          variables: {
+            'input': {
+              'id': userId,
+              'cognitoUsername': cognitoUsername,
+              'name': name,
+              'email': email.toLowerCase(),
+            }
+          },
+        ),
+      ).response;
+
+      if (createResponse.data == null) {
+        throw Exception('Failed to create AppUser');
+      }
+
+      final createdUserJson = json.decode(createResponse.data!);
+      final createdUserId = createdUserJson['createAppUser']['id'];
+
+      safePrint('[UserSyncService] ✓ AppUser created successfully!');
+      safePrint('[UserSyncService]   - id: $createdUserId');
+      safePrint('[UserSyncService]   - email: $email');
+      safePrint('[UserSyncService]   - name: $name');
       safePrint('========================================');
       safePrint('');
+
       return SyncResult(
         success: true,
-        message: '레거시 테이블 동기화 스킵',
-        isNew: false,
+        message: 'AppUser created successfully',
+        isNew: true,
       );
     } catch (e, stackTrace) {
       safePrint('');
@@ -100,19 +163,6 @@ class UserSyncService {
     }
   }
 
-  /// Cognito 그룹 조회
-  Future<List<String>> _getGroups() async {
-    try {
-      final session = await Amplify.Auth.fetchAuthSession() as CognitoAuthSession;
-      final idToken = session.userPoolTokensResult.value.idToken;
-
-      // ID 토큰에서 cognito:groups 클레임 추출
-      return idToken.groups;
-    } catch (e) {
-      safePrint('[UserSyncService] getGroups error: $e');
-      return [];
-    }
-  }
 
   /// 모든 Cognito 사용자를 DynamoDB에 마이그레이션 (관리자 기능)
   ///

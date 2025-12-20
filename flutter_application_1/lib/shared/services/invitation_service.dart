@@ -126,4 +126,29 @@ class InvitationService {
       return [];
     }
   }
+
+  /// 이메일로 받은 초대 목록 조회 (피초대자용)
+  Future<List<Invitation>> getInvitationsByTargetEmail(String email) async {
+    safePrint('[InvitationService] Fetching invitations for email: $email');
+
+    try {
+      final invitations = await Amplify.DataStore.query(
+        Invitation.classType,
+        where: Invitation.TARGETEMAIL.eq(email.toLowerCase()),
+      );
+
+      // 유효한 초대만 필터링 (만료 안 됨 + 사용 안 됨)
+      final validInvitations = invitations.where((inv) {
+        final notExpired = inv.expiresAt.getDateTimeInUtc().isAfter(DateTime.now().toUtc());
+        final notUsed = inv.usedAt == null;
+        return notExpired && notUsed;
+      }).toList();
+
+      safePrint('[InvitationService] Found ${validInvitations.length} valid invitations for $email');
+      return validInvitations;
+    } catch (e) {
+      safePrint('[InvitationService] Error fetching invitations by email: $e');
+      return [];
+    }
+  }
 }

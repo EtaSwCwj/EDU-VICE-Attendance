@@ -213,6 +213,7 @@ class AuthState extends ChangeNotifier {
           name: userName,
           username: cognitoUsername,
           password: '',
+          email: appUser?['email'],
           memberships: [],
         );
         _academies = const [];
@@ -254,6 +255,7 @@ class AuthState extends ChangeNotifier {
         name: userName,
         username: cognitoUsername,
         password: '',
+        email: appUser?['email'],
         memberships: membershipList,
       );
 
@@ -427,6 +429,13 @@ class AuthState extends ChangeNotifier {
     if (_user != null) {
       await _loadUserInfo();
     }
+    notifyListeners();
+  }
+
+  /// 인증 상태 새로고침 (멤버 등록 후 확인용)
+  Future<void> refreshAuth() async {
+    safePrint('[AuthState] 인증 상태 새로고침');
+    await _loadUserInfo();
     notifyListeners();
   }
 

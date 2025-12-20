@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:go_router/go_router.dart';
-import '../users/data/repositories/app_user_aws_repository.dart';
 
 /// 회원가입 페이지
 class RegisterPage extends StatefulWidget {
@@ -27,8 +26,6 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _agreedToTerms = false;
   String? _tempUsername;
   final _confirmationCodeController = TextEditingController();
-
-  final _userRepo = AppUserAwsRepository();
 
   @override
   void dispose() {
@@ -306,30 +303,50 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  /// User 테이블에 유저 생성
+  /// AppUser 테이블에 유저 생성
   Future<void> _createUserInDatabase(String email, String name) async {
     try {
-      safePrint('[RegisterPage] Creating user in database: $email');
+      safePrint('[RegisterPage] Creating AppUser in database: $email');
 
-      // users 그룹에 추가 (자동으로 추가되지 않을 수 있으므로)
-      // 주의: 이 작업은 Lambda 트리거나 백엔드에서 수행하는 것이 더 적절함
-      // 여기서는 앱에서 직접 User 테이블에 저장만 함
+      // Cognito 사용자 ID 가져오기
+      final cognitoUser = await Amplify.Auth.getCurrentUser();
+      final userId = cognitoUser.userId;
 
-      final user = await _userRepo.createUser(
-        cognitoUsername: email,
-        email: email,
-        name: name,
-        birthDate: _birthDateController.text.trim().isEmpty ? null : _birthDateController.text.trim(),
-        gender: _selectedGender,
-      );
+      safePrint('[RegisterPage] Cognito userId: $userId');
 
-      if (user != null) {
-        safePrint('[RegisterPage] User created successfully in database: ${user.id}');
+      // AppUser 생성 (GraphQL API 사용)
+      const createUserMutation = '''
+        mutation CreateAppUser(\$input: CreateAppUserInput!) {
+          createAppUser(input: \$input) {
+            id
+            cognitoUsername
+            name
+            email
+          }
+        }
+      ''';
+
+      final createResponse = await Amplify.API.mutate(
+        request: GraphQLRequest<String>(
+          document: createUserMutation,
+          variables: {
+            'input': {
+              'id': userId,
+              'cognitoUsername': email,
+              'name': name,
+              'email': email.toLowerCase(),
+            }
+          },
+        ),
+      ).response;
+
+      if (createResponse.data == null) {
+        safePrint('[RegisterPage] WARNING: AppUser creation failed, but Cognito signup succeeded');
       } else {
-        safePrint('[RegisterPage] WARNING: User creation in database failed, but Cognito signup succeeded');
+        safePrint('[RegisterPage] AppUser created successfully: $userId');
       }
     } catch (e) {
-      safePrint('[RegisterPage] Error creating user in database: $e');
+      safePrint('[RegisterPage] Error creating AppUser: $e');
       // Cognito 가입은 성공했으므로 계속 진행
     }
   }

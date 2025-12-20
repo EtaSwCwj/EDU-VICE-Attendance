@@ -7,6 +7,7 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:amplify_api/amplify_api.dart';
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_storage_s3/amplify_storage_s3.dart';
+import 'package:amplify_datastore/amplify_datastore.dart';
 
 // Amplify Models (GraphQL API용)
 import 'models/ModelProvider.dart';
@@ -61,6 +62,7 @@ Future<void> _initAmplifyOnce() async {
       AmplifyAPI(options: APIPluginOptions(modelProvider: ModelProvider.instance)),
       AmplifyAuthCognito(),
       AmplifyStorageS3(),
+      AmplifyDataStore(modelProvider: ModelProvider.instance),
     ]);
 
     await Amplify.configure(amplifyconfig);
