@@ -92,8 +92,8 @@ function runClaudeCode(filepath) {
   
   const command = `${taskName} 실행해. ${filepath} 읽고 작업해. 결과는 ai_bridge/${taskName.toLowerCase()}_result.md로 저장해.`;
   
-  // Claude Code CLI 호출 (자동 승인 모드)
-  const claude = spawn('claude', ['--dangerously-skip-permissions', command], {
+  // Claude Code CLI 호출 (비대화형 + 자동 승인 모드)
+  const claude = spawn('claude', ['-p', '--dangerously-skip-permissions', command], {
     stdio: 'inherit',
     shell: true,
     cwd: path.join(__dirname, '..')
