@@ -12,9 +12,29 @@
  */
 
 const chokidar = require('chokidar');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+
+// 완료 알림 소리
+function playSound(success = true) {
+  if (os.platform() === 'win32') {
+    // Windows: 비프음 (더 크게)
+    if (success) {
+      exec('powershell -c "[console]::beep(800, 300); [console]::beep(1000, 300); [console]::beep(1200, 500)"');
+    } else {
+      exec('powershell -c "[console]::beep(400, 500); [console]::beep(300, 500)"');
+    }
+  } else if (os.platform() === 'darwin') {
+    // Mac: afplay로 시스템 사운드
+    const sound = success ? '/System/Library/Sounds/Glass.aiff' : '/System/Library/Sounds/Basso.aiff';
+    exec(`afplay ${sound}`);
+  } else {
+    // Linux: 벨 문자
+    process.stdout.write('\x07');
+  }
+}
 
 // 설정
 const AI_BRIDGE_PATH = path.join(__dirname, '..', 'ai_bridge');
@@ -105,10 +125,12 @@ function runClaudeCode(filepath) {
   
   claude.on('close', (code) => {
     if (code === 0) {
-      console.log(`\n[Watcher] ${taskName} 완료`);
+      console.log(`\n[Watcher] ${taskName} 완료 ✅`);
       saveProcessedFile(filename);
+      playSound(true);  // 성공 소리
     } else {
-      console.log(`\n[Watcher] ${taskName} 종료 (코드: ${code})`);
+      console.log(`\n[Watcher] ${taskName} 실패 ❌ (코드: ${code})`);
+      playSound(false);  // 실패 소리
     }
   });
 }
