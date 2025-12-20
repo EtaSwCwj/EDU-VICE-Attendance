@@ -1,4 +1,4 @@
-# TASK_022: 선후임 자동화 스크립트 커밋
+# TASK_022: 선후임 자동화 스크립트 커밋 (수정)
 
 > **작성자**: 윈선임 (메인 개발 4)
 > **작성일**: 2025-12-21
@@ -9,7 +9,7 @@
 
 ## 📋 목적
 
-선후임 자동화 시스템 코드 커밋.
+선후임 자동화 시스템 코드 + 빠진 result 파일 전부 커밋.
 
 ---
 
@@ -22,13 +22,13 @@ cd C:\gitproject\EDU-VICE-Attendance
 git status
 ```
 
-### Step 2: 스테이징
+### Step 2: 전체 스테이징
 
 ```bash
 git add scripts/auto_task_watcher.js
 git add package.json
-git add ai_bridge/TASK_021_TEST.md
-git add ai_bridge/TASK_022_COMMIT_AUTOMATION.md
+git add package-lock.json
+git add ai_bridge/
 ```
 
 ### Step 3: 커밋
@@ -36,9 +36,10 @@ git add ai_bridge/TASK_022_COMMIT_AUTOMATION.md
 ```bash
 git commit -m "feat: 선후임 자동화 시스템 추가
 
-- scripts/auto_task_watcher.js: ai_bridge 폴더 감시 스크립트
-- package.json: watch:task 스크립트 + chokidar 의존성 추가
-- npm run watch:task로 자동화 실행"
+- scripts/auto_task_watcher.js: ai_bridge 폴더 감시 + 자동 승인 모드
+- package.json: watch:task 스크립트 + chokidar 의존성
+- npm run watch:task로 자동화 실행
+- ai_bridge result 파일들 포함"
 ```
 
 ### Step 4: 푸시
@@ -52,24 +53,9 @@ git push origin dev
 ## ✅ 체크리스트
 
 - [ ] git status 확인
-- [ ] git add 완료
+- [ ] git add 완료 (scripts, package.json, ai_bridge 전체)
 - [ ] git commit 완료
 - [ ] git push 완료
-
----
-
-## 📝 결과 보고
-
-```markdown
-# TASK_022 결과
-
-## 커밋 정보
-- 커밋 해시: (해시값)
-- 브랜치: dev
-
-## 푸시
-- 완료: O/X
-```
 
 ---
 
