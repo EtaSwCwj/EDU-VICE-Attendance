@@ -26,8 +26,10 @@ import 'AppUser.dart';
 import 'Assignment.dart';
 import 'Book.dart';
 import 'Chapter.dart';
+import 'Invitation.dart';
 import 'Lesson.dart';
 import 'Student.dart';
+import 'StudentSupporter.dart';
 import 'Teacher.dart';
 import 'TeacherStudent.dart';
 
@@ -39,18 +41,20 @@ export 'AssignmentStatus.dart';
 export 'Book.dart';
 export 'Chapter.dart';
 export 'Grade.dart';
+export 'Invitation.dart';
 export 'Lesson.dart';
 export 'LessonStatus.dart';
 export 'Student.dart';
+export 'StudentSupporter.dart';
 export 'Subject.dart';
 export 'Teacher.dart';
 export 'TeacherStudent.dart';
 
 class ModelProvider implements amplify_core.ModelProviderInterface {
   @override
-  String version = "d5b39212f3c79ab6b53e48aa55145140";
+  String version = "cf29dbdb1ad908989946485170290aba";
   @override
-  List<amplify_core.ModelSchema> modelSchemas = [Academy.schema, AcademyMember.schema, AppUser.schema, Assignment.schema, Book.schema, Chapter.schema, Lesson.schema, Student.schema, Teacher.schema, TeacherStudent.schema];
+  List<amplify_core.ModelSchema> modelSchemas = [Academy.schema, AcademyMember.schema, AppUser.schema, Assignment.schema, Book.schema, Chapter.schema, Invitation.schema, Lesson.schema, Student.schema, StudentSupporter.schema, Teacher.schema, TeacherStudent.schema];
   @override
   List<amplify_core.ModelSchema> customTypeSchemas = [];
   static final ModelProvider _instance = ModelProvider();
@@ -71,10 +75,14 @@ class ModelProvider implements amplify_core.ModelProviderInterface {
         return Book.classType;
       case "Chapter":
         return Chapter.classType;
+      case "Invitation":
+        return Invitation.classType;
       case "Lesson":
         return Lesson.classType;
       case "Student":
         return Student.classType;
+      case "StudentSupporter":
+        return StudentSupporter.classType;
       case "Teacher":
         return Teacher.classType;
       case "TeacherStudent":

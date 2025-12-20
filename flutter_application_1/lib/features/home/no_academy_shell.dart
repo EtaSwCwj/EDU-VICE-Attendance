@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:go_router/go_router.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../shared/services/auth_state.dart';
 
 /// 소속 학원이 없는 유저용 화면
@@ -99,19 +101,15 @@ class NoAcademyShell extends StatelessWidget {
                 ),
               const SizedBox(height: 48),
 
-              // 학원 코드 입력 버튼 (향후 구현)
-              OutlinedButton.icon(
+              // 초대코드 입력 버튼
+              FilledButton.icon(
                 onPressed: () {
-                  // TODO: 학원 코드 입력 다이얼로그
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('학원 코드 입력 기능은 향후 구현 예정입니다'),
-                    ),
-                  );
+                  safePrint('[NoAcademyShell] 초대코드 입력 버튼 클릭');
+                  context.go('/join');
                 },
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('학원 코드로 가입 요청'),
-                style: OutlinedButton.styleFrom(
+                icon: const Icon(Icons.qr_code),
+                label: const Text('초대코드로 참여하기'),
+                style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 32,
                     vertical: 16,

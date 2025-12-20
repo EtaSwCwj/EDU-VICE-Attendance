@@ -146,6 +146,10 @@ class AuthState extends ChangeNotifier {
       final cognitoUsername = cognitoUser.username;
       final cognitoUserId = cognitoUser.userId;
 
+      safePrint('[DEBUG] ========== 역할 판단 시작 ==========');
+      safePrint('[DEBUG] Cognito userId: $cognitoUserId');
+      safePrint('[DEBUG] Cognito username: $cognitoUsername');
+
       safePrint('[AuthState] Step 2: AppUser 조회');
       final appUser = await _getAppUserByUsername(cognitoUsername);
       String userName = cognitoUsername;
@@ -155,33 +159,66 @@ class AuthState extends ChangeNotifier {
         userName = appUser['name'] ?? cognitoUsername;
         appUserId = appUser['id'];
         safePrint('[AuthState]   AppUser: $userName');
+        safePrint('[DEBUG] AppUser 조회 결과: 있음 (id=$appUserId, name=$userName)');
+      } else {
+        safePrint('[DEBUG] AppUser 조회 결과: 없음');
       }
 
       safePrint('[AuthState] Step 3: AcademyMember 조회');
-      String role = 'student';
+      String? role;
       String academyId = 'default-academy';
+      bool hasMembership = false;
 
       if (appUserId != null) {
         final membership = await _getAcademyMemberByUserId(appUserId);
         if (membership != null) {
           role = membership['role'] ?? 'student';
           academyId = membership['academyId'] ?? 'default-academy';
+          hasMembership = true;
           safePrint('[AuthState]   role=$role, academyId=$academyId');
+          safePrint('[DEBUG] AcademyMember 조회 결과: 있음 (role=$role)');
         } else {
+          safePrint('[DEBUG] AcademyMember 조회 결과: 없음');
           final groups = await _getGroups();
+          safePrint('[DEBUG] Cognito 그룹: $groups');
           if (groups.contains('owners')) {
             role = 'owner';
+            hasMembership = true;
           } else if (groups.contains('teachers')) {
             role = 'teacher';
+            hasMembership = true;
           }
         }
       } else {
+        safePrint('[DEBUG] appUserId가 null이므로 AcademyMember 조회 스킵');
         final groups = await _getGroups();
+        safePrint('[DEBUG] Cognito 그룹: $groups');
         if (groups.contains('owners')) {
           role = 'owner';
+          hasMembership = true;
         } else if (groups.contains('teachers')) {
           role = 'teacher';
+          hasMembership = true;
         }
+      }
+
+      safePrint('[DEBUG] hasMembership: $hasMembership');
+      safePrint('[DEBUG] 최종 role: $role');
+
+      // 소속이 없으면 memberships를 빈 리스트로
+      if (!hasMembership || role == null) {
+        safePrint('[DEBUG] 소속 없음 → memberships: []');
+        _user = Account(
+          id: appUserId ?? cognitoUserId,
+          name: userName,
+          username: cognitoUsername,
+          password: '',
+          memberships: [],
+        );
+        _academies = const [];
+        _current = null;
+        safePrint('[DEBUG] ========== 역할 판단 끝 (NoAcademyShell) ==========');
+        return;
       }
 
       safePrint('[AuthState] Step 4: Academy 조회');
@@ -224,6 +261,7 @@ class AuthState extends ChangeNotifier {
       _current = membershipList.first;
 
       safePrint('[AuthState] Summary: user=$userName, role=$role, academy=${academyInfo.name}');
+      safePrint('[DEBUG] ========== 역할 판단 끝 (role=$role, memberships.length=${membershipList.length}) ==========');
     } catch (e) {
       safePrint('[AuthState] ERROR: 사용자 정보 로드 실패 - $e');
 

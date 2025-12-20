@@ -265,3 +265,53 @@ type AcademyMember
   createdAt: AWSDateTime
   updatedAt: AWSDateTime
 }
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: Invitation (초대)
+# ─────────────────────────────────────────────────────────────────────
+
+type Invitation
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  academyId: ID!
+    @index(name: "byAcademy")
+  role: String!
+  inviteCode: String!
+    @index(name: "byInviteCode")
+  targetEmail: String
+  targetStudentId: ID
+  createdBy: ID!
+  expiresAt: AWSDateTime!
+  usedAt: AWSDateTime
+  usedBy: ID
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: StudentSupporter (학생-서포터 연결)
+# ─────────────────────────────────────────────────────────────────────
+
+type StudentSupporter
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  studentMemberId: ID!
+    @index(name: "byStudent")
+  supporterUserId: ID!
+    @index(name: "bySupporter")
+  academyId: ID!
+    @index(name: "byAcademy")
+  relationship: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}

@@ -1,5 +1,6 @@
 // lib/features/auth/register_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../users/data/repositories/app_user_aws_repository.dart';
@@ -23,6 +24,7 @@ class _RegisterPageState extends State<RegisterPage> {
   String? _selectedGender;
   bool _isLoading = false;
   bool _needConfirmation = false;
+  bool _agreedToTerms = false;
   String? _tempUsername;
   final _confirmationCodeController = TextEditingController();
 
@@ -80,18 +82,84 @@ class _RegisterPageState extends State<RegisterPage> {
     return null;
   }
 
+  /// 생년월일 검증
+  String? _validateBirthDate(String? value) {
+    if (value == null || value.isEmpty) {
+      return null; // 선택 필드라 비어있어도 OK
+    }
+
+    // 형식 체크
+    final regex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+    if (!regex.hasMatch(value)) {
+      return 'YYYY-MM-DD 형식으로 입력해주세요';
+    }
+
+    // 유효한 날짜인지 체크
+    try {
+      final parts = value.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final day = int.parse(parts[2]);
+
+      if (year < 1900 || year > DateTime.now().year) {
+        return '올바른 연도를 입력해주세요';
+      }
+      if (month < 1 || month > 12) {
+        return '올바른 월을 입력해주세요';
+      }
+      if (day < 1 || day > 31) {
+        return '올바른 일을 입력해주세요';
+      }
+
+      final date = DateTime(year, month, day);
+      if (date.isAfter(DateTime.now())) {
+        return '미래 날짜는 입력할 수 없습니다';
+      }
+    } catch (e) {
+      return '올바른 날짜를 입력해주세요';
+    }
+
+    return null;
+  }
+
   /// 생년월일 선택
   Future<void> _selectBirthDate() async {
+    safePrint('[RegisterPage] Opening birth date picker');
+
+    // 현재 입력된 값이 있으면 그걸로 시작, 없으면 2000년
+    DateTime initialDate = DateTime(2000, 1, 1);
+    if (_birthDateController.text.isNotEmpty) {
+      try {
+        final parts = _birthDateController.text.split('-');
+        if (parts.length == 3) {
+          initialDate = DateTime(
+            int.parse(parts[0]),
+            int.parse(parts[1]),
+            int.parse(parts[2]),
+          );
+        }
+      } catch (e) {
+        safePrint('[RegisterPage] Could not parse existing date: $e');
+      }
+    }
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(2000, 1, 1),
-      firstDate: DateTime(1900),
+      initialDate: initialDate,
+      firstDate: DateTime(1920),
       lastDate: DateTime.now(),
       locale: const Locale('ko', 'KR'),
+      initialDatePickerMode: DatePickerMode.year,  // 연도 선택부터 시작!
+      helpText: '생년월일 선택',
+      cancelText: '취소',
+      confirmText: '확인',
     );
+
     if (picked != null) {
+      safePrint('[RegisterPage] Birth date selected: $picked');
       setState(() {
-        _birthDateController.text = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+        _birthDateController.text =
+          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
       });
     }
   }
@@ -99,6 +167,14 @@ class _RegisterPageState extends State<RegisterPage> {
   /// 회원가입 처리
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (!_agreedToTerms) {
+      safePrint('[RegisterPage] 약관 미동의');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('약관에 동의해주세요')),
+      );
       return;
     }
 
@@ -360,17 +436,27 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
               const SizedBox(height: 16),
 
-              // 생년월일
+              // 생년월일 - 직접 입력 + 캘린더 버튼
               TextFormField(
                 controller: _birthDateController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: '생년월일',
-                  hintText: 'YYYY-MM-DD',
-                  prefixIcon: Icon(Icons.calendar_today),
-                  border: OutlineInputBorder(),
+                  hintText: 'YYYY-MM-DD (예: 1990-06-15)',
+                  prefixIcon: const Icon(Icons.calendar_today),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.date_range),
+                    onPressed: _selectBirthDate,
+                    tooltip: '달력에서 선택',
+                  ),
                 ),
-                readOnly: true,
-                onTap: _selectBirthDate,
+                keyboardType: TextInputType.datetime,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                  LengthLimitingTextInputFormatter(10),
+                  _DateInputFormatter(),
+                ],
+                validator: _validateBirthDate,
               ),
               const SizedBox(height: 16),
 
@@ -392,7 +478,25 @@ class _RegisterPageState extends State<RegisterPage> {
                   });
                 },
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+
+              // 약관 동의 체크박스
+              CheckboxListTile(
+                value: _agreedToTerms,
+                onChanged: (value) {
+                  setState(() => _agreedToTerms = value ?? false);
+                },
+                title: const Text('이용약관 및 개인정보처리방침에 동의합니다'),
+                subtitle: TextButton(
+                  onPressed: () {
+                    safePrint('[RegisterPage] 약관 보기 탭됨');
+                    // TODO: 약관 페이지로 이동
+                  },
+                  child: const Text('약관 보기'),
+                ),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const SizedBox(height: 16),
 
               // 회원가입 버튼
               FilledButton(
@@ -491,6 +595,29 @@ class _RegisterPageState extends State<RegisterPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 생년월일 자동 포맷터 (YYYY-MM-DD)
+class _DateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text.replaceAll('-', '');
+    final buffer = StringBuffer();
+
+    for (int i = 0; i < text.length && i < 8; i++) {
+      if (i == 4 || i == 6) buffer.write('-');
+      buffer.write(text[i]);
+    }
+
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

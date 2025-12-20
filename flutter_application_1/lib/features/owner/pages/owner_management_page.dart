@@ -1,12 +1,15 @@
 // lib/features/owner/pages/owner_management_page.dart
 import 'package:flutter/material.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:provider/provider.dart';
 import '../../../models/ModelProvider.dart';
 import '../../users/data/repositories/teacher_aws_repository.dart';
 import '../../users/data/repositories/student_aws_repository.dart';
+import '../../invitation/invitation_management_page.dart';
+import '../../../shared/services/auth_state.dart';
 
 /// Owner 전용 관리 페이지
-/// 3개 탭: 선생 관리 / 학생 관리 / 배정 관리
+/// 4개 탭: 선생 관리 / 학생 관리 / 배정 관리 / 초대 관리
 class OwnerManagementPage extends StatefulWidget {
   const OwnerManagementPage({super.key});
 
@@ -23,7 +26,7 @@ class _OwnerManagementPageState extends State<OwnerManagementPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -34,6 +37,8 @@ class _OwnerManagementPageState extends State<OwnerManagementPage>
 
   @override
   Widget build(BuildContext context) {
+    safePrint('[OwnerManagementPage] 빌드');
+
     return Column(
       children: [
         TabBar(
@@ -42,6 +47,7 @@ class _OwnerManagementPageState extends State<OwnerManagementPage>
             Tab(text: '선생 관리'),
             Tab(text: '학생 관리'),
             Tab(text: '배정 관리'),
+            Tab(text: '초대 관리'),
           ],
         ),
         Expanded(
@@ -53,6 +59,21 @@ class _OwnerManagementPageState extends State<OwnerManagementPage>
               _AssignmentManagementTab(
                 teacherRepo: _teacherRepo,
                 studentRepo: _studentRepo,
+              ),
+              Builder(
+                builder: (context) {
+                  safePrint('[OwnerManagementPage] 초대 관리 탭 진입');
+                  final authState = context.watch<AuthState>();
+                  final currentMembership = authState.currentMembership;
+
+                  if (currentMembership == null) {
+                    safePrint('[OwnerManagementPage] ERROR: currentMembership is null');
+                    return const Center(child: Text('학원 정보를 불러올 수 없습니다'));
+                  }
+
+                  safePrint('[OwnerManagementPage] academyId: ${currentMembership.academyId}');
+                  return InvitationManagementPage(academyId: currentMembership.academyId);
+                },
               ),
             ],
           ),

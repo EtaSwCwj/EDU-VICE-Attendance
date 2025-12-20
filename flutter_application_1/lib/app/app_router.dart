@@ -13,6 +13,9 @@ import '../features/teacher_homework/teacher_homework_page_aws.dart';
 import '../features/home/no_academy_shell.dart';
 import '../features/home/academy_selector_page.dart';
 import '../features/settings/settings_page.dart';
+import '../features/invitation/join_by_code_page.dart';
+import '../features/invitation/invitation_management_page.dart';
+import '../features/supporter/supporter_shell.dart';
 
 /// 역할 가드 & 홈쉘 분리 라우터
 class AppRouter {
@@ -83,6 +86,8 @@ class AppRouter {
                 return const TeacherShell(); // 5개 탭: 홈/수업/학생/숙제/교재
               case 'student':
                 return const StudentShell(); // 3개 탭: 홈/수업/숙제
+              case 'supporter':
+                return const SupporterShell(); // 3개 탭: 홈/학생현황/설정
               default:
                 // 알 수 없는 역할 → NoAcademyShell
                 return const NoAcademyShell();
@@ -110,6 +115,27 @@ class AppRouter {
             return null;
           },
           builder: (_, __) => const TeacherHomeworkPageAws(),
+        ),
+
+        // ── 초대 관련 라우트 ──────────────────────────────────────────────
+        // 초대코드 입력 페이지
+        GoRoute(
+          path: '/join',
+          builder: (_, __) => const JoinByCodePage(),
+        ),
+
+        // 초대 관리 페이지 (원장용)
+        GoRoute(
+          path: '/invitations/:academyId',
+          redirect: (_, state) {
+            final role = auth.currentMembership?.role ?? '';
+            if (role != 'owner') return '/home';
+            return null;
+          },
+          builder: (context, state) {
+            final academyId = state.pathParameters['academyId'] ?? '';
+            return InvitationManagementPage(academyId: academyId);
+          },
         ),
 
         // 필요 시 /student/*, /owner/* 네임스페이스도 같은 방식으로 확장
