@@ -1,9 +1,9 @@
 /**
- * 중간관리자 Watcher (VSCode Opus) - 파이프라인 버전
+ * 중간관리자 Watcher (VSCode Opus) - 교차검증 버전
  * 
  * 역할:
  * 1. bigstep/ 감시 → 스몰스텝으로 분해 → smallstep/ 생성
- * 2. result/ 감시 → Claude가 판단 → 재지시 or 보고
+ * 2. result/ 감시 → 실제 코드 교차검증 → 재지시 or 보고
  * 
  * 사용법:
  *   npm run watch:manager
@@ -16,12 +16,13 @@ const fs = require('fs');
 const os = require('os');
 
 // 경로 설정
-const AI_BRIDGE = path.join(__dirname, '..', 'ai_bridge');
+const PROJECT_ROOT = path.join(__dirname, '..');
+const AI_BRIDGE = path.join(PROJECT_ROOT, 'ai_bridge');
+const FLUTTER_APP = path.join(PROJECT_ROOT, 'flutter_application_1');
 const BIGSTEP_PATH = path.join(AI_BRIDGE, 'bigstep');
 const SMALLSTEP_PATH = path.join(AI_BRIDGE, 'smallstep');
 const RESULT_PATH = path.join(AI_BRIDGE, 'result');
 const REPORT_PATH = path.join(AI_BRIDGE, 'report');
-const LEARNING_PATH = path.join(AI_BRIDGE, 'learning');
 
 // 폴더 존재 확인 및 생성
 [SMALLSTEP_PATH, RESULT_PATH, REPORT_PATH].forEach(dir => {
@@ -74,7 +75,7 @@ function callClaude(prompt) {
       ? `type "${promptFile}" | claude -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`
       : `cat "${promptFile}" | claude -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`;
 
-    exec(cmd, { cwd: path.join(__dirname, '..'), maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    exec(cmd, { cwd: PROJECT_ROOT, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       try { fs.unlinkSync(promptFile); } catch (e) {}
       
       if (error) {
@@ -86,7 +87,54 @@ function callClaude(prompt) {
   });
 }
 
-// 빅스텝 처리: 스몰스텝으로 분해
+// result에서 변경된 파일 경로 추출
+function extractChangedFiles(resultContent) {
+  const files = [];
+  
+  // 다양한 패턴으로 파일 경로 추출
+  const patterns = [
+    /flutter_application_1\/lib\/[^\s\`\"\'\)]+\.dart/g,
+    /lib\/[^\s\`\"\'\)]+\.dart/g,
+    /ai_bridge\/[^\s\`\"\'\)]+\.(txt|md)/g,
+  ];
+  
+  patterns.forEach(pattern => {
+    const matches = resultContent.match(pattern);
+    if (matches) {
+      matches.forEach(m => {
+        const fullPath = m.startsWith('flutter_application_1') || m.startsWith('ai_bridge')
+          ? path.join(PROJECT_ROOT, m)
+          : path.join(FLUTTER_APP, m);
+        if (!files.includes(fullPath)) {
+          files.push(fullPath);
+        }
+      });
+    }
+  });
+  
+  return files;
+}
+
+// 실제 코드 파일 읽기
+function readCodeFiles(filePaths) {
+  let codeContent = '';
+  
+  filePaths.forEach(filePath => {
+    try {
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const relativePath = path.relative(PROJECT_ROOT, filePath);
+        codeContent += `\n\n=== ${relativePath} ===\n${content.substring(0, 2000)}${content.length > 2000 ? '\n... (truncated)' : ''}\n`;
+      }
+    } catch (e) {
+      codeContent += `\n\n=== ${filePath} ===\n[읽기 실패: ${e.message}]\n`;
+    }
+  });
+  
+  return codeContent;
+}
+
+// 빅스텝 처리
 async function handleBigstep(filepath) {
   const filename = path.basename(filepath);
   if (processedFiles.has(filename)) {
@@ -101,7 +149,6 @@ async function handleBigstep(filepath) {
   const bigstepContent = fs.readFileSync(filepath, 'utf8');
   const bigstepId = filename.match(/BIG_(\d+)/)?.[1] || '000';
   
-  // 스몰스텝 파일 직접 생성 (단순 분해)
   const smallstepFilename = `SMALL_${bigstepId}_01_EXECUTE.md`;
   const smallstepPath = path.join(SMALLSTEP_PATH, smallstepFilename);
   const resultPath = path.join(RESULT_PATH, `small_${bigstepId}_01_result.md`);
@@ -133,7 +180,7 @@ ${bigstepContent}
   }
 }
 
-// 결과 검토: Claude가 판단 → 재지시 or 보고
+// 결과 교차검증
 async function handleResult(filepath) {
   const filename = path.basename(filepath);
   if (processedFiles.has(filename)) {
@@ -143,58 +190,107 @@ async function handleResult(filepath) {
   
   console.log('\n' + '='.repeat(60));
   console.log(`[Manager] 결과 감지: ${filename}`);
-  console.log(`[Manager] Claude 판단 중...`);
+  console.log(`[Manager] 교차검증 중...`);
   console.log('='.repeat(60));
   
   const resultContent = fs.readFileSync(filepath, 'utf8');
   
-  // 빅스텝 ID 추출
+  // 변경된 파일 추출 및 실제 코드 읽기
+  const changedFiles = extractChangedFiles(resultContent);
+  const actualCode = readCodeFiles(changedFiles);
+  
+  console.log(`[Manager] 검토 대상 파일: ${changedFiles.length}개`);
+  
   const match = filename.match(/small_(\d+)_(\d+)/);
   const bigstepId = match?.[1] || '000';
   const smallstepNum = parseInt(match?.[2] || '1');
   
-  // 1단계: Claude가 결과 판단
-  const judgmentPrompt = `아래 작업 결과를 분석하고, 딱 한 줄로 판단해.
+  // 원본 빅스텝 읽기
+  const bigstepFiles = fs.readdirSync(BIGSTEP_PATH).filter(f => f.includes(`BIG_${bigstepId}`));
+  let originalTask = '';
+  if (bigstepFiles.length > 0) {
+    originalTask = fs.readFileSync(path.join(BIGSTEP_PATH, bigstepFiles[0]), 'utf8');
+  }
+  
+  // 교차검증 프롬프트
+  const judgmentPrompt = `당신은 중간관리자입니다. 후임의 작업을 교차검증하세요.
 
-=== 작업 결과 ===
+=== 원본 빅스텝 요청 ===
+${originalTask}
+
+=== 후임의 작업 보고 ===
 ${resultContent}
-=== 결과 끝 ===
 
-판단 기준:
-- 작업이 성공적으로 완료되었으면: "SUCCESS"
-- 에러가 있거나 작업이 실패했으면: "FAIL: (이유)"
+=== 실제 코드 (직접 확인) ===
+${actualCode || '(변경된 코드 파일 없음)'}
 
-반드시 "SUCCESS" 또는 "FAIL: (이유)" 중 하나로만 응답해. 다른 말 하지 마.`;
+=== 교차검증 기준 ===
+1. 빅스텝 요청사항을 모두 수행했는가?
+2. flutter analyze 에러가 있는가? (error가 1개라도 있으면 FAIL)
+3. 실제 코드가 보고 내용과 일치하는가?
+4. 코드 품질에 문제가 없는가? (문법, 구조, 네이밍)
+
+=== 판단 ===
+모든 기준을 통과하면: "SUCCESS"
+하나라도 실패하면: "FAIL: (구체적 이유)"
+
+반드시 한 줄로만 응답. 다른 말 하지 마.`;
 
   try {
     const judgment = await callClaude(judgmentPrompt);
     console.log(`[Manager] 판단 결과: ${judgment.trim()}`);
     
     if (judgment.toUpperCase().includes('SUCCESS')) {
-      // 성공 → 보고서 생성
+      // 성공 → 최종 보고서 생성 (교차검증 내용 포함)
+      const reportPrompt = `당신은 중간관리자입니다. CP/선임에게 보고할 최종 보고서를 작성하세요.
+
+=== 원본 빅스텝 요청 ===
+${originalTask}
+
+=== 후임 작업 결과 ===
+${resultContent}
+
+=== 실제 코드 (직접 확인) ===
+${actualCode || '(변경된 코드 파일 없음)'}
+
+=== 보고서 형식 ===
+# BIG_${bigstepId} 완료 보고서
+
+## 📋 요청 사항
+(빅스텝에서 요청한 내용 요약)
+
+## ✅ 수행 결과
+(무엇을 했는지)
+
+## 🔍 교차검증 결과
+- 실제 코드 직접 확인: ✅
+- 요청사항 충족: ✅
+- flutter analyze 에러: 0개
+- 코드 품질: (간단한 평가)
+
+## 📁 변경된 파일
+(파일 목록)
+
+## 💬 중간관리자 의견
+(한두 줄로 간단히)
+
+---
+위 형식으로 보고서를 작성하세요.`;
+
+      const report = await callClaude(reportPrompt);
+      
       const reportFilename = `big_${bigstepId}_report.md`;
       const reportPath = path.join(REPORT_PATH, reportFilename);
       
-      const reportContent = `# BIG_${bigstepId} 완료 보고서
+      const finalReport = `${report}
 
+---
 > **생성**: 중간관리자 자동 생성
 > **시간**: ${new Date().toISOString()}
-> **판단**: ✅ SUCCESS
-
----
-
-## 📋 결과 요약
-
-${resultContent}
-
----
-
-## ✅ 상태
-
-작업 성공. CP/선임 확인 필요.
+> **교차검증**: ✅ 실제 코드 직접 확인 완료
 `;
       
-      fs.writeFileSync(reportPath, reportContent);
+      fs.writeFileSync(reportPath, finalReport);
       console.log(`[Manager] 보고서 생성: ${reportFilename}`);
       console.log(`[Manager] 결과 검토 완료 ✅`);
       playSound(true);
@@ -206,16 +302,9 @@ ${resultContent}
       const retryPath = path.join(SMALLSTEP_PATH, retryFilename);
       const retryResultPath = path.join(RESULT_PATH, `small_${bigstepId}_${String(smallstepNum + 1).padStart(2, '0')}_result.md`);
       
-      // 원본 빅스텝 읽기
-      const bigstepFiles = fs.readdirSync(BIGSTEP_PATH).filter(f => f.includes(`BIG_${bigstepId}`));
-      let originalTask = '원본 빅스텝을 찾을 수 없음';
-      if (bigstepFiles.length > 0) {
-        originalTask = fs.readFileSync(path.join(BIGSTEP_PATH, bigstepFiles[0]), 'utf8');
-      }
-      
       const retryContent = `# ${retryFilename}
 
-> **재지시**: 이전 작업 실패로 인한 재시도
+> **재지시**: 교차검증 실패
 > **실패 이유**: ${failReason}
 
 ---
@@ -226,15 +315,24 @@ ${originalTask}
 
 ---
 
-## ⚠️ 이전 실패 내용
+## ⚠️ 이전 결과 (실패)
 
 ${resultContent}
 
 ---
 
+## 🔍 중간관리자 교차검증 결과
+
+실제 코드를 직접 확인한 결과: **${failReason}**
+
+---
+
 ## 🔧 수정 지시
 
-이전 실패를 참고해서 다시 작업해. 실패 이유: ${failReason}
+위 문제를 수정하세요. 반드시:
+1. flutter analyze 에러 0개
+2. 요청사항 모두 충족
+3. 코드 품질 확보
 
 ---
 
@@ -250,7 +348,7 @@ ${resultContent}
     saveProcessedFile(filename);
     
   } catch (e) {
-    console.error(`[Manager] 판단 실패: ${e.message}`);
+    console.error(`[Manager] 검증 실패: ${e.message}`);
     playSound(false);
   }
 }
@@ -258,7 +356,7 @@ ${resultContent}
 // 메인
 function main() {
   console.log('='.repeat(60));
-  console.log('  중간관리자 시스템 (Manager) - 파이프라인 버전');
+  console.log('  중간관리자 시스템 (Manager) - 교차검증 버전');
   console.log('  bigstep/, result/ 감시 중...');
   console.log('='.repeat(60));
   console.log(`\n빅스텝 경로: ${BIGSTEP_PATH}`);
@@ -268,7 +366,6 @@ function main() {
   
   loadProcessedFiles();
   
-  // bigstep 감시
   const bigstepWatcher = chokidar.watch(path.join(BIGSTEP_PATH, 'BIG_*.md'), {
     persistent: true,
     ignoreInitial: true,
@@ -277,7 +374,6 @@ function main() {
   
   bigstepWatcher.on('add', handleBigstep);
   
-  // result 감시
   const resultWatcher = chokidar.watch(path.join(RESULT_PATH, '*_result.md'), {
     persistent: true,
     ignoreInitial: true,

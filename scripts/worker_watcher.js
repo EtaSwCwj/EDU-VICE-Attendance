@@ -28,18 +28,10 @@ if (!fs.existsSync(RESULT_PATH)) {
 const processedFiles = new Set();
 const PROCESSED_FILE = path.join(AI_BRIDGE, '.processed_worker');
 
-// 알림 소리
+// 알림 소리 (비활성화 - Manager가 최종 알림)
 function playSound(success = true) {
-  if (os.platform() === 'win32') {
-    if (success) {
-      exec('powershell -c "[console]::beep(800, 300); [console]::beep(1000, 300); [console]::beep(1200, 500)"');
-    } else {
-      exec('powershell -c "[console]::beep(400, 500); [console]::beep(300, 500)"');
-    }
-  } else if (os.platform() === 'darwin') {
-    const sound = success ? '/System/Library/Sounds/Glass.aiff' : '/System/Library/Sounds/Basso.aiff';
-    exec(`afplay ${sound}`);
-  }
+  // Manager에서만 소리 남
+  // if (os.platform() === 'win32') { ... }
 }
 
 // 처리 목록 로드

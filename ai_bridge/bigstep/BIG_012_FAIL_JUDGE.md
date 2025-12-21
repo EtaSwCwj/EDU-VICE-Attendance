@@ -1,0 +1,23 @@
+# BIG_012: FAIL 판단 테스트
+
+> **작성자**: Desktop Opus
+> **작성일**: 2025-12-21
+
+---
+
+## 📋 작업
+
+1. flutter_application_1/lib/broken_code.dart 파일 생성
+2. 문법 에러 코드:
+```dart
+class BrokenCode {
+  void test( {
+    print("error"
+  }
+}
+```
+3. flutter analyze 실행
+
+---
+
+flutter analyze 에러가 나와야 함.
