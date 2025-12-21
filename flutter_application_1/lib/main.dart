@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 // Amplify
 import 'package:amplify_flutter/amplify_flutter.dart';
@@ -58,13 +59,21 @@ Future<void> _initAmplifyOnce() async {
   if (Amplify.isConfigured) return;
 
   try {
-    await Amplify.addPlugins([
+    final plugins = <AmplifyPluginInterface>[
       AmplifyAPI(options: APIPluginOptions(modelProvider: ModelProvider.instance)),
       AmplifyAuthCognito(),
       AmplifyStorageS3(),
-      AmplifyDataStore(modelProvider: ModelProvider.instance),
-    ]);
+    ];
 
+    // 웹이 아닐 때만 DataStore 추가
+    if (!kIsWeb) {
+      plugins.add(AmplifyDataStore(modelProvider: ModelProvider.instance));
+      safePrint('[Amplify] DataStore 플러그인 추가됨 (웹이 아님)');
+    } else {
+      safePrint('[Amplify] DataStore 플러그인 건너뜀 (웹 플랫폼)');
+    }
+
+    await Amplify.addPlugins(plugins);
     await Amplify.configure(amplifyconfig);
     safePrint('[Amplify] configure: SUCCESS');
   } on AmplifyAlreadyConfiguredException {

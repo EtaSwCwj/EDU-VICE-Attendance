@@ -1,14 +1,3 @@
-아래 지시를 수행하세요. 설명하지 말고 바로 작업하세요.
-
-지시 내용:
-# SMALL_031_01_EXECUTE.md
-
-> **빅스텝**: BIG_031_FINAL_COMMIT.md
-
----
-
-## 📋 작업 내용
-
 # BIG_031: 2실린더 v4 최종 커밋
 
 > **작성자**: Desktop Opus
@@ -37,11 +26,3 @@ git commit -m "feat: 2실린더 자동화 v4 완성
 - 멀티 계정 테스트 환경 구축"
 git push origin dev
 ```
-
-
----
-
-**결과는 `C:\gitproject\EDU-VICE-Attendance\ai_bridge\result\small_031_01_result.md`에 저장할 것.**
-
-
-작업 완료 후 결과를 C:\gitproject\EDU-VICE-Attendance\ai_bridge\result\small_031_01_result.md 파일에 저장하세요.

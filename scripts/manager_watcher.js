@@ -1,16 +1,18 @@
 /**
- * 중간관리자 Watcher (VSCode Opus) - 교차검증 버전
+ * 중간관리자 Watcher (Manager) - Worker 호출 버전
  * 
  * 역할:
- * 1. bigstep/ 감시 → 스몰스텝으로 분해 → smallstep/ 생성
- * 2. result/ 감시 → 실제 코드 교차검증 → 재지시 or 보고
+ * 1. bigstep/ 감시 → 스몰스텝 생성 → Worker 호출
+ * 2. result/ 감시 → 교차검증 → 재지시시 Worker 다시 호출
+ * 
+ * Worker는 일회성 실행 후 종료됨
  * 
  * 사용법:
  *   npm run watch:manager
  */
 
 const chokidar = require('chokidar');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -65,6 +67,33 @@ function saveProcessedFile(filename) {
   fs.appendFileSync(PROCESSED_FILE, filename + '\n');
 }
 
+// Worker 호출 (일회성)
+function runWorker() {
+  return new Promise((resolve, reject) => {
+    console.log(`[Manager] Worker 호출 중...`);
+    
+    const worker = spawn('node', ['scripts/worker_watcher.js'], {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit'
+    });
+    
+    worker.on('close', (code) => {
+      if (code === 0) {
+        console.log(`[Manager] Worker 완료`);
+        resolve();
+      } else {
+        console.log(`[Manager] Worker 실패 (코드: ${code})`);
+        reject(new Error(`Worker exited with code ${code}`));
+      }
+    });
+    
+    worker.on('error', (err) => {
+      console.error(`[Manager] Worker 실행 오류: ${err.message}`);
+      reject(err);
+    });
+  });
+}
+
 // Claude 호출 (파이프라인)
 function callClaude(prompt) {
   return new Promise((resolve, reject) => {
@@ -91,7 +120,6 @@ function callClaude(prompt) {
 function extractChangedFiles(resultContent) {
   const files = [];
   
-  // 다양한 패턴으로 파일 경로 추출
   const patterns = [
     /flutter_application_1\/lib\/[^\s\`\"\'\)]+\.dart/g,
     /lib\/[^\s\`\"\'\)]+\.dart/g,
@@ -171,11 +199,14 @@ ${bigstepContent}
   try {
     fs.writeFileSync(smallstepPath, smallstepContent);
     console.log(`[Manager] 스몰스텝 생성: ${smallstepFilename}`);
-    console.log(`[Manager] 빅스텝 분해 완료 ✅`);
     saveProcessedFile(filename);
-    playSound(true);
+    
+    // Worker 호출
+    await runWorker();
+    console.log(`[Manager] 빅스텝 분해 완료 ✅`);
+    
   } catch (e) {
-    console.error(`[Manager] 스몰스텝 생성 실패: ${e.message}`);
+    console.error(`[Manager] 처리 실패: ${e.message}`);
     playSound(false);
   }
 }
@@ -195,7 +226,6 @@ async function handleResult(filepath) {
   
   const resultContent = fs.readFileSync(filepath, 'utf8');
   
-  // 변경된 파일 추출 및 실제 코드 읽기
   const changedFiles = extractChangedFiles(resultContent);
   const actualCode = readCodeFiles(changedFiles);
   
@@ -205,7 +235,6 @@ async function handleResult(filepath) {
   const bigstepId = match?.[1] || '000';
   const smallstepNum = parseInt(match?.[2] || '1');
   
-  // 원본 빅스텝 읽기
   const bigstepFiles = fs.readdirSync(BIGSTEP_PATH).filter(f => f.includes(`BIG_${bigstepId}`));
   let originalTask = '';
   if (bigstepFiles.length > 0) {
@@ -214,7 +243,7 @@ async function handleResult(filepath) {
   
   // 작업 유형 판단
   const taskLower = originalTask.toLowerCase();
-  let taskType = 'code'; // 기본: 코드 작업
+  let taskType = 'code';
   
   if (taskLower.includes('분석') || taskLower.includes('analysis') || taskLower.includes('상태 확인') || taskLower.includes('파악') || taskLower.includes('검토')) {
     taskType = 'analysis';
@@ -226,7 +255,6 @@ async function handleResult(filepath) {
   
   console.log(`[Manager] 작업 유형: ${taskType}`);
   
-  // 작업 유형별 판단 기준
   let judgmentCriteria = '';
   switch (taskType) {
     case 'analysis':
@@ -248,7 +276,7 @@ async function handleResult(filepath) {
 2. 삭제하면 안 되는 파일을 삭제하지 않았는가?
 3. flutter analyze 에러가 없는가?`;
       break;
-    default: // code
+    default:
       judgmentCriteria = `=== 교차검증 기준 (코드 작업) ===
 1. 빅스텝 요청사항을 모두 수행했는가?
 2. flutter analyze 에러가 있는가? (error가 1개라도 있으면 FAIL)
@@ -256,7 +284,6 @@ async function handleResult(filepath) {
 4. 코드 품질에 문제가 없는가? (문법, 구조, 네이밍)`;
   }
   
-  // 교차검증 프롬프트
   const judgmentPrompt = `당신은 중간관리자입니다. 후임의 작업을 교차검증하세요.
 
 === 원본 빅스텝 요청 ===
@@ -281,7 +308,6 @@ ${judgmentCriteria}
     console.log(`[Manager] 판단 결과: ${judgment.trim()}`);
     
     if (judgment.toUpperCase().includes('SUCCESS')) {
-      // 성공 → 최종 보고서 생성 (교차검증 내용 포함)
       const reportPrompt = `당신은 중간관리자입니다. CP/선임에게 보고할 최종 보고서를 작성하세요.
 
 === 원본 빅스텝 요청 ===
@@ -336,7 +362,7 @@ ${actualCode || '(변경된 코드 파일 없음)'}
       playSound(true);
       
     } else {
-      // 실패 → 재지시
+      // 실패 → 재지시 생성 → Worker 다시 호출
       const failReason = judgment.replace(/FAIL:?/i, '').trim();
       const retryFilename = `SMALL_${bigstepId}_${String(smallstepNum + 1).padStart(2, '0')}_RETRY.md`;
       const retryPath = path.join(SMALLSTEP_PATH, retryFilename);
@@ -381,6 +407,9 @@ ${resultContent}
       
       fs.writeFileSync(retryPath, retryContent);
       console.log(`[Manager] 재지시 생성: ${retryFilename}`);
+      
+      // Worker 다시 호출
+      await runWorker();
       console.log(`[Manager] 재지시 완료 ⚠️`);
       playSound(false);
     }
@@ -396,7 +425,7 @@ ${resultContent}
 // 메인
 function main() {
   console.log('='.repeat(60));
-  console.log('  중간관리자 시스템 (Manager) - 교차검증 버전');
+  console.log('  중간관리자 시스템 (Manager) - Worker 호출 버전');
   console.log('  bigstep/, result/ 감시 중...');
   console.log('='.repeat(60));
   console.log(`\n빅스텝 경로: ${BIGSTEP_PATH}`);
