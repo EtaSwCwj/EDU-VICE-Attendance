@@ -1,6 +1,3 @@
-아래 지시를 수행하세요. 설명하지 말고 바로 파일을 생성하세요.
-
-지시 내용:
 # SMALL_014_02_RETRY.md
 
 > **재지시**: 교차검증 실패
@@ -112,6 +109,3 @@ git push origin dev
 ---
 
 **결과는 `C:\gitproject\EDU-VICE-Attendance\ai_bridge\result\small_014_02_result.md`에 저장할 것.**
-
-
-작업 완료 후 결과를 C:\gitproject\EDU-VICE-Attendance\ai_bridge\result\small_014_02_result.md 파일에 저장하세요.

@@ -67,7 +67,7 @@ class _InvitationManagementPageState extends State<InvitationManagementPage> {
 
     try {
       // 1. 이메일로 AppUser 조회 (API 사용 - 실시간 데이터)
-      final listUsersQuery = '''
+      const listUsersQuery = '''
         query ListAppUsers(\$filter: ModelAppUserFilterInput) {
           listAppUsers(filter: \$filter) {
             items {
@@ -116,7 +116,7 @@ class _InvitationManagementPageState extends State<InvitationManagementPage> {
       safePrint('[InvitationManagementPage] Found user: $targetUserName (id: $targetUserId)');
 
       // 2. 이미 멤버인지 확인 (API 사용)
-      final listMembersQuery = '''
+      const listMembersQuery = '''
         query ListAcademyMembers(\$filter: ModelAcademyMemberFilterInput) {
           listAcademyMembers(filter: \$filter) {
             items {
@@ -156,7 +156,7 @@ class _InvitationManagementPageState extends State<InvitationManagementPage> {
       }
 
       // 3. AcademyMember 생성 (API 사용)
-      final createMemberMutation = '''
+      const createMemberMutation = '''
         mutation CreateAcademyMember(\$input: CreateAcademyMemberInput!) {
           createAcademyMember(input: \$input) {
             id
