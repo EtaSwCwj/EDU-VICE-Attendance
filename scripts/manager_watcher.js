@@ -212,6 +212,50 @@ async function handleResult(filepath) {
     originalTask = fs.readFileSync(path.join(BIGSTEP_PATH, bigstepFiles[0]), 'utf8');
   }
   
+  // 작업 유형 판단
+  const taskLower = originalTask.toLowerCase();
+  let taskType = 'code'; // 기본: 코드 작업
+  
+  if (taskLower.includes('분석') || taskLower.includes('analysis') || taskLower.includes('상태 확인') || taskLower.includes('파악') || taskLower.includes('검토')) {
+    taskType = 'analysis';
+  } else if (taskLower.includes('커밋') || taskLower.includes('commit') || taskLower.includes('push') || taskLower.includes('git add')) {
+    taskType = 'commit';
+  } else if (taskLower.includes('삭제') || taskLower.includes('delete') || taskLower.includes('정리') || taskLower.includes('cleanup')) {
+    taskType = 'cleanup';
+  }
+  
+  console.log(`[Manager] 작업 유형: ${taskType}`);
+  
+  // 작업 유형별 판단 기준
+  let judgmentCriteria = '';
+  switch (taskType) {
+    case 'analysis':
+      judgmentCriteria = `=== 교차검증 기준 (분석 작업) ===
+1. 요청한 분석 항목을 모두 다뤘는가?
+2. 분석 내용이 구체적이고 정확한가?
+3. 존재하지 않는 파일을 "구현 완료"라고 거짓 보고하지 않았는가?
+4. 결론과 다음 단계 권장사항이 명확한가?`;
+      break;
+    case 'commit':
+      judgmentCriteria = `=== 교차검증 기준 (커밋 작업) ===
+1. git commit이 성공했는가?
+2. git push가 성공했는가?
+3. 커밋 메시지가 적절한가?`;
+      break;
+    case 'cleanup':
+      judgmentCriteria = `=== 교차검증 기준 (정리 작업) ===
+1. 요청한 파일들이 삭제되었는가?
+2. 삭제하면 안 되는 파일을 삭제하지 않았는가?
+3. flutter analyze 에러가 없는가?`;
+      break;
+    default: // code
+      judgmentCriteria = `=== 교차검증 기준 (코드 작업) ===
+1. 빅스텝 요청사항을 모두 수행했는가?
+2. flutter analyze 에러가 있는가? (error가 1개라도 있으면 FAIL)
+3. 실제 코드가 보고 내용과 일치하는가?
+4. 코드 품질에 문제가 없는가? (문법, 구조, 네이밍)`;
+  }
+  
   // 교차검증 프롬프트
   const judgmentPrompt = `당신은 중간관리자입니다. 후임의 작업을 교차검증하세요.
 
@@ -224,11 +268,7 @@ ${resultContent}
 === 실제 코드 (직접 확인) ===
 ${actualCode || '(변경된 코드 파일 없음)'}
 
-=== 교차검증 기준 ===
-1. 빅스텝 요청사항을 모두 수행했는가?
-2. flutter analyze 에러가 있는가? (error가 1개라도 있으면 FAIL)
-3. 실제 코드가 보고 내용과 일치하는가?
-4. 코드 품질에 문제가 없는가? (문법, 구조, 네이밍)
+${judgmentCriteria}
 
 === 판단 ===
 모든 기준을 통과하면: "SUCCESS"

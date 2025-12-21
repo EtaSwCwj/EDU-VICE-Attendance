@@ -1,14 +1,3 @@
-아래 지시를 수행하세요. 설명하지 말고 바로 파일을 생성하세요.
-
-지시 내용:
-# SMALL_020_01_EXECUTE.md
-
-> **빅스텝**: BIG_020_FINAL_COMMIT.md
-
----
-
-## 📋 작업 내용
-
 # BIG_020: 자동화 개선 + 전체 커밋
 
 > **작성자**: Desktop Opus
@@ -32,11 +21,3 @@ git push origin dev
 ```
 
 모든 변경사항 커밋 + 푸시해.
-
-
----
-
-**결과는 `C:\gitproject\EDU-VICE-Attendance\ai_bridge\result\small_020_01_result.md`에 저장할 것.**
-
-
-작업 완료 후 결과를 C:\gitproject\EDU-VICE-Attendance\ai_bridge\result\small_020_01_result.md 파일에 저장하세요.

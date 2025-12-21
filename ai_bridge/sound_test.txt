@@ -1,1 +1,0 @@
-Worker 소리 없음, Manager만 소리 남!
