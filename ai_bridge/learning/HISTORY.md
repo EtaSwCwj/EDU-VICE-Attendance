@@ -124,6 +124,24 @@ if (!kIsWeb) {
 
 ---
 
+## 맥 테스트 환경 (2025-12-21)
+
+### 디바이스
+
+| 디바이스 | ID | 용도 |
+|----------|-----|------|
+| SM A356N (Android 폰) | RFCY40MNBLL | 모바일 테스트 |
+| Chrome | chrome | 웹 테스트 |
+
+### 스크립트
+
+| 파일 | 용도 |
+|------|------|
+| scripts/start_web_mac.sh | 웹 서버 (Chrome) |
+| scripts/start_phone_mac.sh | Android 폰 |
+
+---
+
 ## 이전 히스토리 요약
 
 ### Profile 이미지 S3 업로드 (12/19~20)

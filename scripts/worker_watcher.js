@@ -92,10 +92,11 @@ ${taskContent}
 
     fs.writeFileSync(promptFile, prompt);
 
-    // 실행
+    // 실행 (OS별 claude 경로)
+    const claudePath = os.platform() === 'darwin' ? '/opt/homebrew/bin/claude' : 'claude';
     const cmd = os.platform() === 'win32'
-      ? `type "${promptFile}" | claude -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`
-      : `cat "${promptFile}" | claude -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`;
+      ? `type "${promptFile}" | ${claudePath} -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`
+      : `cat "${promptFile}" | ${claudePath} -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`;
 
     exec(cmd, { cwd: PROJECT_ROOT, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       // 임시 파일 삭제

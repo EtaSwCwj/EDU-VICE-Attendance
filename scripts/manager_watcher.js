@@ -38,16 +38,23 @@ const processedFiles = new Set();
 const PROCESSED_FILE = path.join(AI_BRIDGE, '.processed_manager');
 
 // 알림 소리
-function playSound(success = true) {
+function playSound(type = 'success') {
   if (os.platform() === 'win32') {
-    if (success) {
+    if (type === 'success') {
       exec('powershell -c "[console]::beep(800, 300); [console]::beep(1000, 300); [console]::beep(1200, 500)"');
-    } else {
+    } else if (type === 'fail') {
       exec('powershell -c "[console]::beep(400, 500); [console]::beep(300, 500)"');
+    } else if (type === 'start') {
+      exec('powershell -c "[console]::beep(600, 200); [console]::beep(800, 200)"');
     }
   } else if (os.platform() === 'darwin') {
-    const sound = success ? '/System/Library/Sounds/Glass.aiff' : '/System/Library/Sounds/Basso.aiff';
-    exec(`afplay ${sound}`);
+    if (type === 'success') {
+      exec('afplay /System/Library/Sounds/Glass.aiff');
+    } else if (type === 'fail') {
+      exec('afplay /System/Library/Sounds/Basso.aiff');
+    } else if (type === 'start') {
+      exec('afplay /System/Library/Sounds/Pop.aiff');
+    }
   }
 }
 
@@ -100,9 +107,11 @@ function callClaude(prompt) {
     const promptFile = path.join(AI_BRIDGE, '.temp_prompt_manager.txt');
     fs.writeFileSync(promptFile, prompt);
 
+    // OS별 claude 경로
+    const claudePath = os.platform() === 'darwin' ? '/opt/homebrew/bin/claude' : 'claude';
     const cmd = os.platform() === 'win32'
-      ? `type "${promptFile}" | claude -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`
-      : `cat "${promptFile}" | claude -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`;
+      ? `type "${promptFile}" | ${claudePath} -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`
+      : `cat "${promptFile}" | ${claudePath} -p --model claude-sonnet-4-20250514 --dangerously-skip-permissions`;
 
     exec(cmd, { cwd: PROJECT_ROOT, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       try { fs.unlinkSync(promptFile); } catch (e) {}
@@ -174,6 +183,9 @@ async function handleBigstep(filepath) {
   console.log(`[Manager] 빅스텝 감지: ${filename}`);
   console.log('='.repeat(60));
   
+  // 시작 알림
+  playSound('start');
+  
   const bigstepContent = fs.readFileSync(filepath, 'utf8');
   const bigstepId = filename.match(/BIG_(\d+)/)?.[1] || '000';
   
@@ -207,7 +219,7 @@ ${bigstepContent}
     
   } catch (e) {
     console.error(`[Manager] 처리 실패: ${e.message}`);
-    playSound(false);
+    playSound('fail');
   }
 }
 
@@ -359,7 +371,7 @@ ${actualCode || '(변경된 코드 파일 없음)'}
       fs.writeFileSync(reportPath, finalReport);
       console.log(`[Manager] 보고서 생성: ${reportFilename}`);
       console.log(`[Manager] 결과 검토 완료 ✅`);
-      playSound(true);
+      playSound('success');
       
     } else {
       // 실패 → 재지시 생성 → Worker 다시 호출
@@ -411,14 +423,14 @@ ${resultContent}
       // Worker 다시 호출
       await runWorker();
       console.log(`[Manager] 재지시 완료 ⚠️`);
-      playSound(false);
+      playSound('fail');
     }
     
     saveProcessedFile(filename);
     
   } catch (e) {
     console.error(`[Manager] 검증 실패: ${e.message}`);
-    playSound(false);
+    playSound('fail');
   }
 }
 
