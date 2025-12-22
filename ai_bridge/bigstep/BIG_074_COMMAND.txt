@@ -1,0 +1,19 @@
+ai_bridge/bigstep/BIG_074_DUAL_DEBUG.md 지시서대로 작업하세요.
+
+프로젝트 경로: 현재 디렉토리 (EDU-VICE-Attendance)
+Flutter 앱 경로: flutter_application_1/
+
+작업:
+1. flutter devices로 연결된 디바이스 확인
+2. 폰 디바이스로 flutter run 실행 (새 터미널)
+3. chrome으로 flutter run --web-port=8080 실행 (새 터미널)
+4. 양쪽 빌드 완료될 때까지 대기
+5. 완료되면 알려주고 추가 명령 대기
+
+중요 규칙:
+- 추가 명령이 들어오면 현재 작업보다 우선 처리
+- "테스트 종료" 명령 시: 로그 요약 + ai_bridge/report/big_074_report.md 보고서 작성
+- "로그 확인" 명령 시: 현재 로그 상태 보고
+- 임의로 종료하지 말고 명령 대기
+
+시작하세요.

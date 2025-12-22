@@ -1,77 +1,114 @@
 # 자주 쓰는 패턴
 
-> 이 문서는 반복되는 작업의 패턴을 정리합니다.
-> "이거 어떻게 하더라?" 할 때 참고하세요.
+> "이거 어떻게 하더라?" 할 때 참고
 
 ---
 
-## 📝 빅스텝 작성 패턴
+## 🚀 실행 패턴
 
-### 기본 템플릿
+### 수동 모드 (Opus-Sonnet 체인)
 
-```markdown
-# BIG_XXX: 제목
+```bash
+npm run claude:opus
+# 빅스텝 명령어 복붙
+# Opus가 Sonnet 부려서 작업
+# "테스트 종료" 입력으로 마무리
+```
 
-> **작성자**: Desktop Opus
-> **작성일**: YYYY-MM-DD
+### Sonnet 호출 (Opus가 사용)
+
+```bash
+claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "스몰스텝 내용"
+```
 
 ---
 
-## 📋 작업
+## 🔄 듀얼 디버깅 패턴
 
-(구체적인 작업 내용)
-
-1. 첫 번째 할 일
-2. 두 번째 할 일
-
-## 📋 주의사항 (선택)
-
-- 특별히 주의할 점
-```
-
-### 코드 작업
-
-```markdown
-## 📋 작업
-
-lib/features/xxx/xxx_page.dart 파일 수정:
-1. OOO 기능 추가
-2. flutter analyze 에러 0개 확인
-```
-
-### 분석 작업
-
-```markdown
-## 📋 작업
-
-XXX 현재 구현 상태 분석:
-1. 구현 완료된 것
-2. 미구현된 것
-3. 버그나 문제점
-4. 결과 상세히 보고
-```
-
-### 커밋 작업
-
-```markdown
-## 📋 작업
+### Sonnet 동시 호출
 
 ```bash
-git add -A
-git commit -m "feat: 커밋 메시지"
-git push origin dev
-```
+# Opus가 이 두 명령을 동시에 실행:
+
+# Sonnet 1 - 폰 빌드
+claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "cd flutter_application_1 && flutter run -d RFCY40MNBLL"
+
+# Sonnet 2 - 웹 빌드 (동시에!)
+claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "cd flutter_application_1 && flutter run -d chrome --web-port=8080"
 ```
 
-### 서버 실행
+### 왜 동시 호출?
+
+- 각 `claude` 명령은 별도 프로세스
+- 순차 호출하면 첫 번째가 블로킹
+- 동시 호출해야 진짜 "듀얼"
+
+---
+
+## 📝 빅스텝 템플릿
+
+### 듀얼 디버깅
 
 ```markdown
-## 📋 작업
+## 📋 초기 명령어 (복붙용)
 
-```bash
-call C:\gitproject\EDU-VICE-Attendance\scripts\start_web.bat
+\`\`\`
+당신은 Manager(Opus)입니다.
+
+## 작업 목표
+듀얼 디버깅: 폰 + Chrome 동시 실행
+
+## 스몰스텝
+1. Sonnet: 디바이스 확인
+2. Sonnet 2개 동시: 폰 빌드 + 웹 빌드
+3. 검증 후 CP 명령 대기
+
+## Sonnet 호출
+claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "..."
+
+## 보고서 규칙
+- Sonnet: 텍스트 보고만
+- Opus: 보고서 파일 작성
+
+시작하세요.
+\`\`\`
 ```
+
+### 코드 수정
+
+```markdown
+## 📋 초기 명령어 (복붙용)
+
+\`\`\`
+당신은 Manager(Opus)입니다.
+
+## 작업 목표
+login_page.dart 버그 수정
+
+## 스몰스텝
+1. Sonnet: 현재 코드 확인
+2. Sonnet: 버그 수정
+3. Sonnet: flutter analyze
+4. 검증 후 보고서
+
+## 보고서 규칙
+- Sonnet: 텍스트 보고만
+- Opus: 보고서 파일 작성
+
+시작하세요.
+\`\`\`
 ```
+
+---
+
+## 📊 보고서 규칙
+
+| 역할 | 보고 방식 |
+|------|----------|
+| Sonnet | 텍스트로 결과 보고 (파일 X) |
+| Opus | 최종 보고서 파일 작성 |
+
+→ **중복 방지!**
 
 ---
 
@@ -87,27 +124,11 @@ if (!kIsWeb) {
 }
 ```
 
-### GraphQL API 호출
-
-```dart
-final request = ModelQueries.list(ModelType.classType);
-final response = await Amplify.API.query(request: request).response;
-```
-
-### S3 업로드
-
-```dart
-final result = await Amplify.Storage.uploadFile(
-  localFile: AWSFile.fromPath(filePath),
-  path: StoragePath.fromString('public/profiles/$userId.jpg'),
-).result;
-```
-
 ### Cognito 사용자 정보
 
 ```dart
 final user = await Amplify.Auth.getCurrentUser();
-final userId = user.userId;  // Cognito sub
+final userId = user.userId;  // Cognito sub (중요!)
 ```
 
 ---
@@ -116,136 +137,40 @@ final userId = user.userId;  // Cognito sub
 
 ### MissingPluginException (웹)
 
-**원인**: 웹에서 지원 안 되는 플러그인
-
-**해결**:
 ```dart
 if (!kIsWeb) {
   plugins.add(AmplifyDataStore(...));
 }
 ```
 
-### flutter analyze 에러
-
-**해결 순서**:
-1. 에러 메시지 읽기
-2. 해당 파일/라인 수정
-3. 다시 flutter analyze
-4. 에러 0개 될 때까지 반복
-
 ### git index.lock
 
-**원인**: 다른 git 프로세스 실행 중
-
-**해결**:
 ```bash
-del .git\index.lock
-```
-
----
-
-## 📂 파일 위치 패턴
-
-### 새 기능 추가 시
-
-```
-lib/features/{기능명}/
-├── {기능명}_page.dart      # UI
-├── {기능명}_state.dart     # 상태
-└── widgets/                # 하위 위젯
-```
-
-### 서비스 추가 시
-
-```
-lib/shared/services/{서비스명}_service.dart
-```
-
-### 모델 추가 시
-
-```
-lib/models/{모델명}.dart  # Amplify 생성
-```
-
----
-
-## 🔄 재지시 처리 패턴
-
-Manager가 FAIL 판단 시:
-
-1. `SMALL_XXX_02_RETRY.md` 자동 생성
-2. Worker 자동 재호출
-3. 수정된 결과 제출
-4. 다시 교차검증
-
-**무한 루프 주의**: 현재 재시도 횟수 제한 없음 (향후 개선 예정)
-
----
-
-## 📊 테스트 환경 패턴
-
-### 웹 2계정 동시 테스트
-
-```
-창 1: localhost:8080 (일반)
-창 2: localhost:8080 (시크릿 모드 Ctrl+Shift+N)
-```
-
-### 웹 + 모바일 동시
-
-```
-웹: localhost:8080
-폰: scrcpy 또는 실제 기기
+rm .git/index.lock  # Mac
+del .git\index.lock  # Windows
 ```
 
 ---
 
 ## 💡 생산성 팁
 
-### 1. 복잡한 작업 분리
+### 1. 역할 분담 기억
 
 ```
-❌ BIG_001: "로그인 전체 구현해"
-
-✅ 
-BIG_001: "auth_service.dart 만들어"
-BIG_002: "login_page.dart 만들어"
-BIG_003: "연결해서 테스트해"
+Opus = 머리 (분석, 검증, 보고서 파일)
+Sonnet = 손발 (실행, 텍스트 보고)
 ```
 
-### 2. 구체적으로 지시
+### 2. 듀얼은 동시 호출
 
 ```
-❌ "버그 고쳐"
-
-✅ "login_page.dart 45번 라인에서 null 에러 나는데, 
-    user가 null일 때 처리 추가해"
+❌ Sonnet 1 → 대기 → Sonnet 2
+✅ Sonnet 1 + Sonnet 2 동시
 ```
 
-### 3. 확인 포인트 명시
+### 3. 보고서 중복 주의
 
 ```
-✅ "수정 후 flutter analyze 에러 0개 확인"
-✅ "로그인 버튼 누르면 홈으로 이동하는지 확인"
+❌ Sonnet도 파일, Opus도 파일 → 2개!
+✅ Sonnet은 텍스트만, Opus만 파일 → 1개!
 ```
-
----
-
-## 🎯 Phase 2 관련 패턴
-
-### 초대 시스템
-
-- 초대 코드: 6자리, 혼동 문자 제외
-- 만료: 7일
-- 서비스: `invitation_service.dart`
-
-### 역할 계층
-
-```
-관리자 > 원장 > 선생 > 학생 > 서포터
-```
-
-### 컨텍스트 스위칭
-
-- 한 사람이 여러 역할 가능
-- Academy 선택 → Role 결정 → Shell 라우팅

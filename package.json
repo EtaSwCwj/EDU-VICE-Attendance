@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "scripts": {
     "watch:manager": "node scripts/manager_watcher.js",
+    "claude:opus": "claude --model claude-opus-4-20250514 --dangerously-skip-permissions",
     "pack:flutter": "powershell -ExecutionPolicy Bypass -File ./scripts/pack_flutter_save.ps1",
     "dev:scrcpy": "powershell -ExecutionPolicy Bypass -File ./scripts/scrcpy_dev.ps1",
     "analyze": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ./flutter_application_1; flutter analyze\"",
@@ -12,6 +13,7 @@
     "watch:task": "node scripts/auto_task_watcher.js",
     "watch:worker": "node scripts/worker_watcher.js",
     "watch:all": "concurrently \"npm run watch:manager\" \"npm run watch:worker\""
+    
   },
   "devDependencies": {
     "gh-pages": "^6.3.0",
