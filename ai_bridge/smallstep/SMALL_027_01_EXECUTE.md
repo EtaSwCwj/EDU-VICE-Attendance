@@ -1,6 +1,7 @@
 # SMALL_027_01_EXECUTE.md
 
 > **빅스텝**: BIG_027_BAT_WEB.md
+> **작업 유형**: code
 
 ---
 
@@ -25,5 +26,11 @@ C:\gitproject\EDU-VICE-Attendance\scripts\start_web.bat
 
 
 ---
+
+## 실행 지침
+
+1. 위 빅스텝 내용을 정확히 수행하세요
+2. 중간에 확인 묻지 말고 끝까지 진행하세요
+3. 작업 완료 후 결과 파일 생성 필수
 
 **결과는 `C:\gitproject\EDU-VICE-Attendance\ai_bridge\result\small_027_01_result.md`에 저장할 것.**

@@ -1,0 +1,11 @@
+프로젝트 경로: C:\gitproject\EDU-VICE-Attendance\flutter_application_1
+
+작업: flutter run -d chrome 실행하고 빌드 완료까지 대기
+
+지침:
+1. cd C:\gitproject\EDU-VICE-Attendance\flutter_application_1
+2. flutter run -d chrome --web-port=8080 실행
+3. "Flutter run key commands" 또는 "앱이 실행됨" 또는 "Syncing files" 메시지가 보일 때까지 대기
+4. 빌드 완료되면 "웹 빌드 완료" 출력
+
+중요: 빌드 완료될 때까지 종료하지 마세요. flutter run은 계속 실행 상태로 두세요.
