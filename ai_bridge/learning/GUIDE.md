@@ -1,7 +1,7 @@
 # 2실린더 자동화 시스템 가이드
 
-> **버전**: v7.1 (2025-12-23)
-> **마지막 업데이트**: Opus-Sonnet 체인, Sonnet 동시 호출 (듀얼 디버깅)
+> **버전**: v7.3 (2025-12-23)
+> **마지막 업데이트**: 듀얼 디버깅 검증 규칙 강화
 
 ---
 
@@ -16,24 +16,39 @@ Opus (Manager): 분석 → 스몰스텝 분해 → Sonnet 호출 → 검증
       ↓
 Sonnet (Worker): 실제 작업 실행 → 텍스트 보고
       ↓
-Opus: 최종 보고서 파일 작성
+Opus: 로그 저장 → 최종 보고서 파일 작성
 ```
 
 ---
 
-## 📐 시스템 구조 (v7.1)
+## 📐 시스템 구조 (v7.2)
 
 ### 역할 분담
 
 | 역할 | 모델 | 담당 |
 |------|------|------|
-| Manager | Opus | 분석, 분해, 검증, **보고서 파일 작성** |
+| Manager | Opus | 분석, 분해, 검증, **로그 저장**, **보고서 파일 작성** |
 | Worker | Sonnet | 작업 실행, **텍스트 보고만** |
 
 ### 보고서 중복 방지
 
 - Sonnet: 결과를 텍스트로만 보고 (파일 X)
-- Opus: 최종 보고서만 파일로 작성
+- Opus: 로그 저장 + 최종 보고서만 파일로 작성
+
+---
+
+## 🆕 Sonnet 로그 저장 (v7.2)
+
+### 왜 필요?
+- Opus가 Sonnet 결과를 텍스트로만 받으면 **컨텍스트 손실**
+- 나중에 디버깅할 때 로그 필요
+
+### 규칙
+| 항목 | 값 |
+|------|-----|
+| 저장 위치 | `ai_bridge/logs/` |
+| 파일명 | `big_XXX_step_YY.log` |
+| 작성자 | Opus (Sonnet 결과 받아서 저장) |
 
 ---
 
@@ -77,41 +92,10 @@ Opus → Sonnet 1 (폰 빌드) ─┐
 2. Opus: Sonnet 2개 동시 호출
    - Sonnet 1: flutter run -d phone
    - Sonnet 2: flutter run -d chrome --web-port=8080
-3. Opus: 두 Sonnet 결과 검증
-4. Opus: CP 명령 대기 ("테스트 종료" 등)
-5. Opus: 보고서 작성
-```
-
----
-
-## 📝 빅스텝 템플릿
-
-### 듀얼 디버깅용
-
-```markdown
-## 📋 초기 명령어 (복붙용)
-
-\`\`\`
-당신은 Manager(Opus)입니다.
-
-## 작업 목표
-듀얼 디버깅: 폰 + Chrome 동시 실행
-
-## 당신의 역할
-1. Sonnet 호출해서 디바이스 확인
-2. Sonnet 2개 **동시** 호출 (폰 빌드 + 웹 빌드)
-3. 두 Sonnet 결과 검증
-4. CP 명령 대기
-
-## Sonnet 호출
-claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "..."
-
-## 보고서 규칙
-- Sonnet: 텍스트 보고만 (파일 X)
-- Opus: 최종 보고서 파일 작성
-
-시작하세요.
-\`\`\`
+3. Opus: 각 Sonnet 결과 로그 저장
+4. Opus: 두 Sonnet 결과 검증
+5. Opus: CP 명령 대기 ("테스트 종료" 등)
+6. Opus: 보고서 작성
 ```
 
 ---
@@ -129,6 +113,9 @@ ai_bridge/
 │
 ├── bigstep/               # 작업 지시서
 │   └── BIG_XXX_제목.md
+│
+├── logs/                  # Sonnet 실행 로그 (v7.2)
+│   └── big_XXX_step_YY.log
 │
 └── report/                # 보고서 (Opus만 작성)
     └── big_XXX_report.md
@@ -159,6 +146,7 @@ ai_bridge/
 ### Opus (Manager)
 - 직접 작업 금지 → Sonnet 시킬 것
 - Sonnet 결과 반드시 검증
+- **Sonnet 결과 로그 파일로 저장**
 - **보고서 파일은 Opus만 작성**
 - CP 명령 없이 임의 종료 금지
 
@@ -175,4 +163,6 @@ ai_bridge/
 |------|------|
 | v6 | Opus 통합 관리 |
 | v7 | 수동 모드 추가 |
-| **v7.1** | **Opus-Sonnet 체인, 동시 호출, 보고서 중복 방지** |
+| v7.1 | Opus-Sonnet 체인, 동시 호출, 보고서 중복 방지 |
+| v7.2 | Sonnet 로그 파일 저장 추가 |
+| **v7.3** | **듀얼 디버깅 검증 규칙 강화 (에러 메시지 ≠ 실패)** |
