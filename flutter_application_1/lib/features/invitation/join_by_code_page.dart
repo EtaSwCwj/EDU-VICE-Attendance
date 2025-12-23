@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../shared/services/invitation_service.dart';
 import '../../shared/services/academy_member_service.dart';
-import '../../shared/services/student_supporter_service.dart';
 
 class JoinByCodePage extends StatefulWidget {
   const JoinByCodePage({super.key});
@@ -18,7 +17,6 @@ class _JoinByCodePageState extends State<JoinByCodePage> {
   final _codeController = TextEditingController();
   final _invitationService = InvitationService();
   final _memberService = AcademyMemberService();
-  final _supporterService = StudentSupporterService();
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -64,28 +62,12 @@ class _JoinByCodePageState extends State<JoinByCodePage> {
 
       // 3. 역할에 따라 처리
       if (invitation.role == 'supporter') {
-        // 서포터인 경우: StudentSupporter 생성
-        if (invitation.targetStudentId == null) {
-          setState(() {
-            _errorMessage = '잘못된 서포터 초대입니다';
-            _isLoading = false;
-          });
-          return;
-        }
-
-        final supporter = await _supporterService.createSupporter(
-          studentMemberId: invitation.targetStudentId!,
-          supporterUserId: userId,
-          academyId: invitation.academyId,
-        );
-
-        if (supporter == null) {
-          setState(() {
-            _errorMessage = '서포터 등록에 실패했습니다 (최대 2명 제한)';
-            _isLoading = false;
-          });
-          return;
-        }
+        // TODO: 서포터 초대 로직은 별도 구현 필요
+        setState(() {
+          _errorMessage = '서포터 초대는 현재 지원되지 않습니다';
+          _isLoading = false;
+        });
+        return;
       } else {
         // 일반 역할인 경우: AcademyMember 생성
         final member = await _memberService.createMemberFromInvitation(

@@ -1,0 +1,22 @@
+{
+  "name": "invitation-email-sender",
+  "version": "1.0.0",
+  "description": "Invitation 생성 시 이메일 발송을 담당하는 Lambda 함수",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1691.0"
+  },
+  "keywords": [
+    "aws",
+    "lambda",
+    "ses",
+    "email",
+    "invitation",
+    "edu-vice"
+  ],
+  "author": "EDU-VICE Team",
+  "license": "MIT"
+}

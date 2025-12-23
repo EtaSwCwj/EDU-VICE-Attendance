@@ -47,56 +47,96 @@ claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "cd fl
 
 ## 📝 빅스텝 템플릿
 
+### ⚠️ 필수 규칙 (모든 지시서에 포함)
+
+```markdown
+## ⚠️ 필수: Opus는 직접 작업 금지!
+가급적 코드/파일 작업은 Sonnet 호출해서 시킬 것.
+
+### Sonnet 호출 방법
+claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "작업 내용"
+
+### 예외 (Opus가 직접 해도 되는 것)
+- AWS CLI (인증 필요)
+- 시스템 환경변수 접근
+- 권한 필요한 명령
+
+## 📊 진행도 업데이트 규칙
+각 스몰스텝 완료 시 지시서 파일에 진행도 업데이트:
+
+### 진행도 표시 형식
+- [ ] 미완료
+- [x] 완료
+
+### 업데이트 위치
+지시서 파일의 "스몰스텝" 섹션에 체크박스 추가
+```
+
+---
+
 ### 듀얼 디버깅
 
 ```markdown
-## 📋 초기 명령어 (복붙용)
+# BIG_XXX: 듀얼 디버깅
 
-\`\`\`
-당신은 Manager(Opus)입니다.
+## 환경
+- 프로젝트: C:\gitproject\EDU-VICE-Attendance
+- Flutter 앱: flutter_application_1/
+- 폰 디바이스: RFCY40MNBLL
+- 웹 포트: 8080
 
-## 작업 목표
-듀얼 디버깅: 폰 + Chrome 동시 실행
-
-## 스몰스텝
-1. Sonnet: 디바이스 확인
-2. Sonnet 2개 동시: 폰 빌드 + 웹 빌드
-3. 검증 후 CP 명령 대기
-
-## Sonnet 호출
+## ⚠️ 필수: Opus는 직접 작업 금지!
+가급적 코드/파일 작업은 Sonnet 호출해서 시킬 것.
 claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "..."
 
-## 보고서 규칙
-- Sonnet: 텍스트 보고만
-- Opus: 보고서 파일 작성
+## 스몰스텝 (진행 시 체크박스 업데이트!)
+- [ ] 1. Sonnet 호출: flutter devices로 디바이스 확인
+- [ ] 2. Sonnet 2개 **동시** 호출:
+   - Sonnet 1: flutter run -d RFCY40MNBLL (폰)
+   - Sonnet 2: flutter run -d chrome --web-port=8080 (웹)
+- [ ] 3. 각 Sonnet 결과 로그 저장
+- [ ] 4. 검증 후 CP 명령 대기
 
-시작하세요.
-\`\`\`
+## 보고서 규칙
+- Sonnet: 텍스트 보고만 (파일 X)
+- Opus: 로그 저장 + 최종 보고서 파일 작성
+
+## 완료 조건
+1. 폰/웹 빌드 성공
+2. 로그 파일 저장 완료
+3. CP가 "테스트 종료" 입력
+4. 보고서 작성 완료
 ```
+
+---
 
 ### 코드 수정
 
 ```markdown
-## 📋 초기 명령어 (복붙용)
+# BIG_XXX: [작업명]
 
-\`\`\`
-당신은 Manager(Opus)입니다.
+## 환경
+- 프로젝트: C:\gitproject\EDU-VICE-Attendance
+- Flutter 앱: flutter_application_1/
 
-## 작업 목표
-login_page.dart 버그 수정
+## ⚠️ 필수: Opus는 직접 작업 금지!
+가급적 코드/파일 작업은 Sonnet 호출해서 시킬 것.
+claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "..."
 
-## 스몰스텝
-1. Sonnet: 현재 코드 확인
-2. Sonnet: 버그 수정
-3. Sonnet: flutter analyze
-4. 검증 후 보고서
+## 스몰스텝 (진행 시 체크박스 업데이트!)
+- [ ] 1. Sonnet: 현재 코드 확인
+- [ ] 2. Sonnet: 코드 수정
+- [ ] 3. Sonnet: flutter analyze
+- [ ] 4. 검증 후 보고서
 
 ## 보고서 규칙
-- Sonnet: 텍스트 보고만
-- Opus: 보고서 파일 작성
+- Sonnet: 텍스트 보고만 (파일 X)
+- Opus: 로그 저장 + 최종 보고서 파일 작성
 
-시작하세요.
-\`\`\`
+## 완료 조건
+1. flutter analyze 에러 없음
+2. CP가 "테스트 종료" 입력
+3. 보고서 작성 완료
 ```
 
 ---
@@ -106,7 +146,7 @@ login_page.dart 버그 수정
 | 역할 | 보고 방식 |
 |------|----------|
 | Sonnet | 텍스트로 결과 보고 (파일 X) |
-| Opus | 최종 보고서 파일 작성 |
+| Opus | 로그 저장 + 최종 보고서 파일 작성 |
 
 → **중복 방지!**
 

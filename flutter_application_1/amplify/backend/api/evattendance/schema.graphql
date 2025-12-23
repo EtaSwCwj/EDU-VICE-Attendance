@@ -280,12 +280,15 @@ type Invitation
   id: ID!
   academyId: ID!
     @index(name: "byAcademy")
-  role: String!
-  inviteCode: String!
+  inviterUserId: ID!      # 초대한 사람 (원장)
+  inviteeEmail: String!   # 초대받은 사람 이메일
+    @index(name: "byInviteeEmail")
+  inviteeUserId: ID       # 초대받은 사람 userId (DB에 있으면)
+  role: String!           # teacher / student
+  status: String!         # pending / accepted / rejected / expired
+    @index(name: "byStatus")
+  inviteCode: String!     # QR 코드용 초대 코드
     @index(name: "byInviteCode")
-  targetEmail: String
-  targetStudentId: ID
-  createdBy: ID!
   expiresAt: AWSDateTime!
   usedAt: AWSDateTime
   usedBy: ID

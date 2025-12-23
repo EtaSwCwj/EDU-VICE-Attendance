@@ -35,9 +35,9 @@ class InvitationService {
         academyId: academyId,
         role: role,
         inviteCode: code,
-        targetEmail: targetEmail,
-        targetStudentId: targetStudentId,
-        createdBy: createdBy,
+        inviteeEmail: targetEmail ?? '',
+        inviterUserId: createdBy,
+        status: 'pending',
         expiresAt: expiresAt,
       );
 
@@ -134,7 +134,7 @@ class InvitationService {
     try {
       final invitations = await Amplify.DataStore.query(
         Invitation.classType,
-        where: Invitation.TARGETEMAIL.eq(email.toLowerCase()),
+        where: Invitation.INVITEEEMAIL.eq(email.toLowerCase()),
       );
 
       // 유효한 초대만 필터링 (만료 안 됨 + 사용 안 됨)

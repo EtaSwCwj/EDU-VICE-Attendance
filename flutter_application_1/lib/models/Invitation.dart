@@ -28,11 +28,12 @@ class Invitation extends amplify_core.Model {
   static const classType = const _InvitationModelType();
   final String id;
   final String? _academyId;
+  final String? _inviterUserId;
+  final String? _inviteeEmail;
+  final String? _inviteeUserId;
   final String? _role;
+  final String? _status;
   final String? _inviteCode;
-  final String? _targetEmail;
-  final String? _targetStudentId;
-  final String? _createdBy;
   final amplify_core.TemporalDateTime? _expiresAt;
   final amplify_core.TemporalDateTime? _usedAt;
   final String? _usedBy;
@@ -65,6 +66,36 @@ class Invitation extends amplify_core.Model {
     }
   }
   
+  String get inviterUserId {
+    try {
+      return _inviterUserId!;
+    } catch(e) {
+      throw amplify_core.AmplifyCodeGenModelException(
+          amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
+          recoverySuggestion:
+            amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastRecoverySuggestion,
+          underlyingException: e.toString()
+          );
+    }
+  }
+  
+  String get inviteeEmail {
+    try {
+      return _inviteeEmail!;
+    } catch(e) {
+      throw amplify_core.AmplifyCodeGenModelException(
+          amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
+          recoverySuggestion:
+            amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastRecoverySuggestion,
+          underlyingException: e.toString()
+          );
+    }
+  }
+  
+  String? get inviteeUserId {
+    return _inviteeUserId;
+  }
+  
   String get role {
     try {
       return _role!;
@@ -78,9 +109,9 @@ class Invitation extends amplify_core.Model {
     }
   }
   
-  String get inviteCode {
+  String get status {
     try {
-      return _inviteCode!;
+      return _status!;
     } catch(e) {
       throw amplify_core.AmplifyCodeGenModelException(
           amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
@@ -91,17 +122,9 @@ class Invitation extends amplify_core.Model {
     }
   }
   
-  String? get targetEmail {
-    return _targetEmail;
-  }
-  
-  String? get targetStudentId {
-    return _targetStudentId;
-  }
-  
-  String get createdBy {
+  String get inviteCode {
     try {
-      return _createdBy!;
+      return _inviteCode!;
     } catch(e) {
       throw amplify_core.AmplifyCodeGenModelException(
           amplify_core.AmplifyExceptionMessages.codeGenRequiredFieldForceCastExceptionMessage,
@@ -141,17 +164,18 @@ class Invitation extends amplify_core.Model {
     return _updatedAt;
   }
   
-  const Invitation._internal({required this.id, required academyId, required role, required inviteCode, targetEmail, targetStudentId, required createdBy, required expiresAt, usedAt, usedBy, createdAt, updatedAt}): _academyId = academyId, _role = role, _inviteCode = inviteCode, _targetEmail = targetEmail, _targetStudentId = targetStudentId, _createdBy = createdBy, _expiresAt = expiresAt, _usedAt = usedAt, _usedBy = usedBy, _createdAt = createdAt, _updatedAt = updatedAt;
+  const Invitation._internal({required this.id, required academyId, required inviterUserId, required inviteeEmail, inviteeUserId, required role, required status, required inviteCode, required expiresAt, usedAt, usedBy, createdAt, updatedAt}): _academyId = academyId, _inviterUserId = inviterUserId, _inviteeEmail = inviteeEmail, _inviteeUserId = inviteeUserId, _role = role, _status = status, _inviteCode = inviteCode, _expiresAt = expiresAt, _usedAt = usedAt, _usedBy = usedBy, _createdAt = createdAt, _updatedAt = updatedAt;
   
-  factory Invitation({String? id, required String academyId, required String role, required String inviteCode, String? targetEmail, String? targetStudentId, required String createdBy, required amplify_core.TemporalDateTime expiresAt, amplify_core.TemporalDateTime? usedAt, String? usedBy, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
+  factory Invitation({String? id, required String academyId, required String inviterUserId, required String inviteeEmail, String? inviteeUserId, required String role, required String status, required String inviteCode, required amplify_core.TemporalDateTime expiresAt, amplify_core.TemporalDateTime? usedAt, String? usedBy, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
     return Invitation._internal(
       id: id == null ? amplify_core.UUID.getUUID() : id,
       academyId: academyId,
+      inviterUserId: inviterUserId,
+      inviteeEmail: inviteeEmail,
+      inviteeUserId: inviteeUserId,
       role: role,
+      status: status,
       inviteCode: inviteCode,
-      targetEmail: targetEmail,
-      targetStudentId: targetStudentId,
-      createdBy: createdBy,
       expiresAt: expiresAt,
       usedAt: usedAt,
       usedBy: usedBy,
@@ -169,11 +193,12 @@ class Invitation extends amplify_core.Model {
     return other is Invitation &&
       id == other.id &&
       _academyId == other._academyId &&
+      _inviterUserId == other._inviterUserId &&
+      _inviteeEmail == other._inviteeEmail &&
+      _inviteeUserId == other._inviteeUserId &&
       _role == other._role &&
+      _status == other._status &&
       _inviteCode == other._inviteCode &&
-      _targetEmail == other._targetEmail &&
-      _targetStudentId == other._targetStudentId &&
-      _createdBy == other._createdBy &&
       _expiresAt == other._expiresAt &&
       _usedAt == other._usedAt &&
       _usedBy == other._usedBy &&
@@ -191,11 +216,12 @@ class Invitation extends amplify_core.Model {
     buffer.write("Invitation {");
     buffer.write("id=" + "$id" + ", ");
     buffer.write("academyId=" + "$_academyId" + ", ");
+    buffer.write("inviterUserId=" + "$_inviterUserId" + ", ");
+    buffer.write("inviteeEmail=" + "$_inviteeEmail" + ", ");
+    buffer.write("inviteeUserId=" + "$_inviteeUserId" + ", ");
     buffer.write("role=" + "$_role" + ", ");
+    buffer.write("status=" + "$_status" + ", ");
     buffer.write("inviteCode=" + "$_inviteCode" + ", ");
-    buffer.write("targetEmail=" + "$_targetEmail" + ", ");
-    buffer.write("targetStudentId=" + "$_targetStudentId" + ", ");
-    buffer.write("createdBy=" + "$_createdBy" + ", ");
     buffer.write("expiresAt=" + (_expiresAt != null ? _expiresAt!.format() : "null") + ", ");
     buffer.write("usedAt=" + (_usedAt != null ? _usedAt!.format() : "null") + ", ");
     buffer.write("usedBy=" + "$_usedBy" + ", ");
@@ -206,15 +232,16 @@ class Invitation extends amplify_core.Model {
     return buffer.toString();
   }
   
-  Invitation copyWith({String? academyId, String? role, String? inviteCode, String? targetEmail, String? targetStudentId, String? createdBy, amplify_core.TemporalDateTime? expiresAt, amplify_core.TemporalDateTime? usedAt, String? usedBy, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
+  Invitation copyWith({String? academyId, String? inviterUserId, String? inviteeEmail, String? inviteeUserId, String? role, String? status, String? inviteCode, amplify_core.TemporalDateTime? expiresAt, amplify_core.TemporalDateTime? usedAt, String? usedBy, amplify_core.TemporalDateTime? createdAt, amplify_core.TemporalDateTime? updatedAt}) {
     return Invitation._internal(
       id: id,
       academyId: academyId ?? this.academyId,
+      inviterUserId: inviterUserId ?? this.inviterUserId,
+      inviteeEmail: inviteeEmail ?? this.inviteeEmail,
+      inviteeUserId: inviteeUserId ?? this.inviteeUserId,
       role: role ?? this.role,
+      status: status ?? this.status,
       inviteCode: inviteCode ?? this.inviteCode,
-      targetEmail: targetEmail ?? this.targetEmail,
-      targetStudentId: targetStudentId ?? this.targetStudentId,
-      createdBy: createdBy ?? this.createdBy,
       expiresAt: expiresAt ?? this.expiresAt,
       usedAt: usedAt ?? this.usedAt,
       usedBy: usedBy ?? this.usedBy,
@@ -224,11 +251,12 @@ class Invitation extends amplify_core.Model {
   
   Invitation copyWithModelFieldValues({
     ModelFieldValue<String>? academyId,
+    ModelFieldValue<String>? inviterUserId,
+    ModelFieldValue<String>? inviteeEmail,
+    ModelFieldValue<String?>? inviteeUserId,
     ModelFieldValue<String>? role,
+    ModelFieldValue<String>? status,
     ModelFieldValue<String>? inviteCode,
-    ModelFieldValue<String?>? targetEmail,
-    ModelFieldValue<String?>? targetStudentId,
-    ModelFieldValue<String>? createdBy,
     ModelFieldValue<amplify_core.TemporalDateTime>? expiresAt,
     ModelFieldValue<amplify_core.TemporalDateTime?>? usedAt,
     ModelFieldValue<String?>? usedBy,
@@ -238,11 +266,12 @@ class Invitation extends amplify_core.Model {
     return Invitation._internal(
       id: id,
       academyId: academyId == null ? this.academyId : academyId.value,
+      inviterUserId: inviterUserId == null ? this.inviterUserId : inviterUserId.value,
+      inviteeEmail: inviteeEmail == null ? this.inviteeEmail : inviteeEmail.value,
+      inviteeUserId: inviteeUserId == null ? this.inviteeUserId : inviteeUserId.value,
       role: role == null ? this.role : role.value,
+      status: status == null ? this.status : status.value,
       inviteCode: inviteCode == null ? this.inviteCode : inviteCode.value,
-      targetEmail: targetEmail == null ? this.targetEmail : targetEmail.value,
-      targetStudentId: targetStudentId == null ? this.targetStudentId : targetStudentId.value,
-      createdBy: createdBy == null ? this.createdBy : createdBy.value,
       expiresAt: expiresAt == null ? this.expiresAt : expiresAt.value,
       usedAt: usedAt == null ? this.usedAt : usedAt.value,
       usedBy: usedBy == null ? this.usedBy : usedBy.value,
@@ -254,11 +283,12 @@ class Invitation extends amplify_core.Model {
   Invitation.fromJson(Map<String, dynamic> json)  
     : id = json['id'],
       _academyId = json['academyId'],
+      _inviterUserId = json['inviterUserId'],
+      _inviteeEmail = json['inviteeEmail'],
+      _inviteeUserId = json['inviteeUserId'],
       _role = json['role'],
+      _status = json['status'],
       _inviteCode = json['inviteCode'],
-      _targetEmail = json['targetEmail'],
-      _targetStudentId = json['targetStudentId'],
-      _createdBy = json['createdBy'],
       _expiresAt = json['expiresAt'] != null ? amplify_core.TemporalDateTime.fromString(json['expiresAt']) : null,
       _usedAt = json['usedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['usedAt']) : null,
       _usedBy = json['usedBy'],
@@ -266,17 +296,18 @@ class Invitation extends amplify_core.Model {
       _updatedAt = json['updatedAt'] != null ? amplify_core.TemporalDateTime.fromString(json['updatedAt']) : null;
   
   Map<String, dynamic> toJson() => {
-    'id': id, 'academyId': _academyId, 'role': _role, 'inviteCode': _inviteCode, 'targetEmail': _targetEmail, 'targetStudentId': _targetStudentId, 'createdBy': _createdBy, 'expiresAt': _expiresAt?.format(), 'usedAt': _usedAt?.format(), 'usedBy': _usedBy, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
+    'id': id, 'academyId': _academyId, 'inviterUserId': _inviterUserId, 'inviteeEmail': _inviteeEmail, 'inviteeUserId': _inviteeUserId, 'role': _role, 'status': _status, 'inviteCode': _inviteCode, 'expiresAt': _expiresAt?.format(), 'usedAt': _usedAt?.format(), 'usedBy': _usedBy, 'createdAt': _createdAt?.format(), 'updatedAt': _updatedAt?.format()
   };
   
   Map<String, Object?> toMap() => {
     'id': id,
     'academyId': _academyId,
+    'inviterUserId': _inviterUserId,
+    'inviteeEmail': _inviteeEmail,
+    'inviteeUserId': _inviteeUserId,
     'role': _role,
+    'status': _status,
     'inviteCode': _inviteCode,
-    'targetEmail': _targetEmail,
-    'targetStudentId': _targetStudentId,
-    'createdBy': _createdBy,
     'expiresAt': _expiresAt,
     'usedAt': _usedAt,
     'usedBy': _usedBy,
@@ -287,11 +318,12 @@ class Invitation extends amplify_core.Model {
   static final amplify_core.QueryModelIdentifier<InvitationModelIdentifier> MODEL_IDENTIFIER = amplify_core.QueryModelIdentifier<InvitationModelIdentifier>();
   static final ID = amplify_core.QueryField(fieldName: "id");
   static final ACADEMYID = amplify_core.QueryField(fieldName: "academyId");
+  static final INVITERUSERID = amplify_core.QueryField(fieldName: "inviterUserId");
+  static final INVITEEEMAIL = amplify_core.QueryField(fieldName: "inviteeEmail");
+  static final INVITEEUSERID = amplify_core.QueryField(fieldName: "inviteeUserId");
   static final ROLE = amplify_core.QueryField(fieldName: "role");
+  static final STATUS = amplify_core.QueryField(fieldName: "status");
   static final INVITECODE = amplify_core.QueryField(fieldName: "inviteCode");
-  static final TARGETEMAIL = amplify_core.QueryField(fieldName: "targetEmail");
-  static final TARGETSTUDENTID = amplify_core.QueryField(fieldName: "targetStudentId");
-  static final CREATEDBY = amplify_core.QueryField(fieldName: "createdBy");
   static final EXPIRESAT = amplify_core.QueryField(fieldName: "expiresAt");
   static final USEDAT = amplify_core.QueryField(fieldName: "usedAt");
   static final USEDBY = amplify_core.QueryField(fieldName: "usedBy");
@@ -322,6 +354,8 @@ class Invitation extends amplify_core.Model {
     
     modelSchemaDefinition.indexes = [
       amplify_core.ModelIndex(fields: const ["academyId"], name: "byAcademy"),
+      amplify_core.ModelIndex(fields: const ["inviteeEmail"], name: "byInviteeEmail"),
+      amplify_core.ModelIndex(fields: const ["status"], name: "byStatus"),
       amplify_core.ModelIndex(fields: const ["inviteCode"], name: "byInviteCode")
     ];
     
@@ -334,31 +368,37 @@ class Invitation extends amplify_core.Model {
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: Invitation.INVITERUSERID,
+      isRequired: true,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: Invitation.INVITEEEMAIL,
+      isRequired: true,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
+      key: Invitation.INVITEEUSERID,
+      isRequired: false,
+      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
+    ));
+    
+    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
       key: Invitation.ROLE,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Invitation.INVITECODE,
+      key: Invitation.STATUS,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
     
     modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Invitation.TARGETEMAIL,
-      isRequired: false,
-      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
-    ));
-    
-    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Invitation.TARGETSTUDENTID,
-      isRequired: false,
-      ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
-    ));
-    
-    modelSchemaDefinition.addField(amplify_core.ModelFieldDefinition.field(
-      key: Invitation.CREATEDBY,
+      key: Invitation.INVITECODE,
       isRequired: true,
       ofType: amplify_core.ModelFieldType(amplify_core.ModelFieldTypeEnum.string)
     ));
