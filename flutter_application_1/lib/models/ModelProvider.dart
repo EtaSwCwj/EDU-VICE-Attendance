@@ -28,10 +28,15 @@ import 'Book.dart';
 import 'Chapter.dart';
 import 'Invitation.dart';
 import 'Lesson.dart';
+import 'Problem.dart';
+import 'ProblemType.dart';
 import 'Student.dart';
+import 'StudentProblemRecord.dart';
 import 'StudentSupporter.dart';
 import 'Teacher.dart';
 import 'TeacherStudent.dart';
+import 'Textbook.dart';
+import 'TextbookChapter.dart';
 
 export 'Academy.dart';
 export 'AcademyMember.dart';
@@ -40,21 +45,28 @@ export 'Assignment.dart';
 export 'AssignmentStatus.dart';
 export 'Book.dart';
 export 'Chapter.dart';
+export 'Difficulty.dart';
 export 'Grade.dart';
 export 'Invitation.dart';
 export 'Lesson.dart';
 export 'LessonStatus.dart';
+export 'Problem.dart';
+export 'ProblemCategory.dart';
+export 'ProblemType.dart';
 export 'Student.dart';
+export 'StudentProblemRecord.dart';
 export 'StudentSupporter.dart';
 export 'Subject.dart';
 export 'Teacher.dart';
 export 'TeacherStudent.dart';
+export 'Textbook.dart';
+export 'TextbookChapter.dart';
 
 class ModelProvider implements amplify_core.ModelProviderInterface {
   @override
-  String version = "760db086e620cd7fc7399040d1653db5";
+  String version = "e357f252e2dde47ae7bfc5f9b616eb89";
   @override
-  List<amplify_core.ModelSchema> modelSchemas = [Academy.schema, AcademyMember.schema, AppUser.schema, Assignment.schema, Book.schema, Chapter.schema, Invitation.schema, Lesson.schema, Student.schema, StudentSupporter.schema, Teacher.schema, TeacherStudent.schema];
+  List<amplify_core.ModelSchema> modelSchemas = [Academy.schema, AcademyMember.schema, AppUser.schema, Assignment.schema, Book.schema, Chapter.schema, Invitation.schema, Lesson.schema, Problem.schema, ProblemType.schema, Student.schema, StudentProblemRecord.schema, StudentSupporter.schema, Teacher.schema, TeacherStudent.schema, Textbook.schema, TextbookChapter.schema];
   @override
   List<amplify_core.ModelSchema> customTypeSchemas = [];
   static final ModelProvider _instance = ModelProvider();
@@ -79,14 +91,24 @@ class ModelProvider implements amplify_core.ModelProviderInterface {
         return Invitation.classType;
       case "Lesson":
         return Lesson.classType;
+      case "Problem":
+        return Problem.classType;
+      case "ProblemType":
+        return ProblemType.classType;
       case "Student":
         return Student.classType;
+      case "StudentProblemRecord":
+        return StudentProblemRecord.classType;
       case "StudentSupporter":
         return StudentSupporter.classType;
       case "Teacher":
         return Teacher.classType;
       case "TeacherStudent":
         return TeacherStudent.classType;
+      case "Textbook":
+        return Textbook.classType;
+      case "TextbookChapter":
+        return TextbookChapter.classType;
       default:
         throw Exception("Failed to find model in model provider for model name: " + modelName);
     }

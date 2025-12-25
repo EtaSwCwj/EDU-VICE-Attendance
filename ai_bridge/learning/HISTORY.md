@@ -4,6 +4,51 @@
 
 ---
 
+## 2025-12-26 - Phase 3 교재 분석 시스템 구현
+
+### 🎯 목표
+
+Claude API로 교재 이미지/PDF 분석 → DB 저장
+
+### ✅ 완료된 작업
+
+| 작업 | 파일 | 상태 |
+|------|------|------|
+| Claude API 서비스 | `claude_api_service.dart` | ✅ |
+| API 키 설정 페이지 | `api_key_settings_page.dart` | ✅ |
+| 교재 분석 페이지 | `textbook_analyzer_page.dart` | ✅ |
+| PDF 지원 추가 | `file_picker` 사용 | ✅ |
+| DB 저장 기능 | Amplify API 연동 | ✅ |
+| 선생님 탭 연결 | `teacher_shell.dart` | ✅ |
+
+### 🐛 발견 및 수정된 버그
+
+1. **go_router 네비게이션 버그**
+   - 문제: `Navigator.pushNamed()` 사용 → 동작 안 함
+   - 해결: `context.push()` 사용
+
+2. **라우터 순서 버그**
+   - 문제: `/settings/:role`이 `/settings/api-key`보다 먼저 매칭
+   - 해결: 구체적 경로(`/settings/api-key`)를 와일드카드(`/settings/:role`)보다 앞에 배치
+
+### ❌ 실패한 시도
+
+**교재 문제 이미지 개별 추출**
+- Vision AI로 PDF 페이지에서 개별 문제 좌표 추출 시도
+- 결과: 실패 (좌표 정확도 부족)
+- 원인: AI는 이미지를 "의미 단위"로 이해, "픽셀 단위" 아님
+
+### 📝 핵심 교훈
+
+```
+1. Vision AI는 좌표 추출에 부적합
+2. go_router 프로젝트 → context.push() 사용
+3. 라우터 순서: 구체적 경로 먼저, 와일드카드 나중
+4. 보고서 검토 시 실제 코드도 검증 필수
+```
+
+---
+
 ## 2025-12-23 - v7.3 (듀얼 디버깅 검증 규칙 강화)
 
 ### 🎯 목표

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../home/dashboard_pages.dart';
 import '../teacher_homework/teacher_homework_page_aws.dart';
+import '../textbook/textbook_analyzer_page.dart';
 import '../../shared/services/auth_state.dart';
 
 /// 교사용 홈 쉘:
@@ -27,9 +28,10 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
     final pages = <Widget>[
       const TeacherDashboardPage(),
       const TeacherHomeworkPageAws(),
+      const TextbookAnalyzerPage(),
     ];
 
-    final titles = <String>["교사 대시보드", "과제"];
+    final titles = <String>["교사 대시보드", "과제", "교재 분석"];
 
     return Scaffold(
       appBar: AppBar(title: Text(titles[_index])),
@@ -144,6 +146,7 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: '대시보드'),
           NavigationDestination(icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment), label: '과제'),
+          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: '교재'),
         ],
         onDestinationSelected: (i) => setState(() => _index = i),
       ),

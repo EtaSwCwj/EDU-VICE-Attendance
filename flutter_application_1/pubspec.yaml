@@ -53,6 +53,8 @@ dependencies:
   qr_flutter: ^4.1.0
   encrypt: ^5.0.1
   mobile_scanner: ^4.0.0
+  http: ^1.1.0
+  flutter_secure_storage: ^9.0.0
 
   # Logging
   logger: ^2.0.2

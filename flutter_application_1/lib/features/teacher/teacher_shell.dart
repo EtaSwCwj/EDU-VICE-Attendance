@@ -7,7 +7,7 @@ import 'pages/teacher_home_page_new.dart';
 import 'pages/teacher_classes_page.dart';
 import 'pages/teacher_students_page.dart';
 import '../teacher_homework/teacher_homework_page_aws.dart';
-import '../books/presentation/pages/book_management_page.dart';
+import '../textbook/textbook_analyzer_page.dart';
 import '../../shared/services/auth_state.dart';
 import '../../shared/widgets/profile_avatar.dart';
 
@@ -28,7 +28,7 @@ class _TeacherShellState extends State<TeacherShell> {
     TeacherClassesPage(),     // 반 관리
     TeacherStudentsPage(),    // 학생 관리
     TeacherHomeworkPageAws(), // 숙제 관리 (AWS)
-    BookManagementPage(),     // 교재 관리 + 설정 접근
+    TextbookAnalyzerPage(),   // 교재 분석
   ];
 
   static const _pageTitles = <String>[

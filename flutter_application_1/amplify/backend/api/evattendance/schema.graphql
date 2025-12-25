@@ -274,6 +274,7 @@ type Invitation
   @model
   @auth(rules: [
     { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "inviteeUserId", operations: [read, update] },
     { allow: private, operations: [read] }
   ])
 {
@@ -315,6 +316,153 @@ type StudentSupporter
   academyId: ID!
     @index(name: "byAcademy")
   relationship: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 3: 교재 DB + AI 분석
+# ═══════════════════════════════════════════════════════════════════
+
+enum ProblemCategory { CONCEPT APPLICATION }
+
+enum Difficulty { BASIC MEDIUM HARD }
+
+# ─────────────────────────────────────────────────────────────────────
+# Textbook (교재 - 상세 정보)
+# ─────────────────────────────────────────────────────────────────────
+
+type Textbook
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: groups, groups: ["teachers"], operations: [create, read, update] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  title: String!
+    @index(name: "byTitle", queryField: "textbooksByTitle")
+  subject: Subject!
+    @index(name: "bySubject", queryField: "textbooksBySubject")
+  grade: String!
+    @index(name: "byGrade", queryField: "textbooksByGrade")
+  semester: String          # "1" | "2" | "전체"
+  publisher: String!
+  edition: String           # "유형편", "개념편", "심화편" 등
+  publishYear: Int!
+  totalPages: Int
+  coverImageUrl: String
+  registeredBy: ID          # 등록한 사용자 ID
+  isVerified: Boolean       # 검증 완료 여부
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# TextbookChapter (교재 단원)
+# ─────────────────────────────────────────────────────────────────────
+
+type TextbookChapter
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: groups, groups: ["teachers"], operations: [create, read, update] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  textbookId: ID!
+    @index(name: "byTextbook", queryField: "chaptersByTextbook", sortKeyFields: ["number"])
+  section: String           # "I. 수와 식의 계산"
+  number: Int!              # 1, 2, 3...
+  title: String!
+  startPage: Int!
+  endPage: Int!
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# ProblemType (문제 유형)
+# ─────────────────────────────────────────────────────────────────────
+
+type ProblemType
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: groups, groups: ["teachers"], operations: [create, read, update] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  chapterId: ID!
+    @index(name: "byChapter", queryField: "problemTypesByChapter", sortKeyFields: ["number"])
+  number: Int!
+  title: String!
+  category: ProblemCategory!  # CONCEPT | APPLICATION
+  description: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Problem (문제)
+# ─────────────────────────────────────────────────────────────────────
+
+type Problem
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: groups, groups: ["teachers"], operations: [create, read, update] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  textbookId: ID!
+    @index(name: "byTextbook", queryField: "problemsByTextbook")
+  chapterId: ID!
+    @index(name: "byChapter", queryField: "problemsByChapter", sortKeyFields: ["page"])
+  typeId: ID
+    @index(name: "byType", queryField: "problemsByType")
+  page: Int!
+  number: String!           # "1", "1-1", "2" 등
+  difficulty: Difficulty!   # BASIC | MEDIUM | HARD
+  category: ProblemCategory!  # CONCEPT | APPLICATION
+  question: String          # 문제 텍스트 (선택)
+  answer: String!           # 정답
+  concepts: [String]        # 관련 개념 태그
+  imageUrl: String          # 문제 이미지 URL
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# StudentProblemRecord (학생 문제 풀이 기록 - AI 분석용)
+# ─────────────────────────────────────────────────────────────────────
+
+type StudentProblemRecord
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "studentUserId", operations: [create, read, update] },
+    { allow: groups, groups: ["teachers"], operations: [read] }
+  ])
+{
+  id: ID!
+  studentUserId: ID!
+    @index(name: "byStudent", queryField: "recordsByStudent", sortKeyFields: ["solvedAt"])
+  problemId: ID!
+    @index(name: "byProblem", queryField: "recordsByProblem")
+  textbookId: ID!
+    @index(name: "byTextbook", queryField: "recordsByTextbook")
+  chapterId: ID!
+    @index(name: "byChapter", queryField: "recordsByChapter")
+  isCorrect: Boolean!
+  studentAnswer: String     # 학생이 쓴 답
+  solvedAt: AWSDateTime!
+  timeSpent: Int            # 풀이 시간 (초)
+  attempts: Int             # 시도 횟수
   createdAt: AWSDateTime
   updatedAt: AWSDateTime
 }

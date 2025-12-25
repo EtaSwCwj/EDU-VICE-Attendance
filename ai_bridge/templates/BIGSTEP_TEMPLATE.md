@@ -49,6 +49,7 @@ claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "작�
 
 ### 예외 (Opus가 직접 해도 되는 것)
 - AWS CLI (인증 필요)
+- amplify 명령어 (대화형 입력 필요)
 
 ---
 
@@ -57,6 +58,24 @@ claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "작�
 - 프로젝트: C:\gitproject\EDU-VICE-Attendance
 - 수정 파일: [파일 경로]
 - 테스트 계정: maknae12@gmail.com (AppUser ID: a498ad1c-6011-70c6-2f00-92a2fad64b02)
+
+---
+
+## 🎯 기대 결과 & 테스트 시나리오
+
+> **CP 확인용**: 이 작업이 성공하면 어떻게 되는지
+
+### 기대 결과
+- [이 작업 완료 시 어떤 기능이 동작하는지]
+- [사용자가 어떤 경험을 하게 되는지]
+
+### 테스트 시나리오
+```
+1. [첫 번째 단계] → [예상 결과]
+2. [두 번째 단계] → [예상 결과]
+3. [세 번째 단계] → [예상 결과]
+4. [최종 확인] → [성공 조건]
+```
 
 ---
 

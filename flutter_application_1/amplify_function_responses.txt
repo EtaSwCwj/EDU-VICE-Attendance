@@ -1,0 +1,9 @@
+invitationAcceptTrigger
+
+
+
+y
+y
+api
+create,read,update
+n

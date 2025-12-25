@@ -16,6 +16,11 @@ import '../features/settings/settings_page.dart';
 import '../features/invitation/join_by_code_page.dart';
 import '../features/invitation/invitation_management_page.dart';
 import '../features/supporter/supporter_shell.dart';
+import '../features/textbook/textbook_list_page.dart';
+import '../features/textbook/chapter_list_page.dart';
+import '../features/textbook/problem_list_page.dart';
+import '../features/textbook/textbook_analyzer_page.dart';
+import '../features/settings/api_key_settings_page.dart';
 
 /// 역할 가드 & 홈쉘 분리 라우터
 class AppRouter {
@@ -96,6 +101,12 @@ class AppRouter {
         ),
 
         // ── 설정 페이지 ─────────────────────────────────────────────────
+        // API 키 설정 (더 구체적인 경로 먼저!)
+        GoRoute(
+          path: '/settings/api-key',
+          builder: (_, __) => const ApiKeySettingsPage(),
+        ),
+        // 역할별 설정
         GoRoute(
           path: '/settings/:role',
           builder: (context, state) {
@@ -136,6 +147,41 @@ class AppRouter {
             final academyId = state.pathParameters['academyId'] ?? '';
             return InvitationManagementPage(academyId: academyId);
           },
+        ),
+        
+        // ── 교재 관련 라우트 ──────────────────────────────────────────────
+        // 교재 목록 페이지
+        GoRoute(
+          path: '/textbooks',
+          builder: (_, __) => const TextbookListPage(),
+        ),
+        
+        // 단원 목록 페이지
+        GoRoute(
+          path: '/textbooks/:textbookId/chapters',
+          builder: (context, state) {
+            final textbookId = state.pathParameters['textbookId'] ?? '';
+            return ChapterListPage(textbookId: textbookId);
+          },
+        ),
+        
+        // 문제 목록 페이지
+        GoRoute(
+          path: '/textbooks/:textbookId/chapters/:chapterId/problems',
+          builder: (context, state) {
+            final textbookId = state.pathParameters['textbookId'] ?? '';
+            final chapterId = state.pathParameters['chapterId'] ?? '';
+            return ProblemListPage(
+              textbookId: textbookId,
+              chapterId: chapterId,
+            );
+          },
+        ),
+
+        // 교재 분석 페이지
+        GoRoute(
+          path: '/textbook-analyzer',
+          builder: (_, __) => const TextbookAnalyzerPage(),
         ),
 
         // 필요 시 /student/*, /owner/* 네임스페이스도 같은 방식으로 확장

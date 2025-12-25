@@ -65,6 +65,11 @@
       "build": true,
       "providerPlugin": "awscloudformation",
       "service": "Lambda"
+    },
+    "invitationAcceptTrigger": {
+      "build": true,
+      "providerPlugin": "awscloudformation",
+      "service": "Lambda"
     }
   },
   "parameters": {
@@ -81,6 +86,22 @@
         {
           "category": "function",
           "resourceName": "S3Triggere1360b3d"
+        }
+      ]
+    },
+    "AMPLIFY_function_invitationAcceptTrigger_deploymentBucketName": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "invitationAcceptTrigger"
+        }
+      ]
+    },
+    "AMPLIFY_function_invitationAcceptTrigger_s3Key": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "invitationAcceptTrigger"
         }
       ]
     }

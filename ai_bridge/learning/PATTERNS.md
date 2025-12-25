@@ -173,6 +173,38 @@ final userId = user.userId;  // Cognito sub (중요!)
 
 ---
 
+## 🚦 go_router 패턴
+
+### 네비게이션 (필수!)
+
+```dart
+import 'package:go_router/go_router.dart';
+
+// ✅ 올바른 사용
+context.push('/path')   // 스택 추가
+context.go('/path')     // 스택 교체
+context.pop()           // 뒤로가기
+
+// ❌ 동작 안 함
+Navigator.pushNamed(context, '/path')
+Navigator.of(context).push(...)
+```
+
+### 라우터 순서 (중요!)
+
+```dart
+routes: [
+  // ✅ 구체적 경로 먼저!
+  GoRoute(path: '/settings/api-key', ...),
+  // ✅ 와일드카드 나중
+  GoRoute(path: '/settings/:role', ...),
+]
+```
+
+**⚠️ 순서 틀리면 `/settings/api-key`가 `:role='api-key'`로 매칭됨!**
+
+---
+
 ## 🐛 자주 발생하는 에러
 
 ### MissingPluginException (웹)
