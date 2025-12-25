@@ -85,7 +85,7 @@ class _TextbookListPageState extends State<TextbookListPage> {
                         trailing: const Icon(Icons.arrow_forward_ios),
                         onTap: () {
                           print('[TextbookList] 버튼 클릭: ${textbook.title}');
-                          context.go('/textbooks/${textbook.id}/chapters');
+                          context.push('/textbooks/${textbook.id}/chapters');
                         },
                       ),
                     );

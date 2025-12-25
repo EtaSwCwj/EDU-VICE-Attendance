@@ -121,7 +121,7 @@ class _ChapterListPageState extends State<ChapterListPage> {
                         trailing: const Icon(Icons.arrow_forward_ios),
                         onTap: () {
                           print('[ChapterList] 버튼 클릭: ${chapter.title}');
-                          context.go('/textbooks/${widget.textbookId}/chapters/${chapter.id}/problems');
+                          context.push('/textbooks/${widget.textbookId}/chapters/${chapter.id}/problems');
                         },
                       ),
                     );
