@@ -136,8 +136,10 @@ class InvitationService {
       const query = '''
         query ListInvitationsByEmail(\$email: String!) {
           listInvitations(
-            filter: { inviteeEmail: { eq: \$email } }
-            sort: { field: createdAt, direction: desc }
+            filter: { 
+              inviteeEmail: { eq: \$email }
+              status: { eq: "pending" }
+            }
           ) {
             items {
               id
