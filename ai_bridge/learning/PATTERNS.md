@@ -192,6 +192,24 @@ del .git\index.lock  # Windows
 
 ---
 
+## 📱 scrcpy (폰 화면 미러링)
+
+### 실행 전 중복 체크 필수!
+
+```bash
+# Mac - 이미 실행 중인지 확인 후 실행
+pgrep -x scrcpy || scrcpy
+```
+
+```powershell
+# Windows - 이미 실행 중인지 확인 후 실행
+if (-not (Get-Process -Name scrcpy -ErrorAction SilentlyContinue)) { scrcpy }
+```
+
+**⚠️ scrcpy 중복 실행하면 화면 여러 개 떠서 문제 생김!**
+
+---
+
 ## 💡 생산성 팁
 
 ### 1. 역할 분담 기억

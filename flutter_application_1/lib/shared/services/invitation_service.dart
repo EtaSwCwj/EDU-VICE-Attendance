@@ -1,4 +1,5 @@
 // lib/shared/services/invitation_service.dart
+import 'dart:convert';
 import 'dart:math';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import '../../models/ModelProvider.dart';
@@ -132,10 +133,53 @@ class InvitationService {
     safePrint('[InvitationService] Fetching invitations for email: $email');
 
     try {
-      final invitations = await Amplify.DataStore.query(
-        Invitation.classType,
-        where: Invitation.INVITEEEMAIL.eq(email.toLowerCase()),
+      const query = '''
+        query ListInvitationsByEmail(\$email: String!) {
+          listInvitations(
+            filter: { inviteeEmail: { eq: \$email } }
+            sort: { field: createdAt, direction: desc }
+          ) {
+            items {
+              id
+              academyId
+              role
+              inviteCode
+              inviteeEmail
+              inviterUserId
+              status
+              expiresAt
+              usedAt
+              usedBy
+              createdAt
+              updatedAt
+            }
+          }
+        }
+      ''';
+
+      final request = GraphQLRequest<String>(
+        document: query,
+        variables: {'email': email.toLowerCase()},
       );
+
+      final response = await Amplify.API.query(request: request).response;
+
+      if (response.hasErrors) {
+        safePrint('[InvitationService] GraphQL errors: ${response.errors}');
+        return [];
+      }
+
+      final data = response.data;
+      if (data == null) {
+        safePrint('[InvitationService] No data returned from query');
+        return [];
+      }
+
+      // JSON 파싱
+      final json = jsonDecode(data);
+      final items = json['listInvitations']['items'] as List;
+
+      final invitations = items.map((item) => Invitation.fromJson(item)).toList();
 
       // 유효한 초대만 필터링 (만료 안 됨 + 사용 안 됨)
       final validInvitations = invitations.where((inv) {

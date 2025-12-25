@@ -140,6 +140,30 @@ claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions -p "스�
 
 ---
 
+## ⚠️ ai_bridge 경로 규칙 (필수!)
+
+**ai_bridge 폴더는 프로젝트 루트에만 존재!**
+
+```
+✅ 올바른 경로:
+~/gitproject/EDU-VICE-Attendance/ai_bridge/
+C:\gitproject\EDU-VICE-Attendance\ai_bridge\
+
+❌ 잘못된 경로 (절대 사용 금지!):
+~/gitproject/EDU-VICE-Attendance/flutter_application_1/ai_bridge/
+```
+
+### 보고서/빅스텝 저장 위치
+| 파일 종류 | 올바른 경로 |
+|----------|------------|
+| 보고서 | ai_bridge/report/big_XXX_report.md |
+| 빅스텝 | ai_bridge/bigstep/BIG_XXX_제목.md |
+| 학습데이터 | ai_bridge/learning/*.md |
+
+**flutter_application_1/ 안에 ai_bridge 만들지 마!**
+
+---
+
 ## 💬 소통 스타일
 
 - 한국어 사용
