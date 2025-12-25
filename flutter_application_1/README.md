@@ -1,16 +1,48 @@
-# flutter_application_1
+# EDU-VICE Attendance - 개선 버전
 
-A new Flutter project.
+## ✨ 변경 사항
 
-## Getting Started
+### 추가된 것
+- ✅ `lib/core/` - 에러 핸들링, 네트워크, DI 인프라
+- ✅ `lib/config/` - 환경 설정
+- ✅ 업데이트된 `pubspec.yaml` - 최신 패키지들
 
-This project is a starting point for a Flutter application.
+### 기존 기능 100% 유지
+- ✅ 모든 features 그대로 작동
+- ✅ AWS Test Page 정상 작동
+- ✅ 로그인/로그아웃 기능 유지
+- ✅ Teacher/Student Shell 정상 작동
 
-A few resources to get you started if this is your first Flutter project:
+## 🚀 실행 방법
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```bash
+# 1. 패키지 설치
+flutter clean
+flutter pub get
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# 2. 실행
+flutter run
+```
+
+## 📦 새로 추가된 패키지
+
+- `get_it` - 의존성 주입 (선택적 사용)
+- `dartz` - Either 타입 (향후 사용 가능)
+- `equatable` - Value object 비교
+- `connectivity_plus` - 네트워크 상태 확인
+- `logger` - 로깅
+
+## 💡 주요 특징
+
+1. **기존 코드 100% 호환**: 기존 features 수정 없음
+2. **DI 선택적 사용**: DI 초기화 실패해도 앱 정상 작동
+3. **점진적 개선 가능**: 필요할 때 core 인프라 활용
+
+## 🔄 향후 개선 방향
+
+원하면 각 feature를 하나씩 Clean Architecture로 리팩토링 가능:
+- `lib/core/` 인프라 활용
+- Repository 패턴 적용
+- Either 타입으로 에러 핸들링
+
+지금 당장은 **기존대로 작동**하니까 안심하고 써도 돼!

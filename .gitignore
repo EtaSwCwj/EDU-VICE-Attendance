@@ -7,7 +7,11 @@
 .buildlog/
 .history
 
+# sum add
+flutter_application_1_*.zip
 
+# Node.js
+node_modules/
 
 # Flutter repo-specific
 /bin/cache/
@@ -17,7 +21,7 @@
 /dev/benchmarks/mega_gallery/
 /dev/bots/.recipe_deps
 /dev/bots/android_tools/
-/dev/devicelab/ABresults*.json
+/dev/devicelab/ABresults*.json 
 /dev/docs/doc/
 /dev/docs/flutter.docs.zip
 /dev/docs/lib/
@@ -117,3 +121,7 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+~$관리 앱 기획.pptx
+
+# Claude local settings
+.claude/settings.local.json

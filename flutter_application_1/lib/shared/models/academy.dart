@@ -1,6 +1,10 @@
 class Academy {
   final String id;
   final String name;
+  final String? code;
+  final String? address;
+  final String? phone;
+  final String? description;
 
   /// 지오펜스 중심 좌표(없을 수도 있음)
   final double? lat;
@@ -12,6 +16,10 @@ class Academy {
   const Academy({
     required this.id,
     required this.name,
+    this.code,
+    this.address,
+    this.phone,
+    this.description,
     this.lat,
     this.lng,
     this.radiusMeters,
@@ -20,6 +28,10 @@ class Academy {
   factory Academy.fromJson(Map<String, dynamic> j) => Academy(
         id: j['id'] as String,
         name: j['name'] as String,
+        code: j['code'] as String?,
+        address: j['address'] as String?,
+        phone: j['phone'] as String?,
+        description: j['description'] as String?,
         lat: (j['lat'] as num?)?.toDouble(),
         lng: (j['lng'] as num?)?.toDouble(),
         radiusMeters: (j['radiusMeters'] as num?)?.toDouble(),

@@ -1,0 +1,320 @@
+# ═══════════════════════════════════════════════════════════════════
+# EDU-VICE Attendance GraphQL Schema
+# ═══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────
+# Enums
+# ─────────────────────────────────────────────────────────────────────
+
+enum AssignmentStatus { ASSIGNED IN_PROGRESS DONE }
+
+enum LessonStatus { SCHEDULED IN_PROGRESS COMPLETED }
+
+enum Subject { MATH ENGLISH SCIENCE KOREAN }
+
+enum Grade { ELEMENTARY MIDDLE HIGH }
+
+# ─────────────────────────────────────────────────────────────────────
+# 기존 모델: Assignment (숙제)
+# ─────────────────────────────────────────────────────────────────────
+
+type Assignment
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "teacherUsername", operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "studentUsername", operations: [read, update] }
+  ])
+{
+  id: ID!
+  title: String!
+  description: String
+  status: AssignmentStatus!
+
+  teacherUsername: String!
+    @index(name: "byTeacherV3", queryField: "assignmentsByTeacherV3", sortKeyFields: ["dueDate"])
+
+  studentUsername: String!
+    @index(name: "byStudentV3", queryField: "assignmentsByStudentV3", sortKeyFields: ["dueDate"])
+
+  book: String
+  range: String
+  dueDate: AWSDateTime
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 기존 모델: Student (학생)
+# ─────────────────────────────────────────────────────────────────────
+
+type Student
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "username", operations: [create, read, update] },
+    { allow: groups, groups: ["teachers"], operations: [read] }
+  ])
+{
+  id: ID!
+  username: String!
+    @index(name: "byStudentUsernameV3", queryField: "getStudentByUsernameV3")
+  name: String!
+  grade: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 기존 모델: Teacher (선생님)
+# ─────────────────────────────────────────────────────────────────────
+
+type Teacher
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "username", operations: [create, read, update] },
+    { allow: groups, groups: ["teachers"], operations: [read] }
+  ])
+{
+  id: ID!
+  username: String!
+    @index(name: "byTeacherUsernameV3", queryField: "getTeacherByUsernameV3")
+  name: String!
+  subjects: [String]
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: Book (교재)
+# ─────────────────────────────────────────────────────────────────────
+
+type Book
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: groups, groups: ["teachers"], operations: [create, read, update, delete] },
+    { allow: groups, groups: ["students"], operations: [read] }
+  ])
+{
+  id: ID!
+  title: String!
+  subject: Subject!
+    @index(name: "bySubject", queryField: "booksBySubject")
+  grade: Grade!
+    @index(name: "byGrade", queryField: "booksByGrade")
+  year: Int
+  chapters: [Chapter] @hasMany(indexName: "byBook", fields: ["id"])
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: Chapter (챕터)
+# ─────────────────────────────────────────────────────────────────────
+
+type Chapter
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: groups, groups: ["teachers"], operations: [create, read, update, delete] },
+    { allow: groups, groups: ["students"], operations: [read] }
+  ])
+{
+  id: ID!
+  bookId: ID!
+    @index(name: "byBook", queryField: "chaptersByBook", sortKeyFields: ["orderIndex"])
+  title: String!
+  orderIndex: Int!
+  parentId: String          # 상위 단원 ID (계층 구조)
+  level: Int                # 1=대단원, 2=중단원, 3=소단원
+  startPage: Int
+  endPage: Int
+  answerImageUrl: String    # S3 답안지 이미지 URL
+  book: Book @belongsTo(fields: ["bookId"])
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: Lesson (수업)
+# ─────────────────────────────────────────────────────────────────────
+
+type Lesson
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "teacherUsername", operations: [create, read, update, delete] },
+    { allow: groups, groups: ["students"], operations: [read] }
+  ])
+{
+  id: ID!
+  title: String!
+  subject: Subject!
+
+  teacherUsername: String!
+    @index(name: "byTeacher", queryField: "lessonsByTeacher", sortKeyFields: ["scheduledDate"])
+
+  studentUsernames: [String]!
+
+  bookId: ID
+    @index(name: "byBook", queryField: "lessonsByBook")
+  chapterId: ID
+
+  scheduledDate: AWSDate!
+    @index(name: "byDate", queryField: "lessonsByDate", sortKeyFields: ["startTime"])
+  startTime: AWSTime!
+  endTime: AWSTime
+  duration: Int
+
+  status: LessonStatus!
+  score: Int  # 0-100 평가점수
+
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: TeacherStudent (선생-학생 연결)
+# ─────────────────────────────────────────────────────────────────────
+
+type TeacherStudent
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "teacherUsername", operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "studentUsername", operations: [read] }
+  ])
+{
+  id: ID!
+  teacherUsername: String!
+    @index(name: "byTeacher", queryField: "teacherStudentsByTeacher", sortKeyFields: ["studentUsername"])
+  studentUsername: String!
+    @index(name: "byStudent", queryField: "teacherStudentsByStudent", sortKeyFields: ["teacherUsername"])
+  subjects: [Subject]
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: AppUser (사용자 프로필)
+# ─────────────────────────────────────────────────────────────────────
+
+type AppUser
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: owner, ownerField: "cognitoUsername", operations: [create, read, update] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  cognitoUsername: String!
+    @index(name: "byCognitoUsername", queryField: "appUserByCognitoUsername")
+  email: String!
+    @index(name: "byEmail", queryField: "appUserByEmail")
+  name: String!
+  birthDate: String
+  gender: String
+  phone: String
+  profileImageUrl: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: Academy (학원)
+# ─────────────────────────────────────────────────────────────────────
+
+type Academy
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  code: String!
+    @index(name: "byCode", queryField: "academyByCode")
+  name: String!
+  address: String
+  phone: String
+  description: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: AcademyMember (학원 멤버십)
+# ─────────────────────────────────────────────────────────────────────
+
+type AcademyMember
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  academyId: String!
+    @index(name: "byAcademy", queryField: "academyMembersByAcademy", sortKeyFields: ["role"])
+  userId: String!
+    @index(name: "byUser", queryField: "academyMembersByUser")
+  role: String!
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: Invitation (초대)
+# ─────────────────────────────────────────────────────────────────────
+
+type Invitation
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  academyId: ID!
+    @index(name: "byAcademy")
+  inviterUserId: ID!      # 초대한 사람 (원장)
+  inviteeEmail: String!   # 초대받은 사람 이메일
+    @index(name: "byInviteeEmail")
+  inviteeUserId: ID       # 초대받은 사람 userId (DB에 있으면)
+  role: String!           # teacher / student
+  status: String!         # pending / accepted / rejected / expired
+    @index(name: "byStatus")
+  inviteCode: String!     # QR 코드용 초대 코드
+    @index(name: "byInviteCode")
+  expiresAt: AWSDateTime!
+  usedAt: AWSDateTime
+  usedBy: ID
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 신규 모델: StudentSupporter (학생-서포터 연결)
+# ─────────────────────────────────────────────────────────────────────
+
+type StudentSupporter
+  @model
+  @auth(rules: [
+    { allow: groups, groups: ["owners"], operations: [create, read, update, delete] },
+    { allow: private, operations: [read] }
+  ])
+{
+  id: ID!
+  studentMemberId: ID!
+    @index(name: "byStudent")
+  supporterUserId: ID!
+    @index(name: "bySupporter")
+  academyId: ID!
+    @index(name: "byAcademy")
+  relationship: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}

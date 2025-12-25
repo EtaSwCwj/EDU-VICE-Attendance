@@ -1,0 +1,14 @@
+{
+  "resourceName": "eduviceStorage",
+  "policyUUID": "54337d3a",
+  "bucketName": "evattendancedd213659cc1a4792ae637f5327ddba3b",
+  "storageAccess": "auth",
+  "guestAccess": [],
+  "authAccess": [
+    "CREATE_AND_UPDATE",
+    "READ",
+    "DELETE"
+  ],
+  "triggerFunction": "S3Triggere1360b3d",
+  "groupAccess": {}
+}

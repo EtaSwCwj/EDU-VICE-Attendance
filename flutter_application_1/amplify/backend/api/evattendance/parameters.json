@@ -1,0 +1,11 @@
+{
+  "AppSyncApiName": "evattendance",
+  "DynamoDBBillingMode": "PAY_PER_REQUEST",
+  "DynamoDBEnableServerSideEncryption": false,
+  "AuthCognitoUserPoolId": {
+    "Fn::GetAtt": [
+      "authevattendance256b9879",
+      "Outputs.UserPoolId"
+    ]
+  }
+}
