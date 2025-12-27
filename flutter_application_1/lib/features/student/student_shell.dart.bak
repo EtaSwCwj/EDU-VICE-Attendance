@@ -9,7 +9,6 @@ import 'pages/student_lessons_page.dart';
 import 'pages/student_homework_page.dart';
 import '../../shared/services/auth_state.dart';
 import '../../shared/widgets/profile_avatar.dart';
-import '../my_books/pages/my_books_page.dart';
 import '../textbook/textbook_main_page.dart';
 
 /// 학생용 앱 쉘: 하단 탭 네비게이션(홈/수업/숙제)
@@ -25,11 +24,10 @@ class _StudentShellState extends State<StudentShell> {
   int _index = 0;
 
   static const _pages = <Widget>[
-    StudentHomePage(),     // 0: 홈
-    StudentLessonsPage(),  // 1: 수업
-    StudentHomeworkPage(), // 2: 숙제
-    TextbookMainPage(),    // 3: 교재
-    MyBooksPage(),         // 4: 내 책
+    StudentHomePage(),     // 홈 (오늘 수업/숙제 요약)
+    StudentLessonsPage(),  // 내 수업
+    StudentHomeworkPage(), // 내 숙제
+    TextbookMainPage(),    // 교재
   ];
 
   static const _pageTitles = <String>[
@@ -37,7 +35,6 @@ class _StudentShellState extends State<StudentShell> {
     '수업',
     '숙제',
     '교재',
-    '내 책',
   ];
 
   @override
@@ -115,11 +112,6 @@ class _StudentShellState extends State<StudentShell> {
             icon: Icon(Icons.menu_book_outlined),
             selectedIcon: Icon(Icons.menu_book),
             label: '교재',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.library_books_outlined),
-            selectedIcon: Icon(Icons.library_books),
-            label: '내 책',
           ),
         ],
       ),
