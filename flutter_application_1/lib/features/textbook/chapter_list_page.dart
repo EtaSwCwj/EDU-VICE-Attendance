@@ -62,7 +62,7 @@ class _ChapterListPageState extends State<ChapterListPage> {
       if (response.data != null) {
         final chapters = response.data!.items.whereType<TextbookChapter>().toList();
         // 단원 번호로 정렬
-        chapters.sort((a, b) => (a.number ?? 0).compareTo(b.number ?? 0));
+        chapters.sort((a, b) => a.number.compareTo(b.number));
         setState(() {
           _chapters = chapters;
         });
@@ -96,7 +96,7 @@ class _ChapterListPageState extends State<ChapterListPage> {
                         leading: CircleAvatar(
                           backgroundColor: Theme.of(context).primaryColor,
                           child: Text(
-                            '${chapter.number ?? 0}',
+                            '${chapter.number}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -115,7 +115,7 @@ class _ChapterListPageState extends State<ChapterListPage> {
                           children: [
                             const SizedBox(height: 4),
                             Text('섹션: ${chapter.section ?? '-'}'),
-                            Text('페이지: ${chapter.startPage ?? 0} ~ ${chapter.endPage ?? 0}'),
+                            Text('페이지: ${chapter.startPage} ~ ${chapter.endPage}'),
                           ],
                         ),
                         trailing: const Icon(Icons.arrow_forward_ios),

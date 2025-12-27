@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
@@ -31,7 +30,7 @@ class ImageCropService {
       final pixels = boundingBox.toPixels(image.width, image.height);
       
       // 영역 추출 (약간의 padding 추가)
-      final padding = 10;
+      const padding = 10;
       final x = (pixels['left']! - padding).clamp(0, image.width - 1);
       final y = (pixels['top']! - padding).clamp(0, image.height - 1);
       final w = (pixels['width']! + padding * 2).clamp(1, image.width - x);

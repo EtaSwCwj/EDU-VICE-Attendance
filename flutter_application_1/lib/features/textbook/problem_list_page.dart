@@ -64,7 +64,7 @@ class _ProblemListPageState extends State<ProblemListPage> {
       if (response.data != null) {
         final problems = response.data!.items.whereType<Problem>().toList();
         // 문제 번호로 정렬
-        problems.sort((a, b) => (a.number ?? '').compareTo(b.number ?? ''));
+        problems.sort((a, b) => a.number.compareTo(b.number));
         setState(() {
           _problems = problems;
         });
@@ -86,7 +86,6 @@ class _ProblemListPageState extends State<ProblemListPage> {
       case Difficulty.HARD:
         return Colors.red;
       case null:
-        return Colors.red;
         return Colors.grey;
     }
   }
@@ -100,7 +99,6 @@ class _ProblemListPageState extends State<ProblemListPage> {
       case Difficulty.HARD:
         return '어려움';
       case null:
-        return '어려움';
         return '-';
     }
   }
@@ -112,7 +110,6 @@ class _ProblemListPageState extends State<ProblemListPage> {
       case ProblemCategory.APPLICATION:
         return Colors.teal;
       case null:
-        return Colors.teal;
         return Colors.grey;
     }
   }
@@ -124,7 +121,6 @@ class _ProblemListPageState extends State<ProblemListPage> {
       case ProblemCategory.APPLICATION:
         return '응용';
       case null:
-        return '응용';
         return '-';
     }
   }
@@ -154,7 +150,7 @@ class _ProblemListPageState extends State<ProblemListPage> {
                             leading: CircleAvatar(
                               backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
                               child: Text(
-                                problem.number ?? '?',
+                                problem.number,
                                 style: TextStyle(
                                   color: Theme.of(context).primaryColor,
                                   fontWeight: FontWeight.bold,
@@ -171,7 +167,7 @@ class _ProblemListPageState extends State<ProblemListPage> {
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Row(
                                 children: [
-                                  Text('p.${problem.page ?? 0}'),
+                                  Text('p.${problem.page}'),
                                   const SizedBox(width: 12),
                                   Chip(
                                     label: Text(
@@ -233,7 +229,7 @@ class _ProblemListPageState extends State<ProblemListPage> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    problem.answer ?? '-',
+                                    problem.answer,
                                     style: const TextStyle(fontSize: 18),
                                   ),
                                   if (problem.concepts?.isNotEmpty == true) ...[

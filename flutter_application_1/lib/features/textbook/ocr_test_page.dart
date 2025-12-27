@@ -680,7 +680,7 @@ class _OcrTestPageState extends State<OcrTestPage> {
                 yStart: estimatedYStart,
                 yEnd: estimatedYEnd,
                 answer: pageDB.getAnswer(sectionName, num),
-                imageFile: null,  // TODO: 균등 분할로 crop 추가 가능
+                imageFile: null,
                 ocrFound: false,
               ));
             }

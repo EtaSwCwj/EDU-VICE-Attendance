@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:amplify_storage_s3/amplify_storage_s3.dart';
 import 'textract_service.dart';
 import 'image_crop_service.dart';
 import 'claude_api_service.dart';
@@ -62,7 +61,7 @@ class ProblemExtractorService {
         final s3Key = 'problem-images/${DateTime.now().millisecondsSinceEpoch}_${cropped.problemNumber}.png';
         
         try {
-          final result = await Amplify.Storage.uploadFile(
+          await Amplify.Storage.uploadFile(
             localFile: AWSFile.fromPath(cropped.file.path),
             path: StoragePath.fromString(s3Key),
           ).result;

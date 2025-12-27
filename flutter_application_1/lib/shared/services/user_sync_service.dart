@@ -169,7 +169,6 @@ class UserSyncService {
   /// 주의: 이 기능은 Cognito Admin API를 사용하므로
   /// IAM 권한이 필요합니다. 일반적으로 서버측에서 실행해야 합니다.
   Future<MigrationResult> migrateAllUsers() async {
-    // TODO: Cognito Admin API를 사용한 전체 사용자 마이그레이션
     // 현재는 클라이언트에서 불가능 (Admin API 필요)
     return MigrationResult(
       totalUsers: 0,
