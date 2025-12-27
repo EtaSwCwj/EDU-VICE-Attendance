@@ -260,59 +260,34 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
           const SizedBox(height: 24),
 
           // Volume 구성
-          const Text(
-            '몇 권 구성인가요?',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: RadioListTile<int>(
-                  title: const Text('1권'),
-                  value: 1,
-                  groupValue: _volumeCount,
-                  onChanged: (value) {
-                    setState(() {
-                      _volumeCount = value!;
-                      _initializeVolumes();
-                    });
-                    safePrint('[Register] Volume 개수 변경: $_volumeCount권');
-                  },
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                ),
+              const Text(
+                '몇 권 구성인가요?',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              Expanded(
-                child: RadioListTile<int>(
-                  title: const Text('2권'),
-                  value: 2,
-                  groupValue: _volumeCount,
+              const SizedBox(width: 16),
+              SizedBox(
+                width: 80,
+                child: TextFormField(
+                  initialValue: '1',
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    suffixText: '권',
+                  ),
                   onChanged: (value) {
-                    setState(() {
-                      _volumeCount = value!;
-                      _initializeVolumes();
-                    });
-                    safePrint('[Register] Volume 개수 변경: $_volumeCount권');
+                    final count = int.tryParse(value) ?? 1;
+                    if (count >= 1 && count <= 10) {
+                      setState(() {
+                        _volumeCount = count;
+                        _initializeVolumes();
+                      });
+                      safePrint('[Register] Volume 개수 변경: $_volumeCount권');
+                    }
                   },
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                ),
-              ),
-              Expanded(
-                child: RadioListTile<int>(
-                  title: const Text('3권'),
-                  value: 3,
-                  groupValue: _volumeCount,
-                  onChanged: (value) {
-                    setState(() {
-                      _volumeCount = value!;
-                      _initializeVolumes();
-                    });
-                    safePrint('[Register] Volume 개수 변경: $_volumeCount권');
-                  },
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
                 ),
               ),
             ],
