@@ -54,6 +54,20 @@ class ProcessedPage {
   });
 }
 
+class SectionInstruction {
+  final String section;      // "A", "B", "C"...
+  final File? imageFile;     // 지시문 crop 이미지
+  final double yStart;       // 섹션 시작 (%)
+  final double yEnd;         // 첫 문제 시작 = 지시문 끝 (%)
+  
+  SectionInstruction({
+    required this.section,
+    this.imageFile,
+    required this.yStart,
+    required this.yEnd,
+  });
+}
+
 class ExtractedProblem {
   final String section;
   final int number;
@@ -132,6 +146,7 @@ class _OcrTestPageState extends State<OcrTestPage> {
   List<ProcessedPage> _pages = [];
   Map<int, PageAnswerDB?> _matchedDBs = {};
   Map<int, List<ExtractedProblem>> _extractedProblems = {};
+  Map<int, Map<String, SectionInstruction>> _sectionInstructions = {};  // 페이지별 섹션 지시문
 
   TextbookDB get _db => grammarEffect2;
 
@@ -460,6 +475,7 @@ class _OcrTestPageState extends State<OcrTestPage> {
     setState(() {
       _isLoading = true;
       _extractedProblems = {};
+      _sectionInstructions = {};  // 지시문도 초기화
     });
 
     try {
@@ -478,6 +494,11 @@ class _OcrTestPageState extends State<OcrTestPage> {
         final bytes = await page.imageFile.readAsBytes();
         final image = img.decodeImage(bytes);
         if (image == null) continue;
+        
+        // ★ 전체 페이지 OCR로 섹션 문자 위치 먼저 찾기
+        setState(() => _status = '🔍 p.${page.pageNumber} 섹션 문자 찾는 중...');
+        final pageSectionLetters = await _findSectionLettersInPage(page.imageFile);
+        safePrint('[Extract] p.${page.pageNumber} 섹션문자: $pageSectionLetters');
         
         final problems = <ExtractedProblem>[];
         
@@ -516,11 +537,13 @@ class _OcrTestPageState extends State<OcrTestPage> {
           final expectedCount = sectionAnswers.length;
           
           // 3. OCR로 문제 번호 위치 찾기
-          final ocrPositions = await _findProblemNumbersWithOCR(
+          final ocrResult = await _findProblemNumbersWithOCR(
             sectionFile, expectedCount, sectionName,
           );
+          final ocrPositions = (ocrResult['problems'] as List<Map<String, int>>);
+          final sectionLetterY = ocrResult['sectionLetterY'] as int?;
           
-          safePrint('[Extract] Section $sectionName: OCR ${ocrPositions.length}/$expectedCount 발견');
+          safePrint('[Extract] Section $sectionName: OCR ${ocrPositions.length}/$expectedCount 발견, 섹션문자 y=$sectionLetterY');
 
           // 5. 못 찾은 문제 재검사
           final missingNumbers = <int>[];
@@ -546,6 +569,50 @@ class _OcrTestPageState extends State<OcrTestPage> {
             ocrPositions.sort((a, b) => a['y']!.compareTo(b['y']!));
 
             safePrint('[Extract] $sectionName 재검사 후: ${ocrPositions.length}/$expectedCount');
+          }
+
+          // 5.5. 지시문 crop (전체 페이지의 섹션 문자 ~ 섹션 내 첫 문제)
+          if (ocrPositions.isNotEmpty && pageSectionLetters.containsKey(sectionName)) {
+            final sectionLetterYInPage = pageSectionLetters[sectionName]!;  // 전체 페이지 기준 px
+            final firstProblemYInSection = ocrPositions.first['y'] as int;  // 섹션 이미지 기준 px
+            final firstProblemYInPage = yStart.round() + firstProblemYInSection;  // 전체 페이지 기준으로 변환
+            
+            final instructionHeight = firstProblemYInPage - sectionLetterYInPage;
+            
+            // 지시문 영역이 충분히 있을 때만 (최소 20px)
+            if (instructionHeight > 20 && sectionLetterYInPage < firstProblemYInPage) {
+              final marginBottom = (instructionHeight * 0.02).round();
+              final cropHeight = (instructionHeight - marginBottom).clamp(1, image.height - sectionLetterYInPage);
+              
+              // 전체 페이지 이미지에서 직접 crop
+              final instructionImg = img.copyCrop(
+                image,
+                x: xStart.round().clamp(0, image.width - 1),
+                y: sectionLetterYInPage.clamp(0, image.height - 1),
+                width: sectionWidth,
+                height: cropHeight.clamp(1, image.height - sectionLetterYInPage),
+              );
+              
+              final instructionFile = File('${tempDir.path}/p${page.pageNumber}_${sectionName}_instruction.png');
+              await instructionFile.writeAsBytes(img.encodePng(instructionImg));
+              
+              // % 변환
+              final instructionYStartPercent = sectionLetterYInPage / image.height * 100;
+              final instructionYEndPercent = firstProblemYInPage / image.height * 100;
+              
+              _sectionInstructions.putIfAbsent(page.pageNumber, () => {});
+              _sectionInstructions[page.pageNumber]![sectionName] = SectionInstruction(
+                section: sectionName,
+                imageFile: instructionFile,
+                yStart: instructionYStartPercent,
+                yEnd: instructionYEndPercent,
+              );
+              
+              safePrint('[Extract] $sectionName 지시문 crop: y=$sectionLetterYInPage~$firstProblemYInPage px (페이지 기준)');
+            }
+          } else if (ocrPositions.isNotEmpty) {
+            // 섹션 문자 못 찾음 (2페이지에 걸친 섹션)
+            safePrint('[Extract] $sectionName: 섹션 문자 못 찾음 (이전 페이지에서 시작된 섹션)');
           }
 
           // 6. 각 문제별로 crop (재검사 결과 포함)
@@ -647,10 +714,59 @@ class _OcrTestPageState extends State<OcrTestPage> {
 
 
   // ============================================================
+  // 전체 페이지에서 섹션 문자(A,B,C,D) 위치 찾기
+  // ============================================================
+  
+  /// 페이지 전체에서 섹션 문자 위치 찾기
+  /// 반환: {'A': 150, 'B': 450, ...} (px 좌표)
+  Future<Map<String, int>> _findSectionLettersInPage(File pageImage) async {
+    try {
+      final inputImage = InputImage.fromFile(pageImage);
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      final recognizedText = await textRecognizer.processImage(inputImage);
+      await textRecognizer.close();
+      
+      final sectionLetters = <String, int>{};
+      final targetSections = ['A', 'B', 'C', 'D', 'E', 'F'];
+      
+      for (final block in recognizedText.blocks) {
+        for (final line in block.lines) {
+          final text = line.text.trim();
+          
+          for (final section in targetSections) {
+            if (sectionLetters.containsKey(section)) continue;
+            
+            // 섹션 문자 패턴: "A", "A ", "A(", "B 빈칸에..."
+            final isSection = text == section ||
+                text.startsWith('$section ') ||
+                text.startsWith('$section(') ||
+                text.startsWith('$section\t');
+            
+            if (isSection) {
+              sectionLetters[section] = line.boundingBox.top.round();
+              safePrint('[PageOCR] 섹션 $section 발견: "$text" y=${line.boundingBox.top.round()}');
+            }
+          }
+        }
+      }
+      
+      return sectionLetters;
+      
+    } catch (e) {
+      safePrint('[PageOCR] 오류: $e');
+      return {};
+    }
+  }
+
+  // ============================================================
   // OCR로 문제 번호 위치 찾기 (찾은 것만 반환!)
   // ============================================================
   
-  Future<List<Map<String, int>>> _findProblemNumbersWithOCR(
+  /// OCR 결과: {
+  ///   'problems': [{'number': 1, 'y': 100}, ...],
+  ///   'sectionLetterY': 50  // 섹션 문자(A,B,C,D) 위치
+  /// }
+  Future<Map<String, dynamic>> _findProblemNumbersWithOCR(
     File sectionImage,
     int expectedCount,
     String sectionName,
@@ -663,16 +779,28 @@ class _OcrTestPageState extends State<OcrTestPage> {
       
       final foundPositions = <Map<String, int>>[];
       final targetNumbers = List.generate(expectedCount, (i) => i + 1);
+      int? sectionLetterY;  // 섹션 문자 위치
       
       for (final block in recognizedText.blocks) {
         for (final line in block.lines) {
           final text = line.text.trim();
           
+          // 섹션 문자(A, B, C, D) 찾기
+          if (sectionLetterY == null) {
+            // "A", "A ", "A(", "B", "B ", etc.
+            final isSection = text == sectionName || 
+                text.startsWith('$sectionName ') ||
+                text.startsWith('$sectionName(');
+            if (isSection) {
+              sectionLetterY = line.boundingBox.top.round();
+              safePrint('[OCR] $sectionName 섹션문자 발견: "$text" y=$sectionLetterY');
+            }
+          }
+          
+          // 문제 번호 찾기
           for (final targetNum in targetNumbers) {
-            // 이미 찾았으면 스킵
             if (foundPositions.any((p) => p['number'] == targetNum)) continue;
             
-            // 패턴 매칭: "1", "1.", "1 xxx", "1. xxx"
             final isMatch = text == '$targetNum' ||
                 text == '$targetNum.' ||
                 text.startsWith('$targetNum ') ||
@@ -693,14 +821,16 @@ class _OcrTestPageState extends State<OcrTestPage> {
         }
       }
       
-      // Y 좌표 순으로 정렬
       foundPositions.sort((a, b) => a['y']!.compareTo(b['y']!));
       
-      return foundPositions;
+      return {
+        'problems': foundPositions,
+        'sectionLetterY': sectionLetterY,
+      };
       
     } catch (e) {
       safePrint('[OCR] 오류: $e');
-      return [];
+      return {'problems': <Map<String, int>>[], 'sectionLetterY': null};
     }
   }
 
@@ -1115,6 +1245,9 @@ class _OcrTestPageState extends State<OcrTestPage> {
         final totalCount = sectionProblems.length;
         
         widgets.add(const SizedBox(height: 8));
+        // 지시문 가져오기
+        final instruction = _sectionInstructions[pageNum]?[sectionName];
+        
         widgets.add(Card(
           child: Padding(
             padding: const EdgeInsets.all(10),
@@ -1138,8 +1271,52 @@ class _OcrTestPageState extends State<OcrTestPage> {
                           fontSize: 11,
                           color: foundCount == totalCount ? Colors.green : Colors.orange,
                         )),
+                    if (instruction != null) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.description, size: 14, color: Colors.blue),
+                      const Text(' 지시문', style: TextStyle(fontSize: 10, color: Colors.blue)),
+                    ],
                   ],
                 ),
+                // 지시문 이미지 표시
+                if (instruction?.imageFile != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      border: Border.all(color: Colors.blue.shade200),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(5),
+                              topRight: Radius.circular(5),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lightbulb_outline, size: 14, color: Colors.blue),
+                              SizedBox(width: 4),
+                              Text('지시문', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Image.file(instruction!.imageFile!, fit: BoxFit.contain),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 ...sectionProblems.map((problem) {
                   if (!problem.ocrFound) {
