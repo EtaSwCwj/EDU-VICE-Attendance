@@ -57,14 +57,28 @@ class _TextbookMainPageState extends State<TextbookMainPage> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: ElevatedButton.icon(
-                  onPressed: () => context.push('/textbook-analyzer'),
-                  icon: const Icon(Icons.add_photo_alternate),
-                  label: const Text('새 페이지 분석'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
-                    minimumSize: const Size(double.infinity, 56),
-                  ),
+                child: Column(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => context.push('/textbook-analyzer'),
+                      icon: const Icon(Icons.add_photo_alternate),
+                      label: const Text('새 페이지 분석'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.all(16),
+                        minimumSize: const Size(double.infinity, 56),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/ocr-test'),
+                      icon: const Icon(Icons.science),
+                      label: const Text('OCR 테스트 (실험)'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.all(12),
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

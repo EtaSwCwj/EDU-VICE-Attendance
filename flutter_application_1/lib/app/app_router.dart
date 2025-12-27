@@ -20,6 +20,7 @@ import '../features/textbook/textbook_list_page.dart';
 import '../features/textbook/chapter_list_page.dart';
 import '../features/textbook/problem_list_page.dart';
 import '../features/textbook/textbook_analyzer_page.dart';
+import '../features/textbook/ocr_test_page.dart';
 import '../features/settings/api_key_settings_page.dart';
 
 /// 역할 가드 & 홈쉘 분리 라우터
@@ -182,6 +183,12 @@ class AppRouter {
         GoRoute(
           path: '/textbook-analyzer',
           builder: (_, __) => const TextbookAnalyzerPage(),
+        ),
+
+        // OCR 테스트 페이지
+        GoRoute(
+          path: '/ocr-test',
+          builder: (_, __) => const OcrTestPage(),
         ),
 
         // 필요 시 /student/*, /owner/* 네임스페이스도 같은 방식으로 확장
