@@ -13,7 +13,7 @@ class LocalBookRepository {
   /// 책 저장
   Future<LocalBook> saveBook(LocalBook book) async {
     try {
-      safePrint('[LocalBookRepo] 저장: ${book.title}');
+      safePrint('[LocalBookRepo] 저장: ${book.title} (${book.volumes.length}개 volume)');
       final db = await _db();
       final updatedBook = book.copyWith(updatedAt: DateTime.now());
       await _store.record(book.id).put(db, updatedBook.toJson(), merge: true);
@@ -64,7 +64,7 @@ class LocalBookRepository {
 
       final map = Map<String, dynamic>.from(snap.value);
       final book = LocalBook.fromJson(map);
-      safePrint('[LocalBookRepo] 조회 완료: ${book.title}');
+      safePrint('[LocalBookRepo] 조회 완료: ${book.title} (${book.volumes.length}개 volume)');
       return book;
     } catch (e) {
       safePrint('[LocalBookRepo] 조회 실패: $e');

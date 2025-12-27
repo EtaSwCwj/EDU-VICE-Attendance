@@ -1,12 +1,14 @@
+import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
+import 'book_volume.dart';
 
 class LocalBook extends Equatable {
   final String id;
   final String title;
   final String publisher;
   final String subject; // ENGLISH, MATH, KOREAN, SCIENCE
-  final int totalPages;
+  final List<BookVolume> volumes;
   final String? coverImagePath; // 로컬 이미지 경로
   final List<int> registeredPages; // 정답지 등록된 페이지들
   final DateTime createdAt;
@@ -17,12 +19,15 @@ class LocalBook extends Equatable {
     required this.title,
     required this.publisher,
     required this.subject,
-    required this.totalPages,
+    List<BookVolume>? volumes,
     this.coverImagePath,
     List<int>? registeredPages,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
+        volumes = volumes != null && volumes.isNotEmpty
+            ? volumes
+            : [BookVolume(index: 0, name: '본책')],
         registeredPages = registeredPages ?? [],
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
@@ -33,7 +38,7 @@ class LocalBook extends Equatable {
       'title': title,
       'publisher': publisher,
       'subject': subject,
-      'totalPages': totalPages,
+      'volumes': volumes.map((v) => v.toJson()).toList(),
       'coverImagePath': coverImagePath,
       'registeredPages': registeredPages,
       'createdAt': createdAt.toIso8601String(),
@@ -42,12 +47,19 @@ class LocalBook extends Equatable {
   }
 
   factory LocalBook.fromJson(Map<String, dynamic> json) {
+    final volumesList = (json['volumes'] as List<dynamic>?)
+        ?.map((v) => BookVolume.fromJson(v as Map<String, dynamic>))
+        .toList();
+
+    final title = json['title'] as String;
+    safePrint('[LocalBook] $title volumes 로드: ${volumesList?.length ?? 0}개');
+
     return LocalBook(
       id: json['id'] as String,
-      title: json['title'] as String,
+      title: title,
       publisher: json['publisher'] as String,
       subject: json['subject'] as String,
-      totalPages: json['totalPages'] as int,
+      volumes: volumesList,
       coverImagePath: json['coverImagePath'] as String?,
       registeredPages: (json['registeredPages'] as List<dynamic>?)
               ?.map((e) => e as int)
@@ -63,7 +75,7 @@ class LocalBook extends Equatable {
     String? title,
     String? publisher,
     String? subject,
-    int? totalPages,
+    List<BookVolume>? volumes,
     String? coverImagePath,
     List<int>? registeredPages,
     DateTime? createdAt,
@@ -74,12 +86,16 @@ class LocalBook extends Equatable {
       title: title ?? this.title,
       publisher: publisher ?? this.publisher,
       subject: subject ?? this.subject,
-      totalPages: totalPages ?? this.totalPages,
+      volumes: volumes ?? this.volumes,
       coverImagePath: coverImagePath ?? this.coverImagePath,
       registeredPages: registeredPages ?? this.registeredPages,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  int get totalPages {
+    return volumes.fold(0, (sum, vol) => sum + (vol.totalPages ?? 0));
   }
 
   double get progress {
@@ -93,7 +109,7 @@ class LocalBook extends Equatable {
         title,
         publisher,
         subject,
-        totalPages,
+        volumes,
         coverImagePath,
         registeredPages,
         createdAt,

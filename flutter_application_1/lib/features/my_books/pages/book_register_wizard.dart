@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../models/local_book.dart';
+import '../models/book_volume.dart';
 import '../data/local_book_repository.dart';
 
 /// 책 등록 위자드 (4단계)
@@ -33,6 +34,10 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
   final _publisherController = TextEditingController();
   final _totalPagesController = TextEditingController();
   String _selectedSubject = 'MATH';
+
+  // Volume 구성
+  int _volumeCount = 1;
+  List<Map<String, dynamic>> _volumes = [];
 
   // Step 3: 검색 상태
   bool _isSearching = false;
@@ -252,19 +257,70 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
               setState(() => _selectedSubject = value!);
             },
           ),
+          const SizedBox(height: 24),
+
+          // Volume 구성
+          const Text(
+            '몇 권 구성인가요?',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: RadioListTile<int>(
+                  title: const Text('1권'),
+                  value: 1,
+                  groupValue: _volumeCount,
+                  onChanged: (value) {
+                    setState(() {
+                      _volumeCount = value!;
+                      _initializeVolumes();
+                    });
+                    safePrint('[Register] Volume 개수 변경: $_volumeCount권');
+                  },
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+              Expanded(
+                child: RadioListTile<int>(
+                  title: const Text('2권'),
+                  value: 2,
+                  groupValue: _volumeCount,
+                  onChanged: (value) {
+                    setState(() {
+                      _volumeCount = value!;
+                      _initializeVolumes();
+                    });
+                    safePrint('[Register] Volume 개수 변경: $_volumeCount권');
+                  },
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+              Expanded(
+                child: RadioListTile<int>(
+                  title: const Text('3권'),
+                  value: 3,
+                  groupValue: _volumeCount,
+                  onChanged: (value) {
+                    setState(() {
+                      _volumeCount = value!;
+                      _initializeVolumes();
+                    });
+                    safePrint('[Register] Volume 개수 변경: $_volumeCount권');
+                  },
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
 
-          // 총 페이지수
-          TextFormField(
-            controller: _totalPagesController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: '총 페이지수 *',
-              border: OutlineInputBorder(),
-              hintText: '예: 320',
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
+          // Volume 입력 필드들
+          ..._buildVolumeInputs(),
 
           const SizedBox(height: 32),
 
@@ -468,10 +524,110 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
 
   /// Step 2 유효성 검사
   bool _validateStep2() {
-    return _titleController.text.isNotEmpty &&
-        _publisherController.text.isNotEmpty &&
-        _totalPagesController.text.isNotEmpty &&
-        int.tryParse(_totalPagesController.text) != null;
+    if (_titleController.text.isEmpty ||
+        _publisherController.text.isEmpty) {
+      return false;
+    }
+
+    // 모든 Volume의 이름이 입력되었는지 확인
+    if (_volumes.length != _volumeCount) return false;
+    for (var volume in _volumes) {
+      if (volume['name'] == null || (volume['name'] as String).isEmpty) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /// Volume 리스트 초기화
+  void _initializeVolumes() {
+    _volumes.clear();
+    for (int i = 0; i < _volumeCount; i++) {
+      _volumes.add({
+        'name': '',
+        'answerStartPage': null,
+        'answerEndPage': null,
+      });
+    }
+  }
+
+  /// Volume 입력 필드 생성
+  List<Widget> _buildVolumeInputs() {
+    if (_volumes.isEmpty) {
+      _initializeVolumes();
+    }
+
+    return List.generate(_volumeCount, (index) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Volume ${index + 1}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextFormField(
+                    decoration: InputDecoration(
+                      labelText: '이름 *',
+                      border: const OutlineInputBorder(),
+                      hintText: index == 0 ? '본책' : '워크북',
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _volumes[index]['name'] = value;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '정답 시작',
+                      border: OutlineInputBorder(),
+                      hintText: '1',
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _volumes[index]['answerStartPage'] =
+                            int.tryParse(value);
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '정답 끝',
+                      border: OutlineInputBorder(),
+                      hintText: '20',
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _volumes[index]['answerEndPage'] =
+                            int.tryParse(value);
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   /// 새 책 등록
@@ -482,16 +638,27 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
     await Future.delayed(const Duration(seconds: 1));
 
     try {
+      // Volume 객체들 생성
+      final volumes = List.generate(_volumeCount, (index) {
+        final volumeData = _volumes[index];
+        return BookVolume(
+          index: index,
+          name: volumeData['name'] as String,
+          answerStartPage: volumeData['answerStartPage'] as int?,
+          answerEndPage: volumeData['answerEndPage'] as int?,
+        );
+      });
+
       final newBook = LocalBook(
         title: _titleController.text,
         publisher: _publisherController.text,
         subject: _selectedSubject,
-        totalPages: int.parse(_totalPagesController.text),
+        volumes: volumes,
         coverImagePath: _coverImage?.path,
       );
 
       await _repository.saveBook(newBook);
-      safePrint('[Register] 책 등록 성공: ${newBook.title}');
+      safePrint('[Register] 책 등록: ${newBook.title} - ${volumes.length}개 volume');
 
       setState(() => _isSearching = false);
       _nextStep();

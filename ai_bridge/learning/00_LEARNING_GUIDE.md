@@ -42,6 +42,7 @@ ai_bridge/templates/BIGSTEP_TEMPLATE.md
 ### 3단계: 참고 자료
 - [ ] `06_HISTORY.md` 훑어보기
 - [ ] `07_VISION_AI_LIMITS.md` 훑어보기
+- [ ] `08_CLAUDE_LIMITATIONS.md` 읽기 ⭐ **자각 필수!**
 - [ ] `knowhow/` 폴더 내용 확인
 
 ### 4단계: 템플릿 확인
@@ -151,6 +152,7 @@ ai_bridge/
 │   ├── 05_GO_ROUTER_PATTERNS.md
 │   ├── 06_HISTORY.md
 │   ├── 07_VISION_AI_LIMITS.md
+│   ├── 08_CLAUDE_LIMITATIONS.md  # Claude 약점 자각
 │   └── knowhow/
 │
 ├── templates/          # 템플릿
@@ -175,6 +177,7 @@ ai_bridge/
 3. go_router에서 네비게이션 방법은?
 4. 빅스텝 지시서 작성 전 확인할 것 5가지는?
 5. Shell 수정 시 순서 맞춰야 하는 3가지는?
+6. Claude의 핵심 약점은? 어려운 문제에서 어떻게 해야 하나?
 
 ---
 

@@ -177,8 +177,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _buildInfoChip(Icons.school, book.grade),
-                    const SizedBox(width: 8),
                     _buildInfoChip(_getSubjectIcon(book.subject), book.subject),
                   ],
                 ),

@@ -26,6 +26,47 @@ class _MyBooksPageState extends State<MyBooksPage> {
     _loadBooks();
   }
 
+  Future<void> _deleteBook(LocalBook book) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('책 삭제'),
+        content: Text('"${book.title}"을(를) 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _repository.deleteBook(book.id);
+        safePrint('[MyBooks] 책 삭제 완료: ${book.title}');
+        _loadBooks();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('"${book.title}" 삭제됨')),
+          );
+        }
+      } catch (e) {
+        safePrint('[MyBooks] 책 삭제 실패: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('삭제 실패: $e')),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _loadBooks() async {
     safePrint('[MyBooks] 진입');
     try {
@@ -138,6 +179,10 @@ class _MyBooksPageState extends State<MyBooksPage> {
                         onTap: () {
                           safePrint('[MyBooks] 책 카드 탭: ${book.title}');
                           context.push('/my-books/${book.id}');
+                        },
+                        onLongPress: () {
+                          safePrint('[MyBooks] 책 카드 길게 누름: ${book.title}');
+                          _deleteBook(book);
                         },
                       );
                     },

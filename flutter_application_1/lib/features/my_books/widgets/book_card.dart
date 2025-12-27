@@ -9,11 +9,13 @@ import '../models/local_book.dart';
 class BookCard extends StatelessWidget {
   final LocalBook book;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const BookCard({
     super.key,
     required this.book,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -26,6 +28,7 @@ class BookCard extends StatelessWidget {
       elevation: 2,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
