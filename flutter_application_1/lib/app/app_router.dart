@@ -25,6 +25,9 @@ import '../features/settings/api_key_settings_page.dart';
 import '../features/my_books/pages/my_books_page.dart';
 import '../features/my_books/pages/book_register_wizard.dart';
 import '../features/my_books/pages/book_detail_page.dart';
+import '../features/my_books/pages/answer_camera_page.dart';
+import '../features/my_books/pages/problem_camera_page.dart';
+import '../features/my_books/pages/book_edit_page.dart';
 
 /// 역할 가드 & 홈쉘 분리 라우터
 class AppRouter {
@@ -211,6 +214,29 @@ class AppRouter {
           builder: (context, state) {
             final bookId = state.pathParameters['bookId'] ?? '';
             return BookDetailPage(bookId: bookId);
+          },
+        ),
+        // 책 수정 페이지
+        GoRoute(
+          path: '/my-books/:id/edit',
+          builder: (context, state) => BookEditPage(
+            bookId: state.pathParameters['id']!,
+          ),
+        ),
+        // 정답지 촬영 페이지
+        GoRoute(
+          path: '/my-books/:bookId/answer-camera',
+          builder: (context, state) {
+            final bookId = state.pathParameters['bookId'] ?? '';
+            return AnswerCameraPage(bookId: bookId);
+          },
+        ),
+        // 문제 촬영 페이지
+        GoRoute(
+          path: '/my-books/:bookId/problem-camera',
+          builder: (context, state) {
+            final bookId = state.pathParameters['bookId'] ?? '';
+            return ProblemCameraPage(bookId: bookId);
           },
         ),
 

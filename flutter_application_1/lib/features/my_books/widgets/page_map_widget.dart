@@ -1,80 +1,240 @@
 import 'package:flutter/material.dart';
+import '../models/local_book.dart';
+import '../models/book_volume.dart';
+import '../models/page_status.dart';
 
-/// 페이지 맵 위젯
-/// - 10페이지 단위로 행 표시
-/// - 등록된 페이지: 초록색
-/// - 미등록: 회색
-/// - 가로 스크롤 가능
-class PageMapWidget extends StatelessWidget {
-  final int totalPages;
-  final List<int> registeredPages;
+/// 페이지 맵 위젯 v2
+/// - Volume별 탭으로 분리
+/// - 상태별 색상: 회색(미등록), 파란(정답만), 녹색(문제등록), 연두(완료)
+class PageMapWidget extends StatefulWidget {
+  final LocalBook book;
+  final Function(BookVolume volume, int page)? onPageTap;
 
   const PageMapWidget({
     super.key,
-    required this.totalPages,
-    required this.registeredPages,
+    required this.book,
+    this.onPageTap,
   });
 
   @override
+  State<PageMapWidget> createState() => _PageMapWidgetState();
+}
+
+class _PageMapWidgetState extends State<PageMapWidget> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: widget.book.volumes.length,
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final registeredSet = Set<int>.from(registeredPages);
-    final rows = (totalPages / 10).ceil();
+    final volumes = widget.book.volumes;
+    
+    // Volume이 1개면 탭 없이 바로 표시
+    if (volumes.length == 1) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLegend(),
+          const SizedBox(height: 8),
+          _buildVolumePageMap(volumes.first),
+        ],
+      );
+    }
 
-    return SizedBox(
-      height: rows * 40.0 + 16, // 각 행 40픽셀 + 패딩
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(rows, (rowIndex) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: List.generate(10, (colIndex) {
-                  final pageNumber = rowIndex * 10 + colIndex + 1;
-                  if (pageNumber > totalPages) {
-                    return const SizedBox(width: 36); // 빈 공간
-                  }
-
-                  final isRegistered = registeredSet.contains(pageNumber);
-                  return _buildPageBox(
-                    pageNumber: pageNumber,
-                    isRegistered: isRegistered,
-                  );
-                }),
-              ),
-            );
-          }),
+    // Volume이 여러 개면 탭으로 표시
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLegend(),
+        const SizedBox(height: 8),
+        
+        // Volume 탭
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            isScrollable: volumes.length > 3,
+            labelColor: Theme.of(context).primaryColor,
+            unselectedLabelColor: Colors.grey[600],
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicator: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                ),
+              ],
+            ),
+            tabs: volumes.map((vol) {
+              final pageCount = vol.effectiveTotalPages;
+              return Tab(
+                child: Text(
+                  '${vol.name} (${pageCount}p)',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              );
+            }).toList(),
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        
+        // 페이지 맵
+        SizedBox(
+          height: 220,
+          child: TabBarView(
+            controller: _tabController,
+            children: volumes.map((vol) => _buildVolumePageMap(vol)).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 범례 위젯
+  Widget _buildLegend() {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      children: [
+        _buildLegendItem(PageStatus.notRegistered, '미등록'),
+        _buildLegendItem(PageStatus.answerOnly, '정답만'),
+        _buildLegendItem(PageStatus.problemRegistered, '문제등록'),
+        _buildLegendItem(PageStatus.complete, '완료'),
+      ],
+    );
+  }
+
+  Widget _buildLegendItem(PageStatus status, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: Color(status.colorValue),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  /// Volume별 페이지 맵
+  Widget _buildVolumePageMap(BookVolume volume) {
+    final pageCount = volume.effectiveTotalPages;
+    
+    if (pageCount == 0) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange[300], size: 32),
+            const SizedBox(height: 8),
+            Text(
+              '페이지 범위가 설정되지 않았습니다',
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '책 수정에서 페이지 범위를 입력하세요',
+              style: TextStyle(color: Colors.grey[400], fontSize: 11),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final startPage = volume.effectiveStartPage;
+    final statuses = widget.book.getVolumePageStatuses(volume);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 화면 너비에 맞춰 한 줄에 들어갈 페이지 수 계산
+        const double boxSize = 32;
+        const double spacing = 4;
+        final int pagesPerRow = ((constraints.maxWidth + spacing) / (boxSize + spacing)).floor().clamp(5, 10);
+        final rows = (pageCount / pagesPerRow).ceil();
+
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: List.generate(rows, (rowIndex) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Wrap(
+                  spacing: spacing,
+                  children: List.generate(pagesPerRow, (colIndex) {
+                    final pageIndex = rowIndex * pagesPerRow + colIndex;
+                    if (pageIndex >= pageCount) {
+                      return const SizedBox.shrink();
+                    }
+                    final pageNumber = startPage + pageIndex;
+                    final status = statuses[pageNumber] ?? PageStatus.notRegistered;
+                    return _buildPageBox(
+                      volume: volume,
+                      pageNumber: pageNumber,
+                      status: status,
+                    );
+                  }),
+                ),
+              );
+            }),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildPageBox({
+    required BookVolume volume,
     required int pageNumber,
-    required bool isRegistered,
+    required PageStatus status,
   }) {
-    return Container(
-      width: 32,
-      height: 32,
-      margin: const EdgeInsets.only(right: 4),
-      decoration: BoxDecoration(
-        color: isRegistered ? Colors.green : Colors.grey[300],
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: isRegistered ? Colors.green[700]! : Colors.grey[400]!,
-          width: 0.5,
+    final color = Color(status.colorValue);
+    final isLight = status == PageStatus.notRegistered;
+
+    return GestureDetector(
+      onTap: () => widget.onPageTap?.call(volume, pageNumber),
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: isLight ? Colors.grey[400]! : color.withOpacity(0.7),
+            width: 0.5,
+          ),
         ),
-      ),
-      child: Center(
-        child: Text(
-          '$pageNumber',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: isRegistered ? Colors.white : Colors.grey[700],
+        child: Center(
+          child: Text(
+            '$pageNumber',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isLight ? Colors.grey[700] : Colors.white,
+            ),
           ),
         ),
       ),

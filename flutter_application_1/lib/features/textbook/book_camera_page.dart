@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
@@ -10,6 +11,7 @@ import '../../shared/services/claude_api_service.dart';
 /// - 자동 테두리 감지
 /// - 프레임 맞춰야만 촬영 가능
 /// - 자동 원근 보정
+/// - 페이지 번호 수정 가능
 class BookCameraPage extends StatefulWidget {
   const BookCameraPage({super.key});
 
@@ -76,7 +78,7 @@ class _BookCameraPageState extends State<BookCameraPage> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.teal.withOpacity(0.2),
+                    color: Colors.teal.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.document_scanner, size: 64, color: Colors.teal),
@@ -221,7 +223,80 @@ class _BookCameraPageState extends State<BookCameraPage> {
       setState(() {
         _isAnalyzing = false;
         _analysisStatus = '인식 실패';
+        // 인식 실패 시 0으로 채우기
+        while (_detectedPages.length < _scannedImages.length) {
+          _detectedPages.add(0);
+        }
       });
+    }
+  }
+
+  /// 페이지 번호 수정 다이얼로그
+  Future<void> _editPageNumber(int index) async {
+    final controller = TextEditingController(
+      text: _detectedPages[index] > 0 ? _detectedPages[index].toString() : '',
+    );
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey.shade900,
+        title: const Text(
+          '페이지 번호 수정',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '인식된 페이지가 틀렸다면 직접 입력해주세요.',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              autofocus: true,
+              style: const TextStyle(color: Colors.white, fontSize: 24),
+              decoration: InputDecoration(
+                hintText: '페이지 번호',
+                hintStyle: TextStyle(color: Colors.grey.shade600),
+                prefixText: 'p.',
+                prefixStyle: const TextStyle(color: Colors.teal, fontSize: 24),
+                filled: true,
+                fillColor: Colors.grey.shade800,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('취소', style: TextStyle(color: Colors.grey.shade400)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text) ?? 0;
+              Navigator.pop(context, value);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _detectedPages[index] = result;
+      });
+      safePrint('[Scanner] 페이지 ${index + 1} 수동 수정 → p.$result');
     }
   }
 
@@ -316,8 +391,25 @@ class _BookCameraPageState extends State<BookCameraPage> {
                 )
               : Column(
                   children: [
-                    const Text('📄 인식된 페이지', 
-                        style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('📄 인식된 페이지', 
+                            style: TextStyle(color: Colors.white70, fontSize: 14)),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            '탭하여 수정',
+                            style: TextStyle(color: Colors.orange, fontSize: 10),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -326,28 +418,48 @@ class _BookCameraPageState extends State<BookCameraPage> {
                           : _detectedPages.asMap().entries.map((entry) {
                               final idx = entry.key;
                               final page = entry.value;
-                              return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 6),
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: page > 0 ? Colors.teal : Colors.orange,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      page > 0 ? 'p.$page' : '?',
-                                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              return GestureDetector(
+                                onTap: () => _editPageNumber(idx),
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: page > 0 ? Colors.teal : Colors.orange,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: page > 0 ? Colors.teal.shade300 : Colors.orange.shade300,
+                                      width: 2,
                                     ),
-                                    if (_scannedImages.length > 1)
-                                      Text(
-                                        idx == 0 ? '왼쪽' : '오른쪽',
-                                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            page > 0 ? 'p.$page' : '?',
+                                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.edit, color: Colors.white70, size: 14),
+                                        ],
                                       ),
-                                  ],
+                                      if (_scannedImages.length > 1)
+                                        Text(
+                                          idx == 0 ? '왼쪽' : '오른쪽',
+                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               );
                             }).toList(),
+                    ),
+                    // 안내 메시지
+                    const SizedBox(height: 12),
+                    Text(
+                      '페이지 번호가 틀렸다면 위 버튼을 탭하여 수정하세요',
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                     ),
                   ],
                 ),
@@ -407,6 +519,19 @@ class _BookCameraPageState extends State<BookCameraPage> {
   Future<void> _confirmAndReturn() async {
     if (_scannedImages.isEmpty) return;
     
+    // 유효한 페이지만 필터링 (0보다 큰 것)
+    final validPages = _detectedPages.where((p) => p > 0).toList();
+    
+    if (validPages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('페이지 번호를 입력해주세요'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
     // 2페이지 모드인데 이미지가 2장이면 합치기
     File finalImage;
     
@@ -443,7 +568,7 @@ class _BookCameraPageState extends State<BookCameraPage> {
     Navigator.pop(context, {
       'image': finalImage,
       'pageMode': _pageMode,
-      'pages': _detectedPages,
+      'pages': validPages,  // 유효한 페이지만 반환
       'individualImages': _scannedImages.map((p) => File(p)).toList(),
     });
   }

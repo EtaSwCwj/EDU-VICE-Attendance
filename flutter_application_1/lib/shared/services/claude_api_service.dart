@@ -984,7 +984,7 @@ sectionBounds: 각 섹션이 차지하는 대략적인 영역 (%)
 
     final bytes = await croppedImage.readAsBytes();
     final base64Data = base64Encode(bytes);
-    
+
     final extension = croppedImage.path.split('.').last.toLowerCase();
     final mediaType = switch (extension) {
       'png' => 'image/png',
@@ -1034,6 +1034,99 @@ sectionBounds: 각 섹션이 차지하는 대략적인 영역 (%)
     } catch (e) {
       debugPrint('[ClaudeAPI] 검증 실패: $e');
       return false;
+    }
+  }
+
+  /// PDF 여러 페이지 분석 (정답지용)
+  /// 반환: List<int> 인식된 페이지 번호들
+  Future<List<int>> analyzePdfPages(File pdfFile) async {
+    final apiKey = await _getApiKey();
+    if (apiKey == null) {
+      throw Exception('API 키가 설정되지 않았습니다');
+    }
+
+    final bytes = await pdfFile.readAsBytes();
+    final base64Data = base64Encode(bytes);
+
+    debugPrint('[ClaudeAPI] PDF 여러 페이지 분석 시작');
+
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model': _model,
+          'max_tokens': 2048,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'document',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': 'application/pdf',
+                    'data': base64Data,
+                  },
+                },
+                {
+                  'type': 'text',
+                  'text': '''이 PDF의 각 페이지에서 페이지 번호를 찾아주세요.
+교재 정답지입니다. 각 페이지 상단이나 하단에 있는 페이지 번호를 읽어주세요.
+
+JSON만 반환:
+{
+  "pages": [1, 2, 3, 4, 5]
+}
+
+pages 배열에 인식된 페이지 번호들을 순서대로 넣어주세요.
+페이지 번호를 못 찾으면 해당 페이지는 건너뛰세요.''',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['content'][0]['text'] as String;
+        debugPrint('[ClaudeAPI] PDF 분석 응답: $content');
+
+        try {
+          String jsonStr = content;
+          if (content.contains('```json')) {
+            jsonStr = content.split('```json')[1].split('```')[0].trim();
+          } else if (content.contains('```')) {
+            jsonStr = content.split('```')[1].split('```')[0].trim();
+          } else if (content.contains('{')) {
+            final start = content.indexOf('{');
+            final end = content.lastIndexOf('}') + 1;
+            jsonStr = content.substring(start, end);
+          }
+
+          final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+          final pages = (parsed['pages'] as List<dynamic>)
+              .map((e) => e as int)
+              .toList();
+          debugPrint('[ClaudeAPI] 인식된 페이지: $pages');
+          return pages;
+        } catch (e) {
+          debugPrint('[ClaudeAPI] JSON 파싱 실패: $e');
+          return [];
+        }
+      } else {
+        debugPrint('[ClaudeAPI] 에러: ${response.statusCode}');
+        debugPrint('[ClaudeAPI] 응답: ${response.body}');
+        throw Exception('API 호출 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[ClaudeAPI] PDF 분석 예외: $e');
+      rethrow;
     }
   }
 }
