@@ -12,7 +12,7 @@ MCP filesystem 연결되어 있음.
 
 경로: C:\gitproject\EDU-VICE-Attendance\ai_bridge\
 
-해봐. 된다.
+된다.
 ```
 
 ---
