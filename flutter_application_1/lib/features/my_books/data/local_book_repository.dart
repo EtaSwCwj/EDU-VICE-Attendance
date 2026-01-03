@@ -2,6 +2,7 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:sembast/sembast.dart';
 import '../../../data/local/sembast_database.dart';
 import '../models/local_book.dart';
+import '../models/toc_entry.dart';
 
 const String _kBooksStore = 'my_books';
 
@@ -125,10 +126,10 @@ class LocalBookRepository {
     }
   }
 
-  /// 등록된 페이지 전체 초기화
+  /// 등록된 페이지 + 정답 내용 전체 초기화
   Future<LocalBook> clearRegisteredPages(String bookId) async {
     try {
-      safePrint('[LocalBookRepo] 등록된 페이지 전체 초기화: $bookId');
+      safePrint('[LocalBookRepo] 등록된 페이지 + 정답 내용 전체 초기화: $bookId');
       final book = await getBook(bookId);
       if (book == null) {
         throw Exception('책을 찾을 수 없습니다: $bookId');
@@ -136,11 +137,12 @@ class LocalBookRepository {
 
       final updatedBook = book.copyWith(
         registeredPages: [],
+        answerContents: {},  // ★ 정답 내용도 함께 초기화
         updatedAt: DateTime.now(),
       );
 
       await saveBook(updatedBook);
-      safePrint('[LocalBookRepo] 등록된 페이지 초기화 완료');
+      safePrint('[LocalBookRepo] 등록된 페이지 + 정답 내용 초기화 완료');
       return updatedBook;
     } catch (e) {
       safePrint('[LocalBookRepo] 등록된 페이지 초기화 실패: $e');
@@ -225,5 +227,46 @@ class LocalBookRepository {
       safePrint('[LocalBookRepo] 촬영 기록 삭제 실패: $e');
       throw Exception('촬영 기록 삭제 실패: $e');
     }
+  }
+
+  /// 페이지 번호로 해당 단원 찾기
+  TocEntry? findUnitForPage(LocalBook book, int page) {
+    for (final entry in book.tableOfContents) {
+      final start = entry.startPage;
+      final end = entry.endPage ?? entry.startPage;
+      if (page >= start && page <= end) {
+        safePrint('[BookRepo] 페이지 $page → 단원: ${entry.unitName}');
+        return entry;
+      }
+    }
+    safePrint('[BookRepo] 페이지 $page → 단원 못 찾음');
+    return null;
+  }
+
+  /// 정답지에서 특정 문제의 정답 추출
+  /// answerContents[page]에서 "번호" 패턴으로 해당 문제 정답 찾기
+  String? extractAnswerForProblem(LocalBook book, int page, int problemNumber) {
+    final content = book.answerContents[page];
+    if (content == null || content.isEmpty) {
+      safePrint('[BookRepo] 페이지 $page 정답 없음');
+      return null;
+    }
+
+    // 패턴: "3 정답내용" 또는 "3. 정답내용" 또는 "3) 정답내용"
+    // 다음 문제 번호나 줄바꿈까지 추출
+    final pattern = RegExp(
+      r'(?:^|\s)' + problemNumber.toString() + r'[\.\)\s]+([^\n]+?)(?=\s*(?:\d+[\.\)\s]|$))',
+      multiLine: true,
+    );
+
+    final match = pattern.firstMatch(content);
+    if (match != null && match.group(1) != null) {
+      final answer = match.group(1)!.trim();
+      safePrint('[BookRepo] p$page-$problemNumber 정답: $answer');
+      return answer;
+    }
+
+    safePrint('[BookRepo] p$page-$problemNumber 정답 추출 실패');
+    return null;
   }
 }

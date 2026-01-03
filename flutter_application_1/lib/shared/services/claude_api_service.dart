@@ -868,6 +868,185 @@ text 필드: 해당 영역에서 실제로 보이는 문제 텍스트 일부 (�
     return result?['pageNumber'] as int? ?? 0;
   }
 
+  /// ML Kit OCR로 추출한 텍스트를 정답 데이터로 파싱
+  /// BIG_136: 텍스트 전용 Claude AI 파싱 (이미지 없이)
+  /// 
+  /// 반환 형식 (answer_parser_service.dart가 기대하는 구조):
+  /// [
+  ///   {
+  ///     'pageNumber': 9,
+  ///     'sections': {'A': ['답1', '답2'], 'B': ['답1']},
+  ///     'content': 'Unit 01...\nA)\n1. 답1\n...'
+  ///   }
+  /// ]
+  Future<List<Map<String, dynamic>>> parseOcrTextToAnswers(String ocrText) async {
+    debugPrint('[Claude] ========== parseOcrTextToAnswers 시작 ==========');
+    debugPrint('[Claude] OCR 텍스트 길이: ${ocrText.length}자');
+
+    // ★ BIG_143: AI 입력 텍스트 상세 로그 (줄바꿈 치환)
+    final inputForLog = ocrText.replaceAll('\n', '↵');
+    final inputPreview = inputForLog.length > 500 ? inputForLog.substring(0, 500) : inputForLog;
+    debugPrint('[Claude] AI 입력 OCR 앞 500자: $inputPreview');
+
+    try {
+      final apiKey = await _getApiKey();
+      if (apiKey == null) {
+        throw Exception('API 키가 설정되지 않았습니다');
+      }
+
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model': _modelHaiku,  // 비용 절감
+          'max_tokens': 4096,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'text',
+                  'text': '''
+다음은 교육용 학습 관리 시스템(LMS)에서 ML Kit OCR로 추출한 텍스트입니다.
+학생 학습 진도 추적을 위해 정답 데이터를 구조화해주세요.
+
+<ocr_text>
+$ocrText
+</ocr_text>
+
+요구사항:
+1. 페이지 번호 인식: "p. 09", "p.11", "p. 13" 형식 찾기
+2. 섹션 구분: A, B, C, D 등 대문자 알파벳
+3. 각 섹션의 정답만 추출 (문제번호 제외, 정답 텍스트만)
+
+JSON 형식:
+{
+  "pages": [
+    {
+      "pageNumber": 9,
+      "unitName": "Unit 01 문장을 이루는 요소",
+      "sections": {
+        "A": ["목적어", "동사", "수식어", "보어"],
+        "B": ["wrote", "My teacher", "great", "dinner"],
+        "C": ["주어, 동사, 보어", "주어, 동사, 목적어, 수식어"],
+        "D": ["Tom and I go to the same school.", "She was writing in a diary."]
+      }
+    }
+  ]
+}
+
+중요:
+- sections 값은 **정답 문자열 배열** (객체 아님!)
+- 같은 페이지 정보는 하나로 합치기
+- JSON만 반환, 설명 금지
+'''
+                }
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['content'][0]['text'] as String;
+        debugPrint('[Claude] ========== AI 응답 ==========');
+        debugPrint('[Claude] 응답 길이: ${content.length}자');
+        // ★ BIG_143: AI 응답 전체 로그 (줄바꿈 치환)
+        final responseForLog = content.replaceAll('\n', '↵');
+        debugPrint('[Claude] 응답 전체: $responseForLog');
+        debugPrint('[Claude] ================================');
+
+        // JSON 추출 및 파싱
+        String jsonStr = content;
+        if (content.contains('```json')) {
+          jsonStr = content.split('```json')[1].split('```')[0].trim();
+        } else if (content.contains('```')) {
+          jsonStr = content.split('```')[1].split('```')[0].trim();
+        } else if (content.contains('{')) {
+          final start = content.indexOf('{');
+          final end = content.lastIndexOf('}') + 1;
+          if (end > start) {
+            jsonStr = content.substring(start, end);
+          }
+        }
+
+        final Map<String, dynamic> parsed = jsonDecode(jsonStr);
+
+        // 결과 변환 - answer_parser_service.dart가 기대하는 형식으로!
+        final List<Map<String, dynamic>> results = [];
+
+        if (parsed['pages'] != null) {
+          for (var page in parsed['pages']) {
+            final pageNumber = page['pageNumber'] as int? ?? 0;
+            final unitName = page['unitName'] as String? ?? '';
+            final rawSections = page['sections'] as Map<String, dynamic>? ?? {};
+            
+            // sections를 Map<String, List<String>>으로 변환
+            final sections = <String, List<String>>{};
+            for (final entry in rawSections.entries) {
+              final sectionName = entry.key;
+              final sectionValue = entry.value;
+              
+              if (sectionValue is List) {
+                // 정상: ["답1", "답2"] 형태
+                sections[sectionName] = sectionValue.map((e) => e.toString()).toList();
+              } else if (sectionValue is Map) {
+                // 구형: {"answers": [...]} 형태 → 변환
+                final answers = sectionValue['answers'] as List? ?? [];
+                sections[sectionName] = answers.map((e) {
+                  if (e is Map) {
+                    return e['answer']?.toString() ?? '';
+                  }
+                  return e.toString();
+                }).where((s) => s.isNotEmpty).toList();
+              }
+              
+              debugPrint('[Claude] p.$pageNumber 섹션 $sectionName: ${sections[sectionName]?.length ?? 0}개 정답');
+            }
+            
+            // content 생성 (UI 표시용)
+            final contentBuffer = StringBuffer();
+            if (unitName.isNotEmpty) {
+              contentBuffer.writeln(unitName);
+              contentBuffer.writeln();
+            }
+            for (final entry in sections.entries) {
+              contentBuffer.writeln('${entry.key})');
+              for (int i = 0; i < entry.value.length; i++) {
+                contentBuffer.writeln('${i + 1}. ${entry.value[i]}');
+              }
+              contentBuffer.writeln();
+            }
+            
+            results.add({
+              'pageNumber': pageNumber,
+              'sections': sections,
+              'content': contentBuffer.toString().trim(),
+            });
+            
+            debugPrint('[Claude] p.$pageNumber 추가: ${sections.keys.toList()} 섹션');
+          }
+        }
+
+        debugPrint('[Claude] 총 ${results.length}개 페이지 파싱 완료');
+        return results;
+      } else {
+        debugPrint('[Claude] 에러: ${response.statusCode}');
+        debugPrint('[Claude] 응답: ${response.body}');
+        return [];
+      }
+
+    } catch (e) {
+      debugPrint('[Claude] parseOcrTextToAnswers 오류: $e');
+      return [];
+    }
+  }
+
   /// 통합 분석: 페이지 번호 + 문제 위치 한 번에
   Future<Map<String, dynamic>?> analyzePageComplete(File imageFile) async {
     final apiKey = await _getApiKey();
@@ -1279,36 +1458,46 @@ content에는 해당 페이지에서 보이는 텍스트를 줄바꿈(\\n)으로
                   'type': 'text',
                   'text': '''이 PDF는 영어 교재 정답지입니다.
 
-★★★ 핵심 규칙 ★★★
-"p. XX" 또는 "pp. XX-XX" 형식은 "교재 XX페이지의 정답"을 의미합니다.
-한 PDF 페이지 안에 여러 개의 "p. XX"가 있을 수 있습니다.
-각 "p. XX" 아래의 정답들을 해당 교재 페이지에 매칭해서 분리하세요.
+★★★ 페이지 번호 찾는 방법 ★★★
+1. "p. XX", "pp. XX", "p.XX" 형식 (예: p. 09, pp. 16-17)
+2. "Practice p. XX", "Actual Test p. XX" 형식
+3. 페이지 상단/하단에 인쇄된 숫자 (예: 하단 중앙에 "19")
+4. Unit 제목 옆의 페이지 번호
 
-예시:
-PDF에 이렇게 보이면:
-  Practice p. 09
-  A 1 목적어 2 동사
-  Practice p. 11
-  A 1 angry 2 an artist
+위 순서대로 찾고, 없으면 다음 방법 시도.
+페이지 번호는 반드시 교재에 인쇄된 번호를 사용하세요.
 
-이렇게 분리:
-{
-  "answers": [
-    {"textbookPage": 9, "content": "Practice\\nA 1 목적어 2 동사"},
-    {"textbookPage": 11, "content": "Practice\\nA 1 angry 2 an artist"}
-  ]
-}
+★★★ 정답 구조화 형식 ★★★
+섹션(A, B, C, D...)별로 구분하고, 각 문제 번호마다 줄바꿈하세요.
+
+예시 입력:
+"Unit 01 A 1 목적어 2 주어 3 보어 B 1 동사 2 목적어"
+
+예시 출력:
+A)
+1. 목적어
+2. 주어
+3. 보어
+
+B)
+1. 동사
+2. 목적어
 
 JSON 형식:
 {
   "answers": [
-    {"textbookPage": 숫자, "content": "해당 페이지 정답 내용"}
+    {
+      "textbookPage": 9,
+      "content": "Unit 01 문장을 이루는 요소\\n\\nA)\\n1. 목적어\\n2. 주어\\n3. 보어\\n4. 수식어\\n\\nB)\\n1. 동사\\n2. 목적어"
+    }
   ]
 }
 
-- textbookPage: "p. XX"에서 추출한 교재 페이지 번호
-- content: 해당 페이지의 정답 (다음 "p. XX" 나오기 전까지)
-- pp. 16-17 같은 범위는 16으로 저장''',
+규칙:
+- textbookPage: 교재에 인쇄된 페이지 번호 (PDF 순서 아님!)
+- content: 섹션별로 구분, 문제번호마다 줄바꿈
+- 한 PDF 페이지에 여러 교재 페이지가 있으면 분리
+- 영어 문장 정답은 그대로 유지''',
                 },
               ],
             },
@@ -1465,5 +1654,650 @@ JSON 형식으로만 반환:
       debugPrint('[ClaudeAPI] 목차 인식 예외: $e');
       rethrow;
     }
+  }
+
+  /// PDF 정답지 단계별 분석 (목차 교차 검증)
+  ///
+  /// Step 1: 열 구조 파악
+  /// Step 2: 왼쪽 위부터 순서대로 읽기
+  /// Step 3: 목차와 교차 검증
+  /// Step 4: 페이지 번호 검증
+  /// Step 5: 정답 구조화
+  Future<List<Map<String, dynamic>>> extractPdfWithTocValidation(
+    File pdfChunk,
+    List<Map<String, dynamic>> tocEntries,  // 목차 데이터
+  ) async {
+    final apiKey = await _getApiKey();
+    if (apiKey == null) {
+      throw Exception('API 키가 설정되지 않았습니다');
+    }
+
+    final bytes = await pdfChunk.readAsBytes();
+    final base64Data = base64Encode(bytes);
+
+    // 목차 정보를 프롬프트용 문자열로 변환
+    final tocInfo = tocEntries.map((e) {
+      final name = e['unitName'] ?? '';
+      final start = e['startPage'] ?? 0;
+      final end = e['endPage'] ?? start;
+      return '$name: p.$start~$end';
+    }).join('\n');
+
+    debugPrint('[PDF분석] ========== 단계별 분석 시작 ==========');
+    debugPrint('[PDF분석] 목차 정보:\n$tocInfo');
+
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model': _modelHaiku,
+          'max_tokens': 4000,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'document',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': 'application/pdf',
+                    'data': base64Data,
+                  },
+                },
+                {
+                  'type': 'text',
+                  'text': '''이 PDF는 영어 교재 정답지입니다.
+
+★★★ 가장 중요 ★★★
+이 PDF 청크에는 교재 페이지가 여러 개 있습니다!
+반드시 보이는 모든 교재 페이지를 찾아서 pages 배열에 넣으세요.
+1개만 찾지 말고, 2개, 3개, 4개... 보이는 만큼 모두 추출하세요!
+
+★★★ 목차 정보 (교차 검증용) ★★★
+$tocInfo
+
+★★★ 분석 방법 ★★★
+
+1. PDF 전체를 훑으면서 "p.숫자" 또는 "Unit XX" 패턴을 모두 찾기
+2. 각 교재 페이지마다 정답 추출
+3. 목차와 매칭 확인
+
+페이지 번호 찾는 방법:
+- "p. 09", "p.9", "pp. 16-17" 형식
+- 페이지 하단 중앙의 숫자
+- "Practice p.XX", "Actual Test p.XX" 형식
+
+JSON 형식으로만 반환:
+{
+  "analysis": {
+    "columnLayout": 1 또는 2,
+    "totalPagesFound": 3
+  },
+  "pages": [
+    {
+      "unitName": "Unit 01 문장을 이루는 요소",
+      "tocMatched": true,
+      "pageNumber": 9,
+      "pageValidation": "목차 범위 내",
+      "sections": {
+        "A": ["목적어", "동사", "수식어", "보어"],
+        "B": ["wrote", "My teacher", "great", "dinner"]
+      }
+    },
+    {
+      "unitName": "Unit 02 1형식, 2형식",
+      "tocMatched": true,
+      "pageNumber": 11,
+      "pageValidation": "목차 범위 내",
+      "sections": {
+        "A": ["angry", "an artist"],
+        "B": ["looked", "became"]
+      }
+    }
+  ]
+}
+
+★★★ 필수 규칙 ★★★
+- pages 배열에 찾은 모든 페이지를 넣으세요! (1개만 넣지 마세요!)
+- JSON만 반환! 다른 텍스트 금지!
+- pageNumber는 교재에 인쇄된 번호 (PDF 순서 아님!)
+- 섹션(A,B,C,D)별로 정답 분리''',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['content'][0]['text'] as String;
+        debugPrint('[PDF분석] API 응답 길이: ${content.length}');
+
+        try {
+          String jsonStr = content;
+          if (content.contains('```json')) {
+            jsonStr = content.split('```json')[1].split('```')[0].trim();
+          } else if (content.contains('```')) {
+            jsonStr = content.split('```')[1].split('```')[0].trim();
+          } else if (content.contains('{')) {
+            final start = content.indexOf('{');
+            final end = content.lastIndexOf('}') + 1;
+            jsonStr = content.substring(start, end);
+          }
+
+          final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+          // 분석 결과 로그
+          final analysis = parsed['analysis'] as Map<String, dynamic>?;
+          if (analysis != null) {
+            debugPrint('[PDF분석] Step 1: ${analysis['columnLayout']}열 구조 감지');
+            debugPrint('[PDF분석] Step 2: 읽기 순서 - ${analysis['readingOrder']}');
+          }
+
+          final pages = parsed['pages'] as List<dynamic>? ?? [];
+          final results = <Map<String, dynamic>>[];
+          
+          // ★★★ 중복 페이지 방지용 Set ★★★
+          final Set<int> processedPages = {};
+
+          for (final page in pages) {
+            final unitName = page['unitName'] ?? '';
+            final tocMatched = page['tocMatched'] ?? false;
+            final pageNum = page['pageNumber'] as int?;
+            final validation = page['pageValidation'] ?? '';
+            
+            // ★★★ 중복 페이지 체크 ★★★
+            if (pageNum != null && processedPages.contains(pageNum)) {
+              debugPrint('[PDF분석] ⚠️ 중복 페이지 건너뜀: p.$pageNum (이미 처리됨)');
+              continue;
+            }
+            
+            // ★★★ sections 타입 안전 처리 ★★★
+            Map<String, dynamic> sections = {};
+            final rawSections = page['sections'];
+            if (rawSections is Map<String, dynamic>) {
+              sections = rawSections;
+            } else if (rawSections is Map) {
+              sections = Map<String, dynamic>.from(rawSections);
+            } else {
+              debugPrint('[PDF분석] ⚠️ sections 타입 오류: ${rawSections.runtimeType}');
+            }
+
+            debugPrint('[PDF분석] Step 3: $unitName ${tocMatched ? "목차 매칭 ✓" : "목차 매칭 ✗"}');
+            debugPrint('[PDF분석] Step 4: p.$pageNum - $validation');
+
+            // ★★★ 교차 검증: API + 클라이언트 둘 다 통과해야 진짜 통과 ★★★
+            
+            // 1. API 판단
+            final bool apiSaysValid = tocMatched;
+            
+            // 2. 클라이언트 판단 (실제 페이지 범위 확인)
+            bool clientSaysValid = false;
+            String matchedTocName = '';
+            if (pageNum != null) {
+              for (final toc in tocEntries) {
+                final start = toc['startPage'] as int? ?? 0;
+                final end = toc['endPage'] as int? ?? start;
+                if (pageNum >= start && pageNum <= end) {
+                  clientSaysValid = true;
+                  matchedTocName = toc['unitName'] as String? ?? '';
+                  break;
+                }
+              }
+            }
+            
+            debugPrint('[PDF분석] 검증: API=$apiSaysValid, 클라이언트=$clientSaysValid (p.$pageNum)');
+
+            // 3. 클라이언트 우선 검증 (PDF는 텍스트가 깨끗해서 클라이언트 판단이 더 정확)
+            // TODO: 사진 기반일 때는 API 판단도 고려 필요
+            if (!clientSaysValid) {
+              // ★★★ 실패 원인 상세 로그 ★★★
+              debugPrint('[PDF분석] ========== 교차 검증 실패 상세 ==========');
+              debugPrint('[PDF분석] ❌ 제외된 페이지: p.$pageNum ($unitName)');
+              
+              // API 실패 원인
+              if (!apiSaysValid) {
+                debugPrint('[PDF분석] ❌ API 실패 원인: tocMatched=false (API가 목차 매칭 실패 판정)');
+              }
+              
+              // 클라이언트 실패 원인
+              if (!clientSaysValid) {
+                if (pageNum == null) {
+                  debugPrint('[PDF분석] ❌ 클라이언트 실패 원인: pageNumber가 null');
+                } else {
+                  debugPrint('[PDF분석] ❌ 클라이언트 실패 원인: p.$pageNum이 어떤 목차 범위에도 포함 안 됨');
+                  debugPrint('[PDF분석]    검사한 목차 범위들:');
+                  for (final toc in tocEntries) {
+                    final tocName = toc['unitName'] ?? '';
+                    final start = toc['startPage'] as int? ?? 0;
+                    final end = toc['endPage'] as int? ?? start;
+                    final inRange = pageNum >= start && pageNum <= end;
+                    debugPrint('[PDF분석]    - $tocName: p.$start~$end ${inRange ? "✓" : "✗"}');
+                  }
+                }
+              }
+              debugPrint('[PDF분석] ================================================');
+              continue;  // 다음 페이지로 건너뜀
+            }
+            debugPrint('[PDF분석] ✓ 교차 검증 통과: p.$pageNum (목차: $matchedTocName)');
+            
+            // ★★★ 처리된 페이지로 등록 ★★★
+            if (pageNum != null) {
+              processedPages.add(pageNum);
+            }
+
+            // 섹션별 문제 수 로그 (안전 처리)
+            final sectionInfo = sections.entries.map((e) {
+              final val = e.value;
+              if (val is List) {
+                return '${e.key}섹션 ${val.length}문제';
+              } else {
+                return '${e.key}섹션 (타입오류)';
+              }
+            }).join(', ');
+            debugPrint('[PDF분석] Step 5: $sectionInfo');
+
+            // 정답 내용을 구조화된 문자열로 변환
+            final contentBuffer = StringBuffer();
+            contentBuffer.writeln(unitName);
+            contentBuffer.writeln();
+
+            for (final entry in sections.entries) {
+              final sectionName = entry.key;
+              final rawAnswers = entry.value;
+              if (rawAnswers is! List) {
+                debugPrint('[PDF분석] ⚠️ $sectionName 섹션 정답이 List가 아님: ${rawAnswers.runtimeType}');
+                continue;
+              }
+              final answers = rawAnswers;
+              contentBuffer.writeln('$sectionName)');
+              for (int i = 0; i < answers.length; i++) {
+                contentBuffer.writeln('${i + 1}. ${answers[i]}');
+              }
+              contentBuffer.writeln();
+            }
+
+            results.add({
+              'pageNumber': pageNum,
+              'content': contentBuffer.toString().trim(),
+              'unitName': unitName,
+              'tocMatched': tocMatched,
+            });
+          }
+
+          debugPrint('[PDF분석] ========== 분석 완료: ${results.length}페이지 ==========');
+          return results;
+
+        } catch (e) {
+          debugPrint('[PDF분석] JSON 파싱 실패: $e');
+          debugPrint('[PDF분석] 원본 응답 앞 500자: ${content.substring(0, content.length > 500 ? 500 : content.length)}');
+          return [];
+        }
+      } else if (response.statusCode == 429) {
+        debugPrint('[PDF분석] Rate limit 초과 (429)');
+        throw Exception('RATE_LIMIT');
+      } else {
+        debugPrint('[PDF분석] API 에러: ${response.statusCode}');
+        throw Exception('API 호출 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[PDF분석] 예외: $e');
+      rethrow;
+    }
+  }
+
+  /// 이미지에서 열 개수 감지 (1, 2, 4)
+  Future<int> detectColumnCount(File imageFile) async {
+    final apiKey = await _getApiKey();
+    if (apiKey == null) {
+      throw Exception('API 키가 설정되지 않았습니다');
+    }
+
+    final bytes = await imageFile.readAsBytes();
+    final base64Data = base64Encode(bytes);
+
+    final extension = imageFile.path.split('.').last.toLowerCase();
+    final mediaType = switch (extension) {
+      'png' => 'image/png',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      _ => 'image/png',
+    };
+
+    try {
+      debugPrint('[ClaudeAPI] 열 개수 감지 시작');
+
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model': _modelHaiku,  // 빠른 처리를 위해 Haiku 사용
+          'max_tokens': 50,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'image',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': mediaType,
+                    'data': base64Data,
+                  },
+                },
+                {
+                  'type': 'text',
+                  'text': '''이 이미지는 교재 정답지입니다.
+정답이 몇 열로 배치되어 있나요?
+
+- 1열: 정답이 세로로 한 줄
+- 2열: 정답이 좌/우 2개 열 (2페이지 펼침)
+- 4열: 정답이 4개 열 (2페이지 펼침 + 각 페이지 2열)
+
+숫자만 답하세요: 1, 2, 또는 4''',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final text = data['content'][0]['text'] as String;
+        debugPrint('[ClaudeAPI] 열 감지 응답: $text');
+
+        final match = RegExp(r'[124]').firstMatch(text);
+        if (match != null) {
+          final columns = int.parse(match.group(0)!);
+          debugPrint('[ClaudeAPI] 감지된 열 개수: $columns');
+          return columns;
+        }
+      }
+
+      debugPrint('[ClaudeAPI] 열 감지 실패, 기본값 2 반환');
+      return 2;  // 기본값
+    } catch (e) {
+      debugPrint('[ClaudeAPI] 열 감지 예외: $e');
+      return 2;
+    }
+  }
+
+  /// 병합된 1열 이미지에서 텍스트 추출 (학습 관리용 OCR)
+  /// 
+  /// 프롬프트 설계 원칙:
+  /// - "정답지" 대신 "학습 자료", "교육 콘텐츠" 사용
+  /// - 목적을 "학습 진도 추적"으로 명시
+  /// - JSON 파싱 실패 시 다양한 폴백 전략
+  Future<List<Map<String, dynamic>>> extractAnswersFromMergedImage(
+    File mergedImage,
+    List<Map<String, dynamic>> tocEntries,
+  ) async {
+    final apiKey = await _getApiKey();
+    if (apiKey == null) {
+      throw Exception('API 키가 설정되지 않았습니다');
+    }
+
+    final bytes = await mergedImage.readAsBytes();
+    final base64Data = base64Encode(bytes);
+
+    // 목차 정보 문자열
+    final tocInfo = tocEntries.map((e) {
+      final name = e['unitName'] ?? '';
+      final start = e['startPage'] ?? 0;
+      final end = e['endPage'] ?? start;
+      return '$name: p.$start~$end';
+    }).join('\n');
+
+    debugPrint('[OCR추출] 이미지 텍스트 추출 시작');
+
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model': _modelHaiku,
+          'max_tokens': 8000,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'image',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': 'image/png',
+                    'data': base64Data,
+                  },
+                },
+                {
+                  'type': 'text',
+                  'text': '''당신은 교육용 학습 관리 시스템(LMS)의 OCR 엔진입니다.
+이 이미지는 학생 진도 추적을 위한 교육 자료입니다.
+
+[시스템 목적]
+- 학원에서 학생별 학습 진도를 추적하는 앱
+- 선생님이 학생의 오답을 분석하여 복습 자료 생성
+- 이미지의 텍스트를 DB에 저장하여 검색/분석에 활용
+
+[추출 요청]
+이미지에서 모든 텍스트를 OCR로 추출해주세요.
+위에서 아래로 순서대로 읽어주세요.
+
+[참고 - 단원 구성]
+$tocInfo
+
+[출력 형식 - 반드시 JSON만]
+{"pages":[{"pageNumber":9,"unitName":"Unit 01","sections":{"A":["1번내용","2번내용"],"B":["1번내용"]}}]}
+
+[중요 규칙]
+1. 반드시 위 JSON 형식으로만 출력
+2. 설명이나 코멘트 없이 JSON만
+3. p.XX, pp.XX-YY 형식의 페이지 번호 찾기
+4. A, B, C, D 등 섹션별로 구분
+5. 각 항목의 번호와 내용 추출''',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['content'][0]['text'] as String;
+        debugPrint('[OCR추출] 응답 길이: ${content.length}');
+        debugPrint('[OCR추출] 응답 앞 200자: ${content.substring(0, content.length > 200 ? 200 : content.length)}');
+
+        // ★★★ 강화된 JSON 파싱 로직 ★★★
+        return _parseOcrResponse(content);
+
+      } else {
+        debugPrint('[OCR추출] API 에러: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      debugPrint('[OCR추출] 예외: $e');
+      return [];
+    }
+  }
+
+  /// OCR 응답 파싱 (다양한 형식 처리)
+  List<Map<String, dynamic>> _parseOcrResponse(String content) {
+    debugPrint('[OCR파싱] 파싱 시작');
+    
+    // 1. JSON 추출 시도
+    String jsonStr = content;
+    
+    // 마크다운 코드블록 제거
+    if (content.contains('```json')) {
+      jsonStr = content.split('```json')[1].split('```')[0].trim();
+    } else if (content.contains('```')) {
+      jsonStr = content.split('```')[1].split('```')[0].trim();
+    } else if (content.contains('{')) {
+      final start = content.indexOf('{');
+      final end = content.lastIndexOf('}') + 1;
+      if (end > start) {
+        jsonStr = content.substring(start, end);
+      }
+    }
+
+    // 2. JSON 파싱 시도
+    try {
+      final parsed = jsonDecode(jsonStr);
+      
+      // Case A: {"pages": [...]} 형식
+      if (parsed is Map<String, dynamic> && parsed.containsKey('pages')) {
+        final pagesRaw = parsed['pages'];
+        List<dynamic> pages;
+        
+        if (pagesRaw is List) {
+          pages = pagesRaw;
+        } else if (pagesRaw is Map) {
+          // 단일 객체가 온 경우 배열로 변환
+          pages = [pagesRaw];
+        } else {
+          debugPrint('[OCR파싱] pages가 예상치 못한 타입: ${pagesRaw.runtimeType}');
+          return [];
+        }
+        
+        return _convertPagesToResults(pages);
+      }
+      
+      // Case B: [{...}, {...}] 배열 직접
+      if (parsed is List) {
+        return _convertPagesToResults(parsed);
+      }
+      
+      // Case C: 단일 페이지 객체 {"pageNumber": ...}
+      if (parsed is Map<String, dynamic> && parsed.containsKey('pageNumber')) {
+        return _convertPagesToResults([parsed]);
+      }
+      
+      debugPrint('[OCR파싱] 알 수 없는 JSON 구조');
+      return [];
+      
+    } catch (e) {
+      debugPrint('[OCR파싱] JSON 파싱 실패: $e');
+      
+      // 3. 텍스트 응답에서 정보 추출 시도 (최후의 수단)
+      return _extractFromPlainText(content);
+    }
+  }
+
+  /// 페이지 배열을 결과 형식으로 변환
+  List<Map<String, dynamic>> _convertPagesToResults(List<dynamic> pages) {
+    final results = <Map<String, dynamic>>[];
+    
+    for (final page in pages) {
+      if (page is! Map) continue;
+      
+      // pageNumber 추출 (int 또는 String)
+      int? pageNum;
+      final rawPageNum = page['pageNumber'];
+      if (rawPageNum is int) {
+        pageNum = rawPageNum;
+      } else if (rawPageNum is String) {
+        pageNum = int.tryParse(rawPageNum.replaceAll(RegExp(r'[^0-9]'), ''));
+      }
+      
+      final unitName = page['unitName']?.toString() ?? '';
+      
+      // sections 추출 (Map 또는 다른 형식)
+      Map<String, dynamic> sections = {};
+      final rawSections = page['sections'];
+      if (rawSections is Map<String, dynamic>) {
+        sections = rawSections;
+      } else if (rawSections is Map) {
+        sections = Map<String, dynamic>.from(rawSections);
+      }
+
+      // 정답 내용을 문자열로 변환
+      final contentBuffer = StringBuffer();
+      if (unitName.isNotEmpty) {
+        contentBuffer.writeln(unitName);
+        contentBuffer.writeln();
+      }
+
+      for (final entry in sections.entries) {
+        contentBuffer.writeln('${entry.key})');
+        
+        // answers가 List인지 확인
+        final rawAnswers = entry.value;
+        if (rawAnswers is List) {
+          for (int i = 0; i < rawAnswers.length; i++) {
+            contentBuffer.writeln('${i + 1}. ${rawAnswers[i]}');
+          }
+        } else if (rawAnswers is String) {
+          contentBuffer.writeln(rawAnswers);
+        }
+        contentBuffer.writeln();
+      }
+
+      if (pageNum != null) {
+        results.add({
+          'pageNumber': pageNum,
+          'content': contentBuffer.toString().trim(),
+          'unitName': unitName,
+        });
+        debugPrint('[OCR파싱] 페이지 추출: p.$pageNum - $unitName');
+      }
+    }
+    
+    debugPrint('[OCR파싱] 총 ${results.length}페이지 추출 완료');
+    return results;
+  }
+
+  /// 일반 텍스트에서 페이지 정보 추출 (최후의 수단)
+  List<Map<String, dynamic>> _extractFromPlainText(String text) {
+    debugPrint('[OCR파싱] 텍스트에서 추출 시도');
+    
+    final results = <Map<String, dynamic>>[];
+    
+    // "p.숫자" 또는 "pp.숫자" 패턴 찾기
+    final pagePattern = RegExp(r'p+\.\s*(\d+)', caseSensitive: false);
+    final matches = pagePattern.allMatches(text);
+    
+    for (final match in matches) {
+      final pageNum = int.tryParse(match.group(1) ?? '');
+      if (pageNum != null) {
+        // 해당 페이지 번호 주변 텍스트 추출 (대략적)
+        final startIdx = match.start;
+        final endIdx = (startIdx + 500).clamp(0, text.length);
+        final excerpt = text.substring(startIdx, endIdx);
+        
+        results.add({
+          'pageNumber': pageNum,
+          'content': excerpt.trim(),
+          'unitName': '',
+        });
+        debugPrint('[OCR파싱] 텍스트에서 발견: p.$pageNum');
+      }
+    }
+    
+    // 중복 제거
+    final seen = <int>{};
+    results.removeWhere((r) {
+      final pageNum = r['pageNumber'] as int;
+      if (seen.contains(pageNum)) return true;
+      seen.add(pageNum);
+      return false;
+    });
+    
+    debugPrint('[OCR파싱] 텍스트에서 ${results.length}페이지 추출');
+    return results;
   }
 }

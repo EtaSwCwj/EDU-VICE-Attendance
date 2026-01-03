@@ -62,4 +62,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+    
+    // BIG_144: ML Kit Korean 텍스트 인식 모델
+    implementation 'com.google.mlkit:text-recognition-korean:16.0.0'
 }

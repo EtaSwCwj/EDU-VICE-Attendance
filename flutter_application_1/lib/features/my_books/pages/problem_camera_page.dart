@@ -132,6 +132,7 @@ class _ProblemCameraPageState extends State<ProblemCameraPage> {
           bookId: widget.bookId,
           page: page,
           volumeName: volume.name,
+          book: _book,  // 추가: 목차/정답 매칭용
         );
         
         // 분할된 문제들 DB에 저장

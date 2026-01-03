@@ -5,6 +5,8 @@ import 'package:image/image.dart' as img;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../models/problem.dart';
 import '../../../shared/services/claude_api_service.dart';
+import '../data/local_book_repository.dart';
+import '../models/local_book.dart';
 
 /// 문제 분할 서비스 (ocr_test_page.dart의 성공 로직 그대로 복사)
 /// 
@@ -22,6 +24,7 @@ class ProblemSplitService {
     required String bookId,
     required int page,
     required String volumeName,
+    LocalBook? book,  // 추가: 목차/정답 매칭용
   }) async {
     try {
       safePrint('[ProblemSplit] ========== 문제 분할 시작 ==========');
@@ -48,7 +51,7 @@ class ProblemSplitService {
       
       if (analysisResult == null) {
         safePrint('[ProblemSplit] ❌ Claude 분석 실패 → 기본 분할');
-        return await _defaultSplit(imageFile, bookId, page, volumeName);
+        return await _defaultSplit(imageFile, bookId, page, volumeName, book);
       }
       
       safePrint('[ProblemSplit] Claude 응답: $analysisResult');
@@ -56,7 +59,7 @@ class ProblemSplitService {
       final sectionBounds = analysisResult['sectionBounds'] as Map<String, dynamic>?;
       if (sectionBounds == null || sectionBounds.isEmpty) {
         safePrint('[ProblemSplit] ❌ 섹션 감지 실패 → 기본 분할');
-        return await _defaultSplit(imageFile, bookId, page, volumeName);
+        return await _defaultSplit(imageFile, bookId, page, volumeName, book);
       }
       
       safePrint('[ProblemSplit] 감지된 섹션: ${sectionBounds.keys.toList()}');
@@ -171,6 +174,16 @@ class ProblemSplitService {
           final problemPath = '${problemsDir.path}/p${page}_${sectionName}_$number.jpg';
           await File(problemPath).writeAsBytes(img.encodeJpg(problemImg, quality: 90));
           
+          // 단원명 + 정답 매칭
+          String? unitName;
+          String? answer;
+          if (book != null) {
+            final bookRepo = LocalBookRepository();
+            final tocEntry = bookRepo.findUnitForPage(book, page);
+            unitName = tocEntry?.unitName;
+            answer = bookRepo.extractAnswerForProblem(book, page, number);
+          }
+
           // Problem 객체 생성
           final problem = Problem(
             id: '${bookId}_p${page}_${sectionName}_$number',
@@ -184,10 +197,12 @@ class ProblemSplitService {
               'width': sectionImg.width,
               'height': cropHeight,
             },
+            unitName: unitName,    // 추가
+            answer: answer,        // 추가
           );
-          
+
           problems.add(problem);
-          safePrint('[ProblemSplit] ✓ $sectionName.$number 저장: $problemPath');
+          safePrint('[ProblemSplit] ✓ $sectionName.$number 저장 (단원: $unitName, 정답: ${answer ?? "없음"})');
         }
       }
 
@@ -398,6 +413,7 @@ class ProblemSplitService {
     String bookId,
     int page,
     String volumeName,
+    LocalBook? book,  // 추가: 목차/정답 매칭용
   ) async {
     try {
       safePrint('[ProblemSplit] 기본 분할 (4등분)');
@@ -425,6 +441,16 @@ class ProblemSplitService {
         final problemPath = '${problemsDir.path}/p${page}_q${i + 1}.jpg';
         await File(problemPath).writeAsBytes(img.encodeJpg(problemImg, quality: 90));
         
+        // 단원명 + 정답 매칭
+        String? unitName;
+        String? answer;
+        if (book != null) {
+          final bookRepo = LocalBookRepository();
+          final tocEntry = bookRepo.findUnitForPage(book, page);
+          unitName = tocEntry?.unitName;
+          answer = bookRepo.extractAnswerForProblem(book, page, i + 1);
+        }
+
         problems.add(Problem(
           id: '${bookId}_p${page}_q${i + 1}',
           page: page,
@@ -432,6 +458,8 @@ class ProblemSplitService {
           volumeName: volumeName,
           imagePath: problemPath,
           boundingBox: {'x': 0, 'y': cropY, 'width': image.width, 'height': cropHeight},
+          unitName: unitName,    // 추가
+          answer: answer,        // 추가
         ));
       }
 

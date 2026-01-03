@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "scripts": {
     "watch:manager": "node scripts/manager_watcher.js",
-  "claude:opus": "claude --model claude-opus-4-20250514 --dangerously-skip-permissions",
-    "claude:opus:c": "claude --model claude-opus-4-20250514 --dangerously-skip-permissions -c",
+    "claude:opus": "claude --model claude-opus-4-20250514 --dangerously-skip-permissions",
+    "claude:sonnet": "claude --model claude-sonnet-4-20250514 --dangerously-skip-permissions",
     "pack:flutter": "powershell -ExecutionPolicy Bypass -File ./scripts/pack_flutter_save.ps1",
     "dev:scrcpy": "powershell -ExecutionPolicy Bypass -File ./scripts/scrcpy_dev.ps1",
     "analyze": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ./flutter_application_1; flutter analyze\"",

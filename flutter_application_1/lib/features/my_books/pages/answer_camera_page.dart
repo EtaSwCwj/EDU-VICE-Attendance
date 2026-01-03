@@ -1,14 +1,18 @@
 import 'dart:io';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/local_book.dart';
 import '../data/local_book_repository.dart';
 import '../widgets/volume_selector.dart';
 import '../../textbook/book_camera_page.dart';
 import '../../../shared/services/claude_api_service.dart';
-import '../../../shared/services/pdf_chunker.dart';
+import '../../../shared/services/pdf_to_image_service.dart';
+import '../../../shared/services/answer_parser_service.dart';
 
 /// 정답지 촬영/업로드 페이지
 class AnswerCameraPage extends StatefulWidget {
@@ -23,6 +27,7 @@ class AnswerCameraPage extends StatefulWidget {
 class _AnswerCameraPageState extends State<AnswerCameraPage> {
   final _repository = LocalBookRepository();
   final _claudeService = ClaudeApiService();
+  final _answerParser = AnswerParserService();
   LocalBook? _book;
   int _selectedVolumeIndex = 0;
   bool _isLoading = true;
@@ -107,8 +112,127 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
     );
 
     if (result != null && mounted) {
-      safePrint('[AnswerCamera] 촬영 결과: pages=${result['pages']}');
-      await _validateAndSavePages(result['pages'] as List<int>? ?? []);
+      safePrint('[AnswerCamera] 촬영 결과 수신');
+      
+      // 이미지 파일로 OCR+AI 파싱
+      final imageFile = result['image'] as File?;
+      if (imageFile != null) {
+        safePrint('[AnswerCamera] 이미지 파일로 OCR+AI 파싱 시작: ${imageFile.path}');
+        
+        setState(() {
+          _isAnalyzing = true;
+          _analysisStatus = '정답지 분석 중...';
+        });
+        
+        try {
+          final parsedPages = await _answerParser.extractAnswers(imageFile);
+          
+          setState(() => _isAnalyzing = false);
+          
+          if (parsedPages.isNotEmpty) {
+            safePrint('[AnswerCamera] OCR+AI 파싱 완료: ${parsedPages.length}페이지');
+            
+            final pageResults = parsedPages.map((p) => p.toMap()).toList();
+            final proceed = await _showExtractedTextDialog(pageResults);
+            
+            if (proceed == true) {
+              final pages = parsedPages.map((p) => p.pageNumber).where((p) => p > 0).toList();
+              final answerContents = <int, String>{};
+              for (final p in parsedPages) {
+                if (p.pageNumber > 0) {
+                  answerContents[p.pageNumber] = p.rawContent;
+                }
+              }
+              await _validateAndSavePagesWithAnswers(pages, answerContents);
+            }
+          } else {
+            safePrint('[AnswerCamera] OCR+AI 파싱 결과 없음');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('정답지를 인식하지 못했습니다')),
+              );
+            }
+          }
+        } catch (e) {
+          safePrint('[AnswerCamera] OCR+AI 파싱 실패: $e');
+          setState(() => _isAnalyzing = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('분석 실패: $e')),
+            );
+          }
+        }
+      } else {
+        // 이미지 없으면 기존 방식 (페이지 번호만)
+        safePrint('[AnswerCamera] 이미지 없음, 기존 방식 사용: pages=${result['pages']}');
+        await _validateAndSavePages(result['pages'] as List<int>? ?? []);
+      }
+    }
+  }
+
+  /// 갤러리에서 이미지 선택
+  Future<void> _pickFromGallery() async {
+    safePrint('[AnswerCamera] 갤러리 선택 시작');
+
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedFile != null && mounted) {
+        final imageFile = File(pickedFile.path);
+        safePrint('[AnswerCamera] 갤러리 이미지 선택됨: ${imageFile.path}');
+
+        setState(() {
+          _isAnalyzing = true;
+          _analysisStatus = '정답지 분석 중...';
+        });
+
+        try {
+          final parsedPages = await _answerParser.extractAnswers(imageFile);
+
+          setState(() => _isAnalyzing = false);
+
+          if (parsedPages.isNotEmpty) {
+            safePrint('[AnswerCamera] OCR+AI 파싱 완료: ${parsedPages.length}페이지');
+
+            final pageResults = parsedPages.map((p) => p.toMap()).toList();
+            final proceed = await _showExtractedTextDialog(pageResults);
+
+            if (proceed == true) {
+              final pages = parsedPages.map((p) => p.pageNumber).where((p) => p > 0).toList();
+              final answerContents = <int, String>{};
+              for (final p in parsedPages) {
+                if (p.pageNumber > 0) {
+                  answerContents[p.pageNumber] = p.rawContent;
+                }
+              }
+              await _validateAndSavePagesWithAnswers(pages, answerContents);
+            }
+          } else {
+            safePrint('[AnswerCamera] OCR+AI 파싱 결과 없음');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('정답지를 인식하지 못했습니다')),
+              );
+            }
+          }
+        } catch (e) {
+          safePrint('[AnswerCamera] OCR+AI 파싱 실패: $e');
+          setState(() => _isAnalyzing = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('분석 실패: $e')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      safePrint('[AnswerCamera] 갤러리 선택 실패: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('이미지 선택 실패: $e')),
+        );
+      }
     }
   }
 
@@ -159,8 +283,12 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
   }
 
   /// 전체 Volume PDF 한번에 업로드 (청크 분할 처리)
+  /// 전체 Volume PDF 한번에 업로드 (BIG_140: 단순화 - 열 분리 없이 직접 OCR+AI)
   Future<void> _pickPdfForAll() async {
-    safePrint('[AnswerCamera] PDF 선택 시작 (전체 Volume)');
+    safePrint('[PDF처리] ========================================');
+    safePrint('[PDF처리] PDF 선택 시작 (BIG_140: 단순화 방식)');
+    safePrint('[PDF처리] 열 분리/병합 제거, 이미지 그대로 OCR+AI');
+    safePrint('[PDF처리] ========================================');
 
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -170,106 +298,139 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
-        safePrint('[AnswerCamera] PDF 선택됨: ${file.path}');
+        final fileSize = await file.length();
+        safePrint('[PDF처리] PDF 선택됨: ${file.path}');
+        safePrint('[PDF처리] 파일 크기: ${(fileSize / 1024).toStringAsFixed(1)} KB');
 
         setState(() {
           _isAnalyzing = true;
-          _analysisStatus = 'PDF 페이지 수 확인 중...';
+          _analysisStatus = 'PDF → 이미지 변환 중...';
         });
 
-        // 1. PDF 페이지 수 확인
-        final totalPages = await PdfChunker.getPageCount(file);
-        safePrint('[AnswerCamera] PDF 총 페이지: $totalPages');
+        // 1. PDF → 이미지 변환 + AI 열 분리
+        // ★ BIG_144: 책 이름 전달 + 2페이지만 테스트
+        safePrint('[PDF처리] Step 1: PDF → 이미지 변환 + 열 분리 시작');
+        final bookName = _book?.title?.replaceAll(RegExp(r'[^\w가-힣]'), '_') ?? 'book';
+        safePrint('[PDF처리] 책 이름: $bookName');
+        final stopwatch = Stopwatch()..start();
+        final pageImages = await PdfToImageService.convertPdfToImages(
+          file,
+          maxPages: 2,  // BIG_144 테스트: 2페이지만 (1페이지=2열, 2페이지=4열)
+          bookName: bookName,
+        );
+        stopwatch.stop();
+        safePrint('[PDF처리] Step 1 완료: ${pageImages.length}개 열 이미지, ${stopwatch.elapsedMilliseconds}ms');
+        
+        // ★ BIG_142: 각 이미지 상세 정보 로그
+        for (int i = 0; i < pageImages.length; i++) {
+          final imgFile = pageImages[i];
+          final imgSize = await imgFile.length();
+
+          // 이미지 해상도 확인
+          final imgBytes = await imgFile.readAsBytes();
+          final decodedImage = await decodeImageFromList(imgBytes);
+
+          safePrint('[PDF처리] - 이미지 ${i + 1}:');
+          safePrint('[PDF처리]   경로: ${imgFile.path}');
+          safePrint('[PDF처리]   크기: ${(imgSize / 1024).toStringAsFixed(1)} KB');
+          safePrint('[PDF처리]   해상도: ${decodedImage.width} x ${decodedImage.height}');
+        }
+
+        setState(() {
+          _totalChunks = pageImages.length;
+          _currentChunk = 0;
+        });
 
         List<Map<String, dynamic>> allExtractedPages = [];
 
-        // 2. 20페이지 이하면 분할 없이 처리
-        if (totalPages <= 10) {
-          safePrint('[AnswerCamera] 소용량 PDF - 단일 처리');
-          setState(() => _analysisStatus = 'PDF 텍스트 추출 중...');
-
-          try {
-            allExtractedPages = await _claudeService.extractPdfText(file);
-          } catch (e) {
-            safePrint('[AnswerCamera] 단일 처리 실패: $e');
-          }
-        } else {
-          // 3. 대용량 PDF - 청크 분할 처리
-          safePrint('[AnswerCamera] 대용량 PDF - 청크 분할 처리');
-
-          setState(() => _analysisStatus = 'PDF 분할 중...');
-          final chunks = await PdfChunker.splitPdf(file, pagesPerChunk: 5);
-
+        // 2. 각 열 이미지 OCR+AI 처리
+        // ★ BIG_144: 모든 열 이미지 처리
+        final imageCount = pageImages.length;
+        safePrint('[PDF처리] Step 2: 각 열 이미지 OCR+AI 파싱 시작');
+        safePrint('[PDF처리] ★ BIG_144: 총 $imageCount개 열 이미지 처리');
+        for (int i = 0; i < imageCount; i++) {
+          _currentChunk = i + 1;
           setState(() {
-            _totalChunks = chunks.length;
-            _currentChunk = 0;
+            _analysisStatus = '페이지 ${i + 1}/${pageImages.length} OCR+AI 분석 중...';
           });
 
-          safePrint('[AnswerCamera] ${chunks.length}개 청크로 분할 완료');
+          safePrint('[PDF처리] ====== PDF 페이지 ${i + 1}/${pageImages.length} ======');
+          final pageStopwatch = Stopwatch()..start();
 
-          // 4. 각 청크 순차 처리
-          for (int i = 0; i < chunks.length; i++) {
-            _currentChunk = i + 1;
-            final chunkStart = i * 5 + 1;
-            final chunkEnd = ((i + 1) * 5).clamp(1, totalPages);
-
-            setState(() {
-              _analysisStatus = '페이지 $chunkStart~$chunkEnd 처리 중... ($_currentChunk/$_totalChunks)';
-            });
-
-            safePrint('[AnswerCamera] 청크 ${i + 1}/${chunks.length} 처리 시작');
-
-            try {
-              final chunkResult = await _processChunkWithRetry(chunks[i]);
-              allExtractedPages.addAll(chunkResult);
-              safePrint('[AnswerCamera] 청크 ${i + 1} 완료: ${chunkResult.length}페이지 추출');
-            } catch (e) {
-              safePrint('[AnswerCamera] 청크 ${i + 1} 실패: $e');
-              // 실패해도 계속 진행 (부분 결과라도 보여주기 위해)
+          try {
+            // BIG_140: 열 분리/병합 제거, 이미지 그대로 OCR+AI
+            safePrint('[PDF처리] 페이지 ${i + 1}: extractAnswers() 호출');
+            final parsedPages = await _answerParser.extractAnswers(pageImages[i]);
+            pageStopwatch.stop();
+            
+            safePrint('[PDF처리] 페이지 ${i + 1}: extractAnswers() 완료, ${pageStopwatch.elapsedMilliseconds}ms');
+            safePrint('[PDF처리] 페이지 ${i + 1}: ${parsedPages.length}개 교재 페이지 인식');
+            
+            // 각 인식된 페이지 상세 로그
+            for (int j = 0; j < parsedPages.length; j++) {
+              final p = parsedPages[j];
+              safePrint('[PDF처리] 페이지 ${i + 1} → 교재 p.${p.pageNumber}');
+              safePrint('[PDF처리]   - sections: ${p.sections.keys.toList()}');
+              safePrint('[PDF처리]   - content 길이: ${p.rawContent.length}자');
+              if (p.rawContent.length > 100) {
+                safePrint('[PDF처리]   - content 앞 100자: ${p.rawContent.substring(0, 100)}...');
+              } else {
+                safePrint('[PDF처리]   - content: ${p.rawContent}');
+              }
             }
+            
+            final pageResults = parsedPages.map((p) => p.toMap()).toList();
+            allExtractedPages.addAll(pageResults);
 
-            // Rate limit 회피를 위한 딜레이 (마지막 청크 제외)
-            if (i < chunks.length - 1) {
-              setState(() => _analysisStatus = '다음 청크 준비 중... (2초 대기)');
-              await Future.delayed(const Duration(seconds: 2));
-            }
+          } catch (e, stack) {
+            safePrint('[PDF처리] 페이지 ${i + 1} 처리 실패: $e');
+            safePrint('[PDF처리] 스택트레이스: $stack');
           }
 
-          // 5. 임시 청크 파일 정리
-          await PdfChunker.cleanupChunks(chunks);
+          // Rate limit 대기 (OCR+AI 사이)
+          if (i < pageImages.length - 1) {
+            safePrint('[PDF처리] 다음 페이지 전 1초 대기...');
+            await Future.delayed(const Duration(seconds: 1));
+          }
         }
+
+        // 3. 이미지 파일들 정리
+        // ★ BIG_143 테스트: cleanup 비활성화 (이미지 확인용)
+        safePrint('[PDF처리] Step 3: ★★★ cleanup 비활성화 ★★★');
+        safePrint('[PDF처리] 이미지 위치: DCIM/flutter_1/');
+        // await PdfToImageService.cleanupImages(pageImages);
+        // safePrint('[PDF처리] 임시 파일 정리 완료');
 
         setState(() => _isAnalyzing = false);
 
-        // ★ 디버그 로그
-        safePrint('[DEBUG] allExtractedPages.length: ${allExtractedPages.length}');
-
-        // 6. 결과 확인
-        safePrint('[AnswerCamera] ===== 추출 결과 =====');
-        safePrint('[AnswerCamera] allExtractedPages.length: ${allExtractedPages.length}');
+        // 4. 결과 처리
+        safePrint('[PDF처리] Step 4: 결과 정리');
+        safePrint('[PDF처리] 총 추출 결과: ${allExtractedPages.length}개 교재 페이지');
+        
         if (allExtractedPages.isNotEmpty) {
-          safePrint('[AnswerCamera] 첫번째 페이지: ${allExtractedPages.first}');
-        }
-        safePrint('[AnswerCamera] ===================');
-
-        if (allExtractedPages.isNotEmpty) {
-          // 페이지 번호로 정렬
+          // 페이지 번호 순 정렬
           allExtractedPages.sort((a, b) {
             final aPage = a['pageNumber'] as int? ?? 0;
             final bPage = b['pageNumber'] as int? ?? 0;
             return aPage.compareTo(bPage);
           });
 
-          safePrint('[AnswerCamera] 총 ${allExtractedPages.length}페이지 추출 완료');
+          // 정렬 후 페이지 번호 목록 로그
+          final pageNumbers = allExtractedPages.map((p) => p['pageNumber']).toList();
+          safePrint('[PDF처리] 정렬 후 페이지 번호: $pageNumbers');
+          
+          // 중복 체크
+          final uniquePages = pageNumbers.toSet();
+          if (uniquePages.length != pageNumbers.length) {
+            safePrint('[PDF처리] ⚠️ 중복 페이지 발견! 원본: ${pageNumbers.length}개, 고유: ${uniquePages.length}개');
+          }
 
-          // 인식 결과 확인 다이얼로그
           final proceed = await _showExtractedTextDialog(allExtractedPages);
 
           if (proceed == true) {
-            // 페이지 번호와 정답 내용 추출
             final pages = <int>[];
             final answerContents = <int, String>{};
-            
+
             for (final p in allExtractedPages) {
               final pageNum = p['pageNumber'] as int?;
               final content = p['content'] as String? ?? '';
@@ -282,34 +443,31 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
             }
             pages.sort();
 
+            safePrint('[PDF처리] 저장할 페이지: $pages');
+            safePrint('[PDF처리] 저장할 정답 내용: ${answerContents.length}개');
+
             if (pages.isNotEmpty) {
               await _validateAndSavePagesWithAnswers(pages, answerContents);
             }
+          } else {
+            safePrint('[PDF처리] 사용자가 취소함');
           }
         } else {
-          // 텍스트 추출 완전 실패 시 기존 방식으로 폴백
-          safePrint('[AnswerCamera] 텍스트 추출 실패, 페이지 번호만 추출 시도');
-          setState(() {
-            _isAnalyzing = true;
-            _analysisStatus = '페이지 번호 추출 중... (대체 방식)';
-          });
-
-          final pages = await _analyzePdfWithRetry(file);
-          setState(() => _isAnalyzing = false);
-
-          if (pages.isNotEmpty) {
-            await _validateAndSavePages(pages);
-          } else {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('페이지 번호를 인식하지 못했습니다')),
-              );
-            }
+          safePrint('[PDF처리] ❌ 추출 결과 없음!');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('페이지를 인식하지 못했습니다')),
+            );
           }
         }
+        
+        safePrint('[PDF처리] ========================================');
+        safePrint('[PDF처리] PDF 처리 완료');
+        safePrint('[PDF처리] ========================================');
       }
-    } catch (e) {
-      safePrint('[AnswerCamera] PDF 처리 실패: $e');
+    } catch (e, stack) {
+      safePrint('[PDF처리] ❌ PDF 처리 실패: $e');
+      safePrint('[PDF처리] 스택트레이스: $stack');
       setState(() => _isAnalyzing = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -319,11 +477,76 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
     }
   }
 
+  /// 목차 데이터 준비 (endPage 자동 계산)
+  List<Map<String, dynamic>> _prepareTocEntries() {
+    final rawToc = _book?.tableOfContents ?? [];
+    final tocEntries = <Map<String, dynamic>>[];
+
+    for (int i = 0; i < rawToc.length; i++) {
+      final current = rawToc[i];
+      final start = current.startPage;
+
+      int end;
+      if (current.endPage != null && current.endPage! > 0) {
+        end = current.endPage!;
+      } else if (i + 1 < rawToc.length) {
+        end = rawToc[i + 1].startPage - 1;
+      } else {
+        end = _book?.totalPages ?? (start + 50);
+      }
+
+      tocEntries.add({
+        'unitName': current.unitName,
+        'startPage': start,
+        'endPage': end,
+      });
+    }
+
+    return tocEntries;
+  }
+
   /// 청크 처리 with 재시도
   Future<List<Map<String, dynamic>>> _processChunkWithRetry(File chunk, {int maxRetries = 3}) async {
+    // 목차 데이터 준비 (endPage 자동 계산)
+    final rawToc = _book?.tableOfContents ?? [];
+    final tocEntries = <Map<String, dynamic>>[];
+    
+    for (int i = 0; i < rawToc.length; i++) {
+      final current = rawToc[i];
+      final start = current.startPage;
+      
+      // endPage 계산: 명시적으로 있으면 사용, 없으면 다음 Unit의 startPage - 1
+      int end;
+      if (current.endPage != null && current.endPage! > 0) {
+        end = current.endPage!;
+      } else if (i + 1 < rawToc.length) {
+        // 다음 Unit의 startPage - 1
+        end = rawToc[i + 1].startPage - 1;
+      } else {
+        // 마지막 Unit이면 책의 totalPages 사용, 없으면 startPage + 50 (여유있게)
+        end = _book?.totalPages ?? (start + 50);
+      }
+      
+      tocEntries.add({
+        'unitName': current.unitName,
+        'startPage': start,
+        'endPage': end,
+      });
+      
+      safePrint('[AnswerCamera] 목차[$i]: ${current.unitName} → p.$start~$end');
+    }
+
+    safePrint('[AnswerCamera] 목차 ${tocEntries.length}개 항목으로 교차 검증 시작');
+
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        return await _claudeService.extractPdfChunkText(chunk);
+        // 목차가 있으면 새 메서드 사용, 없으면 기존 메서드
+        if (tocEntries.isNotEmpty) {
+          return await _claudeService.extractPdfWithTocValidation(chunk, tocEntries);
+        } else {
+          safePrint('[AnswerCamera] 목차 없음 - 기존 방식 사용');
+          return await _claudeService.extractPdfChunkText(chunk);
+        }
       } catch (e) {
         final errorStr = e.toString();
         safePrint('[AnswerCamera] 청크 처리 실패 (시도 $attempt): $e');
@@ -1007,6 +1230,19 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
 
             const SizedBox(height: 12),
 
+            // 갤러리 선택 버튼
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _pickFromGallery,
+                icon: const Icon(Icons.photo_library, size: 24),
+                label: const Text('갤러리에서 선택', style: TextStyle(fontSize: 16)),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
             // PDF 업로드 버튼
             SizedBox(
               width: double.infinity,
@@ -1023,5 +1259,12 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
         ),
       ),
     );
+  }
+
+  /// 이미지 바이트에서 해상도 추출
+  Future<ui.Image> decodeImageFromList(Uint8List bytes) async {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    return frame.image;
   }
 }

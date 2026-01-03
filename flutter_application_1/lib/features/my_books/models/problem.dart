@@ -13,6 +13,10 @@ class Problem {
   final bool? isCorrect;    // 정답 여부
   final String? answerImagePath; // 정답지 이미지
 
+  // ★ 추가 필드
+  final String? unitName;     // 소속 단원명 (목차에서 매칭)
+  final String? answer;       // 정답 (정답지에서 추출)
+
   Problem({
     required this.id,
     required this.page,
@@ -23,6 +27,8 @@ class Problem {
     DateTime? createdAt,
     this.isCorrect,
     this.answerImagePath,
+    this.unitName,      // 추가
+    this.answer,        // 추가
   }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +41,8 @@ class Problem {
     'createdAt': createdAt.toIso8601String(),
     'isCorrect': isCorrect,
     'answerImagePath': answerImagePath,
+    'unitName': unitName,       // 추가
+    'answer': answer,           // 추가
   };
 
   factory Problem.fromJson(Map<String, dynamic> json) {
@@ -48,6 +56,8 @@ class Problem {
       createdAt: DateTime.parse(json['createdAt'] as String),
       isCorrect: json['isCorrect'] as bool?,
       answerImagePath: json['answerImagePath'] as String?,
+      unitName: json['unitName'] as String?,     // 추가
+      answer: json['answer'] as String?,         // 추가
     );
   }
 
@@ -61,6 +71,8 @@ class Problem {
     DateTime? createdAt,
     bool? isCorrect,
     String? answerImagePath,
+    String? unitName,      // 추가
+    String? answer,        // 추가
   }) {
     return Problem(
       id: id ?? this.id,
@@ -72,6 +84,8 @@ class Problem {
       createdAt: createdAt ?? this.createdAt,
       isCorrect: isCorrect ?? this.isCorrect,
       answerImagePath: answerImagePath ?? this.answerImagePath,
+      unitName: unitName ?? this.unitName,       // 추가
+      answer: answer ?? this.answer,             // 추가
     );
   }
 

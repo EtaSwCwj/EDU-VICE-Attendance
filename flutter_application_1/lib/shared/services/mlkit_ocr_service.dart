@@ -7,7 +7,12 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 /// - 무료 + 오프라인 동작
 /// - 텍스트 + bounding box 좌표 추출
 class MlKitOcrService {
-  final _textRecognizer = TextRecognizer();  // 기본 라틴 (한국어는 나중에)
+  // BIG_144: Korean 모델 (한글 + 영어 둘 다 인식)
+  final _textRecognizer = TextRecognizer(script: TextRecognitionScript.korean);
+
+  MlKitOcrService() {
+    safePrint('[MlKitOcr] 초기화: Korean 스크립트 텍스트 인식기 로드 완료');
+  }
 
   /// 이미지 파일에서 텍스트와 bounding box 추출
   Future<MlKitOcrResult> analyzeImage(File imageFile) async {
@@ -17,7 +22,19 @@ class MlKitOcrService {
       final inputImage = InputImage.fromFile(imageFile);
       final recognizedText = await _textRecognizer.processImage(inputImage);
 
-      safePrint('[MlKitOcr] 분석 완료: ${recognizedText.blocks.length}개 블록');
+      // 인식된 전체 텍스트 수집 및 샘플 로그
+      final allText = recognizedText.blocks
+          .expand((block) => block.lines)
+          .map((line) => line.text)
+          .join(' ');
+      final textPreview = allText.length > 100 ? allText.substring(0, 100) : allText;
+
+      // 한글 포함 여부 확인 (한글 범위: U+AC00 ~ U+D7A3)
+      final hasKorean = allText.contains(RegExp(r'[\uAC00-\uD7A3]'));
+
+      safePrint('[MlKitOcr] 분석 완료: ${recognizedText.blocks.length}개 블록, 전체 텍스트 길이: ${allText.length}');
+      safePrint('[MlKitOcr] 인식된 텍스트 샘플 (앞 100자): $textPreview');
+      safePrint('[MlKitOcr] 한글 포함 여부: $hasKorean');
 
       final blocks = <OcrTextBlock>[];
 

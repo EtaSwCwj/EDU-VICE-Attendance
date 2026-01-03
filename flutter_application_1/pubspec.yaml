@@ -61,6 +61,7 @@ dependencies:
 
   # PDF Processing
   syncfusion_flutter_pdf: ^32.1.21
+  pdfx: ^2.6.0
 
   # Logging
   logger: ^2.0.2
