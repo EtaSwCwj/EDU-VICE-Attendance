@@ -1,31 +1,22 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../models/problem.dart';
+import '../../../shared/services/claude_api_service.dart';
 
-/// 문제 분할 서비스
-/// - 페이지 이미지에서 개별 문제를 감지하고 분할
+/// 문제 분할 서비스 (ocr_test_page.dart의 성공 로직 그대로 복사)
+/// 
+/// 핵심 파이프라인:
+/// 1. Claude Vision → 섹션 bounds(%) 감지
+/// 2. 섹션별 crop → OCR로 문제 번호 실측 좌표(px) 찾기
+/// 3. 미감지 문제 재검사 (평균 간격 기반)
+/// 4. 각 문제별 crop + 저장
 class ProblemSplitService {
-  static const _baseUrl = 'https://api.anthropic.com/v1/messages';
-  static const _model = 'claude-sonnet-4-20250514';
-  final _storage = const FlutterSecureStorage();
-
-  Future<String?> _getApiKey() async {
-    return await _storage.read(key: 'claude_api_key');
-  }
+  final _claudeService = ClaudeApiService();
 
   /// 페이지 이미지에서 문제들을 분할
-  /// 
-  /// [imageFile] - 촬영된 페이지 이미지
-  /// [bookId] - 책 ID
-  /// [page] - 페이지 번호
-  /// [volumeName] - Volume 이름
-  /// 
-  /// Returns: 분할된 Problem 리스트
   Future<List<Problem>> splitProblems({
     required File imageFile,
     required String bookId,
@@ -33,242 +24,422 @@ class ProblemSplitService {
     required String volumeName,
   }) async {
     try {
-      safePrint('[ProblemSplit] 문제 분할 시작: p$page ($volumeName)');
-
-      // 1. 원본 이미지를 pages 폴더에 저장
-      final pagesDir = await _getPagesDirectory(bookId);
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final originalPath = '${pagesDir.path}/p${page}_$timestamp.jpg';
-      await imageFile.copy(originalPath);
-      safePrint('[ProblemSplit] 원본 저장: $originalPath');
-
-      // 2. Claude API로 문제 영역 감지
-      final regions = await _detectProblemRegions(imageFile);
-      safePrint('[ProblemSplit] 감지된 문제: ${regions.length}개');
-
-      if (regions.isEmpty) {
-        safePrint('[ProblemSplit] 감지된 문제 없음 - 기본 분할 적용');
-        // 기본 분할 적용
-        final defaultRegions = await _defaultSplit(imageFile);
-        return await _cropAndSaveProblems(imageFile, defaultRegions, bookId, page, volumeName);
-      }
-
-      // 3. 각 문제 영역 크롭 및 저장
-      return await _cropAndSaveProblems(imageFile, regions, bookId, page, volumeName);
-
-    } catch (e) {
-      safePrint('[ProblemSplit] 분할 실패: $e');
-      // 실패해도 기본 분할 시도
-      try {
-        final defaultRegions = await _defaultSplit(imageFile);
-        return await _cropAndSaveProblems(imageFile, defaultRegions, bookId, page, volumeName);
-      } catch (e2) {
-        safePrint('[ProblemSplit] 기본 분할도 실패: $e2');
+      safePrint('[ProblemSplit] ========== 문제 분할 시작 ==========');
+      safePrint('[ProblemSplit] p$page ($volumeName)');
+      safePrint('[ProblemSplit] 이미지: ${imageFile.path}');
+      
+      if (!await imageFile.exists()) {
+        safePrint('[ProblemSplit] ❌ 이미지 파일 없음!');
         return [];
       }
+
+      // 0. 이미지 로드
+      final bytes = await imageFile.readAsBytes();
+      final image = img.decodeImage(bytes);
+      if (image == null) {
+        safePrint('[ProblemSplit] ❌ 이미지 디코딩 실패');
+        return [];
+      }
+      safePrint('[ProblemSplit] 이미지 크기: ${image.width}x${image.height}');
+
+      // 1. Claude Vision으로 섹션 영역 감지
+      safePrint('[ProblemSplit] Step 1: Claude Vision 분석...');
+      final analysisResult = await _claudeService.analyzePageComplete(imageFile);
+      
+      if (analysisResult == null) {
+        safePrint('[ProblemSplit] ❌ Claude 분석 실패 → 기본 분할');
+        return await _defaultSplit(imageFile, bookId, page, volumeName);
+      }
+      
+      safePrint('[ProblemSplit] Claude 응답: $analysisResult');
+      
+      final sectionBounds = analysisResult['sectionBounds'] as Map<String, dynamic>?;
+      if (sectionBounds == null || sectionBounds.isEmpty) {
+        safePrint('[ProblemSplit] ❌ 섹션 감지 실패 → 기본 분할');
+        return await _defaultSplit(imageFile, bookId, page, volumeName);
+      }
+      
+      safePrint('[ProblemSplit] 감지된 섹션: ${sectionBounds.keys.toList()}');
+
+      // 2. 저장 디렉토리 준비
+      final problemsDir = await _getProblemsDirectory(bookId);
+      final tempDir = await getTemporaryDirectory();
+      final problems = <Problem>[];
+
+      // 3. 각 섹션별로 처리 (ocr_test_page.dart의 _runExtraction 로직 그대로)
+      for (final sectionName in sectionBounds.keys) {
+        final bounds = sectionBounds[sectionName] as Map<String, dynamic>?;
+        if (bounds == null) continue;
+        
+        safePrint('[ProblemSplit] --- Section $sectionName 처리 ---');
+        
+        // 3-1. 섹션 영역 crop
+        final xStart = ((bounds['xStart'] as num?)?.toDouble() ?? 0) / 100 * image.width;
+        final xEnd = ((bounds['xEnd'] as num?)?.toDouble() ?? 100) / 100 * image.width;
+        final yStart = ((bounds['yStart'] as num?)?.toDouble() ?? 0) / 100 * image.height;
+        final yEnd = ((bounds['yEnd'] as num?)?.toDouble() ?? 100) / 100 * image.height;
+        
+        final sectionWidth = (xEnd - xStart).round().clamp(1, image.width);
+        final sectionHeight = (yEnd - yStart).round().clamp(1, image.height);
+        
+        if (sectionWidth < 50 || sectionHeight < 50) {
+          safePrint('[ProblemSplit] Section $sectionName 너무 작음: ${sectionWidth}x$sectionHeight');
+          continue;
+        }
+        
+        final sectionImg = img.copyCrop(
+          image,
+          x: xStart.round().clamp(0, image.width - 1),
+          y: yStart.round().clamp(0, image.height - 1),
+          width: sectionWidth,
+          height: sectionHeight,
+        );
+        
+        final sectionFile = File('${tempDir.path}/p${page}_section_$sectionName.png');
+        await sectionFile.writeAsBytes(img.encodePng(sectionImg));
+        safePrint('[ProblemSplit] Section $sectionName crop: ${sectionWidth}x$sectionHeight');
+        
+        // 3-2. OCR로 문제 번호 위치 찾기 (ocr_test_page.dart 그대로)
+        final ocrResult = await _findProblemNumbersWithOCR(sectionFile, sectionName);
+        var ocrPositions = ocrResult['problems'] as List<Map<String, int>>;
+        safePrint('[ProblemSplit] Section $sectionName: OCR ${ocrPositions.length}개 발견');
+        
+        if (ocrPositions.isEmpty) {
+          safePrint('[ProblemSplit] Section $sectionName OCR 실패 → 스킵');
+          continue;
+        }
+
+        // 3-3. 미감지 문제 재검사 (ocr_test_page.dart 그대로)
+        final foundNumbers = ocrPositions.map((p) => p['number']!).toSet();
+        final maxNumber = foundNumbers.reduce((a, b) => a > b ? a : b);
+        final missingNumbers = <int>[];
+        for (int num = 1; num <= maxNumber; num++) {
+          if (!foundNumbers.contains(num)) {
+            missingNumbers.add(num);
+          }
+        }
+
+        if (missingNumbers.isNotEmpty) {
+          safePrint('[ProblemSplit] $sectionName 미감지: $missingNumbers → 재검사');
+          final retryResults = await _retryMissingProblems(
+            sectionImage: sectionFile,
+            foundPositions: ocrPositions,
+            missingNumbers: missingNumbers,
+            sectionName: sectionName,
+          );
+          ocrPositions.addAll(retryResults);
+          ocrPositions.sort((a, b) => a['y']!.compareTo(b['y']!));
+          safePrint('[ProblemSplit] $sectionName 재검사 후: ${ocrPositions.length}개');
+        }
+
+        // 3-4. 각 문제별 crop + 저장 (ocr_test_page.dart 그대로)
+        for (int i = 0; i < ocrPositions.length; i++) {
+          final pos = ocrPositions[i];
+          final number = pos['number'] as int;
+          final yPx = pos['y'] as int;
+          
+          // 다음 문제까지 영역
+          int yEndPx;
+          if (i < ocrPositions.length - 1) {
+            yEndPx = ocrPositions[i + 1]['y'] as int;
+          } else {
+            yEndPx = sectionImg.height;
+          }
+          
+          // 마진 (ocr_test_page.dart 그대로)
+          final marginTop = (sectionImg.height * 0.01).round();
+          final marginBottom = (sectionImg.height * 0.02).round();
+          
+          final cropY = (yPx - marginTop).clamp(0, sectionImg.height - 1);
+          final cropYEnd = (yEndPx + marginBottom).clamp(cropY + 1, sectionImg.height);
+          final cropHeight = cropYEnd - cropY;
+          
+          if (cropHeight < 20) {
+            safePrint('[ProblemSplit] $sectionName.$number 높이 너무 작음: $cropHeight');
+            continue;
+          }
+          
+          final problemImg = img.copyCrop(
+            sectionImg,
+            x: 0,
+            y: cropY,
+            width: sectionImg.width,
+            height: cropHeight,
+          );
+          
+          // 저장 경로: p{page}_{section}_{number}.jpg
+          final problemPath = '${problemsDir.path}/p${page}_${sectionName}_$number.jpg';
+          await File(problemPath).writeAsBytes(img.encodeJpg(problemImg, quality: 90));
+          
+          // Problem 객체 생성
+          final problem = Problem(
+            id: '${bookId}_p${page}_${sectionName}_$number',
+            page: page,
+            problemNumber: number,
+            volumeName: volumeName,
+            imagePath: problemPath,
+            boundingBox: {
+              'x': 0,
+              'y': cropY,
+              'width': sectionImg.width,
+              'height': cropHeight,
+            },
+          );
+          
+          problems.add(problem);
+          safePrint('[ProblemSplit] ✓ $sectionName.$number 저장: $problemPath');
+        }
+      }
+
+      safePrint('[ProblemSplit] ========== 분할 완료: ${problems.length}개 ==========');
+      return problems;
+
+    } catch (e, stackTrace) {
+      safePrint('[ProblemSplit] ❌ 오류: $e');
+      safePrint('[ProblemSplit] $stackTrace');
+      return [];
     }
   }
 
-  /// 문제 영역 크롭 및 저장
-  Future<List<Problem>> _cropAndSaveProblems(
+  // ============================================================
+  // ocr_test_page.dart의 _findProblemNumbersWithOCR 그대로 복사
+  // ============================================================
+  
+  /// OCR로 문제 번호 위치 찾기 (찾은 것만 반환!)
+  Future<Map<String, dynamic>> _findProblemNumbersWithOCR(
+    File sectionImage,
+    String sectionName,
+  ) async {
+    try {
+      final inputImage = InputImage.fromFile(sectionImage);
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      final recognizedText = await textRecognizer.processImage(inputImage);
+      await textRecognizer.close();
+      
+      final foundPositions = <Map<String, int>>[];
+      final foundNumbers = <int>{};  // 중복 방지
+      
+      // 1~20 범위의 문제 번호 찾기
+      final targetNumbers = List.generate(20, (i) => i + 1);
+      
+      for (final block in recognizedText.blocks) {
+        for (final line in block.lines) {
+          final text = line.text.trim();
+          
+          for (final targetNum in targetNumbers) {
+            if (foundNumbers.contains(targetNum)) continue;
+            
+            // 패턴 매칭 (ocr_test_page.dart 그대로)
+            final isMatch = text == '$targetNum' ||
+                text == '$targetNum.' ||
+                text.startsWith('$targetNum ') ||
+                text.startsWith('$targetNum. ') ||
+                RegExp('^$targetNum\\s').hasMatch(text) ||
+                RegExp('^$targetNum\\.\\s').hasMatch(text);
+            
+            if (isMatch) {
+              final boundingBox = line.boundingBox;
+              foundPositions.add({
+                'number': targetNum,
+                'y': boundingBox.top.round(),
+              });
+              foundNumbers.add(targetNum);
+              safePrint('[OCR] $sectionName: $targetNum 발견 "$text" y=${boundingBox.top.round()}');
+              break;
+            }
+          }
+        }
+      }
+      
+      foundPositions.sort((a, b) => a['y']!.compareTo(b['y']!));
+      
+      return {'problems': foundPositions};
+      
+    } catch (e) {
+      safePrint('[OCR] 오류: $e');
+      return {'problems': <Map<String, int>>[]};
+    }
+  }
+
+  // ============================================================
+  // ocr_test_page.dart의 _retryMissingProblems 그대로 복사
+  // ============================================================
+
+  /// 미감지 문제 재검사 (기존 좌표 기반 예측)
+  Future<List<Map<String, int>>> _retryMissingProblems({
+    required File sectionImage,
+    required List<Map<String, int>> foundPositions,
+    required List<int> missingNumbers,
+    required String sectionName,
+  }) async {
+    if (foundPositions.isEmpty || missingNumbers.isEmpty) {
+      safePrint('[Retry] 재검사 스킵: found=${foundPositions.length}, missing=${missingNumbers.length}');
+      return [];
+    }
+
+    final bytes = await sectionImage.readAsBytes();
+    final image = img.decodeImage(bytes);
+    if (image == null) return [];
+
+    // 1. 평균 간격 계산 (ocr_test_page.dart 그대로)
+    final yPositions = foundPositions.map((p) => p['y']!).toList()..sort();
+    double avgGap;
+    if (yPositions.length >= 2) {
+      double totalGap = 0;
+      for (int i = 1; i < yPositions.length; i++) {
+        totalGap += yPositions[i] - yPositions[i - 1];
+      }
+      avgGap = totalGap / (yPositions.length - 1);
+    } else {
+      // 1개만 찾은 경우: 이미지 높이 / 문제 수로 추정
+      final expectedCount = missingNumbers.isNotEmpty 
+          ? missingNumbers.reduce((a, b) => a > b ? a : b) 
+          : 4;
+      avgGap = image.height / expectedCount;
+      safePrint('[Retry] 1개만 찾음 → 추정 간격: ${avgGap.round()}px');
+    }
+    safePrint('[Retry] $sectionName 평균 간격: ${avgGap.round()}px');
+
+    final retryFound = <Map<String, int>>[];
+    final tempDir = await getTemporaryDirectory();
+
+    // 2. 각 미감지 문제에 대해 예상 위치 계산 후 재검사 (ocr_test_page.dart 그대로)
+    for (final missingNum in missingNumbers) {
+      // 예상 위치 계산
+      int? predictedY;
+
+      // 방법 1: 앞뒤 문제 사이 보간
+      final prevFound = foundPositions.where((p) => p['number']! < missingNum).toList();
+      final nextFound = foundPositions.where((p) => p['number']! > missingNum).toList();
+
+      if (prevFound.isNotEmpty && nextFound.isNotEmpty) {
+        // 앞뒤 문제가 모두 있으면 선형 보간
+        final prev = prevFound.reduce((a, b) => a['number']! > b['number']! ? a : b);
+        final next = nextFound.reduce((a, b) => a['number']! < b['number']! ? a : b);
+        final gap = next['y']! - prev['y']!;
+        final numGap = next['number']! - prev['number']!;
+        predictedY = prev['y']! + (gap * (missingNum - prev['number']!) ~/ numGap);
+        safePrint('[Retry] $sectionName.$missingNum: 보간 예측 y=$predictedY');
+      } else if (prevFound.isNotEmpty) {
+        // 앞 문제만 있으면 평균 간격으로 예측
+        final prev = prevFound.reduce((a, b) => a['number']! > b['number']! ? a : b);
+        predictedY = prev['y']! + (avgGap * (missingNum - prev['number']!)).round();
+        safePrint('[Retry] $sectionName.$missingNum: 앞 기준 예측 y=$predictedY');
+      } else if (nextFound.isNotEmpty) {
+        // 뒤 문제만 있으면 역산
+        final next = nextFound.reduce((a, b) => a['number']! < b['number']! ? a : b);
+        predictedY = next['y']! - (avgGap * (next['number']! - missingNum)).round();
+        safePrint('[Retry] $sectionName.$missingNum: 뒤 기준 예측 y=$predictedY');
+      }
+
+      if (predictedY == null) continue;
+
+      // 3. 예상 위치 주변 영역 crop (±평균간격의 50%)
+      final margin = (avgGap * 0.5).round();
+      final cropY = (predictedY - margin).clamp(0, image.height - 1);
+      final cropHeight = (avgGap * 1.2).round().clamp(1, image.height - cropY);
+
+      final cropImg = img.copyCrop(
+        image,
+        x: 0,
+        y: cropY,
+        width: image.width,
+        height: cropHeight,
+      );
+
+      final cropFile = File('${tempDir.path}/retry_${sectionName}_$missingNum.png');
+      await cropFile.writeAsBytes(img.encodePng(cropImg));
+
+      safePrint('[Retry] $sectionName.$missingNum: crop y=$cropY~${cropY + cropHeight}');
+
+      // 4. OCR 재시도 (ocr_test_page.dart 그대로)
+      try {
+        final inputImage = InputImage.fromFile(cropFile);
+        final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+        final recognizedText = await textRecognizer.processImage(inputImage);
+        await textRecognizer.close();
+
+        for (final block in recognizedText.blocks) {
+          for (final line in block.lines) {
+            final text = line.text.trim();
+
+            final isMatch = text == '$missingNum' ||
+                text == '$missingNum.' ||
+                text.startsWith('$missingNum ') ||
+                text.startsWith('$missingNum. ') ||
+                RegExp('^$missingNum\\s').hasMatch(text) ||
+                RegExp('^$missingNum\\.\\s').hasMatch(text);
+
+            if (isMatch) {
+              final boundingBox = line.boundingBox;
+              // crop 영역 내 좌표 → 원본 좌표로 변환
+              final originalY = cropY + boundingBox.top.round();
+              retryFound.add({
+                'number': missingNum,
+                'y': originalY,
+              });
+              safePrint('[Retry] ✅ $sectionName.$missingNum 발견! y=$originalY');
+              break;
+            }
+          }
+          if (retryFound.any((p) => p['number'] == missingNum)) break;
+        }
+      } catch (e) {
+        safePrint('[Retry] OCR 오류: $e');
+      }
+    }
+
+    return retryFound;
+  }
+
+  /// API 실패 시 기본 분할 (세로 4등분)
+  Future<List<Problem>> _defaultSplit(
     File imageFile,
-    List<Map<String, dynamic>> regions,
     String bookId,
     int page,
     String volumeName,
   ) async {
-    final bytes = await imageFile.readAsBytes();
-    final originalImage = img.decodeImage(bytes);
-    if (originalImage == null) {
-      throw Exception('이미지 디코딩 실패');
-    }
-
-    final problemsDir = await _getProblemsDirectory(bookId);
-    final problems = <Problem>[];
-
-    for (final region in regions) {
-      final problemNum = region['problemNumber'] as int;
-      final x = region['x'] as int;
-      final y = region['y'] as int;
-      final width = region['width'] as int;
-      final height = region['height'] as int;
-
-      // 크롭 (여유 마진 추가)
-      final margin = 10;
-      final cropX = (x - margin).clamp(0, originalImage.width - 1);
-      final cropY = (y - margin).clamp(0, originalImage.height - 1);
-      final cropW = (width + margin * 2).clamp(1, originalImage.width - cropX);
-      final cropH = (height + margin * 2).clamp(1, originalImage.height - cropY);
-
-      final cropped = img.copyCrop(
-        originalImage,
-        x: cropX,
-        y: cropY,
-        width: cropW,
-        height: cropH,
-      );
-
-      // 저장
-      final problemPath = '${problemsDir.path}/p${page}_q$problemNum.jpg';
-      final croppedBytes = img.encodeJpg(cropped, quality: 90);
-      await File(problemPath).writeAsBytes(croppedBytes);
-
-      // Problem 객체 생성
-      final problem = Problem(
-        id: '${bookId}_p${page}_q$problemNum',
-        page: page,
-        problemNumber: problemNum,
-        volumeName: volumeName,
-        imagePath: problemPath,
-        boundingBox: {
-          'x': cropX,
-          'y': cropY,
-          'width': cropW,
-          'height': cropH,
-        },
-      );
-
-      problems.add(problem);
-      safePrint('[ProblemSplit] 문제 $problemNum 저장: $problemPath');
-    }
-
-    safePrint('[ProblemSplit] 분할 완료: ${problems.length}개');
-    return problems;
-  }
-
-  /// Claude API로 문제 영역 감지
-  Future<List<Map<String, dynamic>>> _detectProblemRegions(File imageFile) async {
     try {
-      final apiKey = await _getApiKey();
-      if (apiKey == null || apiKey.isEmpty) {
-        safePrint('[ProblemSplit] API 키 없음 - 기본 분할 사용');
-        return [];
-      }
-
-      final bytes = await imageFile.readAsBytes();
-      final base64Image = base64Encode(bytes);
-      final extension = imageFile.path.split('.').last.toLowerCase();
-      final mediaType = extension == 'png' ? 'image/png' : 'image/jpeg';
-
-      final prompt = '''
-이 교재/문제집 페이지 이미지를 분석해주세요.
-
-각 문제의 위치를 찾아서 다음 JSON 형식으로 반환해주세요:
-{
-  "problems": [
-    {
-      "problemNumber": 1,
-      "x": 픽셀_X좌표,
-      "y": 픽셀_Y좌표,
-      "width": 너비,
-      "height": 높이
-    }
-  ]
-}
-
-규칙:
-1. 문제 번호가 있는 영역을 찾으세요 (1, 2, 3... 또는 1번, 2번...)
-2. 각 문제의 시작점(왼쪽 상단)과 크기를 픽셀 단위로 반환
-3. 문제가 없으면 빈 배열 반환
-4. JSON만 반환하고 다른 텍스트는 포함하지 마세요
-5. 문제 영역은 다음 문제 시작 전까지 포함 (보기, 빈칸 포함)
-''';
-
-      final response = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: jsonEncode({
-          'model': _model,
-          'max_tokens': 2048,
-          'messages': [
-            {
-              'role': 'user',
-              'content': [
-                {
-                  'type': 'image',
-                  'source': {
-                    'type': 'base64',
-                    'media_type': mediaType,
-                    'data': base64Image,
-                  },
-                },
-                {'type': 'text', 'text': prompt},
-              ],
-            },
-          ],
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final content = data['content'][0]['text'] as String;
-        safePrint('[ProblemSplit] API 응답: $content');
-
-        // JSON 파싱
-        String jsonStr = content;
-        if (content.contains('```json')) {
-          jsonStr = content.split('```json')[1].split('```')[0].trim();
-        } else if (content.contains('```')) {
-          jsonStr = content.split('```')[1].split('```')[0].trim();
-        } else if (content.contains('{')) {
-          final start = content.indexOf('{');
-          final end = content.lastIndexOf('}') + 1;
-          jsonStr = content.substring(start, end);
-        }
-
-        final parsed = json.decode(jsonStr) as Map<String, dynamic>;
-        final problems = (parsed['problems'] as List<dynamic>?)
-            ?.map((p) => Map<String, dynamic>.from(p as Map))
-            .toList() ?? [];
-
-        return problems;
-      } else {
-        safePrint('[ProblemSplit] API 에러: ${response.statusCode}');
-        return [];
-      }
-    } catch (e) {
-      safePrint('[ProblemSplit] API 호출 실패: $e');
-      return [];
-    }
-  }
-
-  /// API 실패 시 기본 분할 (페이지를 세로 4등분)
-  Future<List<Map<String, dynamic>>> _defaultSplit(File imageFile) async {
-    try {
+      safePrint('[ProblemSplit] 기본 분할 (4등분)');
+      
       final bytes = await imageFile.readAsBytes();
       final image = img.decodeImage(bytes);
       if (image == null) return [];
 
-      final w = image.width;
-      final h = image.height;
-      final quarterH = h ~/ 4;
+      final problemsDir = await _getProblemsDirectory(bookId);
+      final problems = <Problem>[];
+      final quarterH = image.height ~/ 4;
 
-      // 세로 4등분 (문제 1,2,3,4로 가정)
-      return [
-        {'problemNumber': 1, 'x': 0, 'y': 0, 'width': w, 'height': quarterH},
-        {'problemNumber': 2, 'x': 0, 'y': quarterH, 'width': w, 'height': quarterH},
-        {'problemNumber': 3, 'x': 0, 'y': quarterH * 2, 'width': w, 'height': quarterH},
-        {'problemNumber': 4, 'x': 0, 'y': quarterH * 3, 'width': w, 'height': quarterH},
-      ];
+      for (int i = 0; i < 4; i++) {
+        final cropY = quarterH * i;
+        final cropHeight = quarterH;
+        
+        final problemImg = img.copyCrop(
+          image,
+          x: 0,
+          y: cropY,
+          width: image.width,
+          height: cropHeight,
+        );
+        
+        final problemPath = '${problemsDir.path}/p${page}_q${i + 1}.jpg';
+        await File(problemPath).writeAsBytes(img.encodeJpg(problemImg, quality: 90));
+        
+        problems.add(Problem(
+          id: '${bookId}_p${page}_q${i + 1}',
+          page: page,
+          problemNumber: i + 1,
+          volumeName: volumeName,
+          imagePath: problemPath,
+          boundingBox: {'x': 0, 'y': cropY, 'width': image.width, 'height': cropHeight},
+        ));
+      }
+
+      return problems;
     } catch (e) {
       safePrint('[ProblemSplit] 기본 분할 실패: $e');
       return [];
     }
-  }
-
-  /// pages 디렉토리 생성
-  Future<Directory> _getPagesDirectory(String bookId) async {
-    final documentsDir = await getApplicationDocumentsDirectory();
-    final pagesDir = Directory('${documentsDir.path}/captures/$bookId/pages');
-    if (!await pagesDir.exists()) {
-      await pagesDir.create(recursive: true);
-      safePrint('[ProblemSplit] pages 디렉토리 생성: ${pagesDir.path}');
-    }
-    return pagesDir;
   }
 
   /// problems 디렉토리 생성
@@ -280,53 +451,5 @@ class ProblemSplitService {
       safePrint('[ProblemSplit] problems 디렉토리 생성: ${problemsDir.path}');
     }
     return problemsDir;
-  }
-
-  /// 저장된 원본 이미지 경로 조회
-  Future<String?> getPageImagePath(String bookId, int page) async {
-    try {
-      final pagesDir = await _getPagesDirectory(bookId);
-      final files = await pagesDir.list().toList();
-      
-      for (final file in files) {
-        if (file is File && file.path.contains('p$page')) {
-          return file.path;
-        }
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// 책의 모든 이미지 삭제
-  Future<void> deleteAllImages(String bookId) async {
-    try {
-      final documentsDir = await getApplicationDocumentsDirectory();
-      final bookDir = Directory('${documentsDir.path}/captures/$bookId');
-      if (await bookDir.exists()) {
-        await bookDir.delete(recursive: true);
-        safePrint('[ProblemSplit] 이미지 폴더 삭제: ${bookDir.path}');
-      }
-    } catch (e) {
-      safePrint('[ProblemSplit] 이미지 삭제 실패: $e');
-    }
-  }
-
-  /// 특정 페이지의 문제 이미지들 조회
-  Future<List<File>> getProblemImages(String bookId, int page) async {
-    try {
-      final problemsDir = await _getProblemsDirectory(bookId);
-      final files = await problemsDir.list().toList();
-      
-      return files
-          .whereType<File>()
-          .where((f) => f.path.contains('p${page}_q'))
-          .toList()
-        ..sort((a, b) => a.path.compareTo(b.path));
-    } catch (e) {
-      safePrint('[ProblemSplit] 문제 이미지 조회 실패: $e');
-      return [];
-    }
   }
 }

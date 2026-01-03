@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 class ClaudeApiService {
   static const _baseUrl = 'https://api.anthropic.com/v1/messages';
   static const _model = 'claude-sonnet-4-20250514';
+  static const _modelHaiku = 'claude-3-5-haiku-20241022';  // PDF 처리용 (저렴)
   final _storage = const FlutterSecureStorage();
 
   Future<String?> _getApiKey() async {
@@ -1059,7 +1060,7 @@ sectionBounds: 각 섹션이 차지하는 대략적인 영역 (%)
           'anthropic-version': '2023-06-01',
         },
         body: jsonEncode({
-          'model': _model,
+          'model': _modelHaiku,  // PDF 처리는 저렴한 Haiku 사용
           'max_tokens': 2048,
           'messages': [
             {
@@ -1126,6 +1127,342 @@ pages 배열에 인식된 페이지 번호들을 순서대로 넣어주세요.
       }
     } catch (e) {
       debugPrint('[ClaudeAPI] PDF 분석 예외: $e');
+      rethrow;
+    }
+  }
+
+  /// PDF 정답지 텍스트 추출 (인식 확인용)
+  /// 반환: List<Map> - [{pageNumber: 9, content: "A 1 목적어 2 동사..."}, ...]
+  Future<List<Map<String, dynamic>>> extractPdfText(File pdfFile) async {
+    final apiKey = await _getApiKey();
+    if (apiKey == null) {
+      throw Exception('API 키가 설정되지 않았습니다');
+    }
+
+    final bytes = await pdfFile.readAsBytes();
+    final base64Data = base64Encode(bytes);
+
+    debugPrint('[ClaudeAPI] PDF 텍스트 추출 시작');
+
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model': _modelHaiku,  // PDF 처리는 저렴한 Haiku 사용
+          'max_tokens': 16000,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'document',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': 'application/pdf',
+                    'data': base64Data,
+                  },
+                },
+                {
+                  'type': 'text',
+                  'text': '''이 PDF는 영어 교재 정답지입니다.
+
+각 페이지에서 보이는 내용을 **그대로** 추출해주세요.
+- 페이지 번호 (p. XX 형식으로 인쇄된 것)
+- 섹션 (A, B, C, D, Practice, Unit 등)
+- 문제 번호와 정답
+
+JSON 형식:
+{
+  "pages": [
+    {
+      "pageNumber": 9,
+      "content": "Unit 01 문장을 이루는 요소\\nPractice\\nA 1 목적어 2 동사 3 수식어 4 보어\\nB 1 wrote 2 My teacher 3 great 4 dinner\\nC 1 주어, 동사, 보어 2 주어, 동사, 목적어, 수식어..."
+    },
+    {
+      "pageNumber": 11,
+      "content": "Unit 02 1형식, 2형식\\nA 1 angry 2 an artist..."
+    }
+  ]
+}
+
+content에는 해당 페이지에서 보이는 텍스트를 줄바꿈(\\n)으로 구분해서 넣어주세요.
+모든 페이지를 빠짐없이 추출해주세요.''',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['content'][0]['text'] as String;
+        debugPrint('[ClaudeAPI] PDF 텍스트 추출 응답 길이: ${content.length}');
+
+        try {
+          String jsonStr = content;
+          if (content.contains('```json')) {
+            jsonStr = content.split('```json')[1].split('```')[0].trim();
+          } else if (content.contains('```')) {
+            jsonStr = content.split('```')[1].split('```')[0].trim();
+          } else if (content.contains('{')) {
+            final start = content.indexOf('{');
+            final end = content.lastIndexOf('}') + 1;
+            jsonStr = content.substring(start, end);
+          }
+
+          final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+          final pages = (parsed['pages'] as List<dynamic>)
+              .map((e) => e as Map<String, dynamic>)
+              .toList();
+
+          debugPrint('[ClaudeAPI] 텍스트 추출 완료: ${pages.length}페이지');
+          return pages;
+        } catch (e) {
+          debugPrint('[ClaudeAPI] JSON 파싱 실패: $e');
+          debugPrint('[ClaudeAPI] 원본 앞부분: ${content.substring(0, content.length > 500 ? 500 : content.length)}');
+          return [];
+        }
+      } else {
+        debugPrint('[ClaudeAPI] 에러: ${response.statusCode}');
+        debugPrint('[ClaudeAPI] 응답: ${response.body}');
+        throw Exception('API 호출 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[ClaudeAPI] PDF 텍스트 추출 예외: $e');
+      rethrow;
+    }
+  }
+
+  /// 단일 PDF 청크 텍스트 추출 (분할 처리용)
+  /// 작은 PDF(10페이지 이하)에 최적화
+  Future<List<Map<String, dynamic>>> extractPdfChunkText(File pdfChunk) async {
+    final apiKey = await _getApiKey();
+    if (apiKey == null) {
+      throw Exception('API 키가 설정되지 않았습니다');
+    }
+
+    final bytes = await pdfChunk.readAsBytes();
+    final base64Data = base64Encode(bytes);
+
+    debugPrint('[ClaudeAPI] PDF 청크 텍스트 추출 시작');
+
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model': _modelHaiku,  // PDF 처리는 저렴한 Haiku 사용
+          'max_tokens': 4000,  // 청크당 4000 토큰으로 제한
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'document',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': 'application/pdf',
+                    'data': base64Data,
+                  },
+                },
+                {
+                  'type': 'text',
+                  'text': '''이 PDF는 영어 교재 정답지입니다.
+
+★★★ 핵심 규칙 ★★★
+"p. XX" 또는 "pp. XX-XX" 형식은 "교재 XX페이지의 정답"을 의미합니다.
+한 PDF 페이지 안에 여러 개의 "p. XX"가 있을 수 있습니다.
+각 "p. XX" 아래의 정답들을 해당 교재 페이지에 매칭해서 분리하세요.
+
+예시:
+PDF에 이렇게 보이면:
+  Practice p. 09
+  A 1 목적어 2 동사
+  Practice p. 11
+  A 1 angry 2 an artist
+
+이렇게 분리:
+{
+  "answers": [
+    {"textbookPage": 9, "content": "Practice\\nA 1 목적어 2 동사"},
+    {"textbookPage": 11, "content": "Practice\\nA 1 angry 2 an artist"}
+  ]
+}
+
+JSON 형식:
+{
+  "answers": [
+    {"textbookPage": 숫자, "content": "해당 페이지 정답 내용"}
+  ]
+}
+
+- textbookPage: "p. XX"에서 추출한 교재 페이지 번호
+- content: 해당 페이지의 정답 (다음 "p. XX" 나오기 전까지)
+- pp. 16-17 같은 범위는 16으로 저장''',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['content'][0]['text'] as String;
+        debugPrint('[ClaudeAPI] 청크 응답 길이: ${content.length}');
+
+        try {
+          String jsonStr = content;
+          if (content.contains('```json')) {
+            jsonStr = content.split('```json')[1].split('```')[0].trim();
+          } else if (content.contains('```')) {
+            jsonStr = content.split('```')[1].split('```')[0].trim();
+          } else if (content.contains('{')) {
+            final start = content.indexOf('{');
+            final end = content.lastIndexOf('}') + 1;
+            jsonStr = content.substring(start, end);
+          }
+
+          final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+          final answers = (parsed['answers'] as List<dynamic>)
+              .map((e) => <String, dynamic>{
+                'pageNumber': e['textbookPage'],
+                'content': e['content'],
+              })
+              .toList();
+
+          debugPrint('[ClaudeAPI] 청크에서 ${answers.length}개 교재 페이지 추출');
+          return answers.cast<Map<String, dynamic>>();
+        } catch (e) {
+          debugPrint('[ClaudeAPI] 청크 JSON 파싱 실패: $e');
+          return [];
+        }
+      } else if (response.statusCode == 429) {
+        debugPrint('[ClaudeAPI] Rate limit 초과 (429)');
+        throw Exception('RATE_LIMIT');
+      } else {
+        debugPrint('[ClaudeAPI] 에러: ${response.statusCode}');
+        debugPrint('[ClaudeAPI] 400 응답 body: ${response.body}');
+        throw Exception('API 호출 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[ClaudeAPI] 청크 처리 예외: $e');
+      rethrow;
+    }
+  }
+
+  /// 목차 이미지에서 단원명 + 페이지 번호 추출
+  Future<List<Map<String, dynamic>>> extractTableOfContents(File imageFile) async {
+    try {
+      final apiKey = await _getApiKey();
+      if (apiKey == null) throw Exception('API key not found');
+
+      // 이미지를 base64로 변환
+      final bytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(bytes);
+
+      final response = await http.post(
+        Uri.parse('https://api.anthropic.com/v1/messages'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: jsonEncode({
+          'model': 'claude-3-5-haiku-20241022', // Haiku 모델 사용
+          'max_tokens': 1000,
+          'temperature': 0.2,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'image',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': 'image/jpeg',
+                    'data': base64Image,
+                  },
+                },
+                {
+                  'type': 'text',
+                  'text': '''이 교재 목차 이미지를 분석해주세요.
+
+★★★ 중요 규칙 ★★★
+1. 반드시 페이지 번호가 있는 항목만 추출하세요
+2. Chapter/Unit 구분 없이 "페이지 번호가 있는 모든 항목"을 플랫하게 나열하세요
+3. 중첩 구조(entries 안에 entries)는 절대 사용하지 마세요
+
+JSON 형식으로만 반환:
+{
+  "entries": [
+    {"unitName": "Unit 01 문장을 이루는 요소", "startPage": 8},
+    {"unitName": "Unit 02 1형식, 2형식", "startPage": 10},
+    {"unitName": "Unit 03 3형식, 4형식", "startPage": 12},
+    {"unitName": "Grammar & Writing", "startPage": 16}
+  ]
+}
+
+규칙:
+- unitName: 목차에 보이는 이름 그대로 (Chapter, Unit, Lesson 등 포함)
+- startPage: 반드시 숫자만! (페이지 번호가 없으면 해당 항목 제외)
+- 페이지 범위(8-10)가 있으면 시작 페이지(8)만 추출
+- 페이지 번호가 없는 항목은 절대 포함하지 마세요
+- 중첩 구조 금지! entries 안에 또 entries 넣지 마세요''',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['content'][0]['text'] as String;
+        debugPrint('[ClaudeAPI] 목차 응답: $content');
+
+        try {
+          String jsonStr = content;
+          if (content.contains('```json')) {
+            jsonStr = content.split('```json')[1].split('```')[0].trim();
+          } else if (content.contains('```')) {
+            jsonStr = content.split('```')[1].split('```')[0].trim();
+          } else if (content.contains('{')) {
+            final start = content.indexOf('{');
+            final end = content.lastIndexOf('}') + 1;
+            jsonStr = content.substring(start, end);
+          }
+
+          final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+          final entries = (parsed['entries'] as List<dynamic>)
+              .map((e) => e as Map<String, dynamic>)
+              .where((e) => e['startPage'] != null && e['unitName'] != null)  // null 필터링
+              .toList();
+
+          debugPrint('[ClaudeAPI] 유효한 목차 항목: ${entries.length}개');
+          return entries;
+        } catch (e) {
+          debugPrint('[ClaudeAPI] 목차 JSON 파싱 실패: $e');
+          debugPrint('[ClaudeAPI] 원본 응답: $content');
+          return [];
+        }
+      } else {
+        debugPrint('[ClaudeAPI] 목차 API 에러: ${response.statusCode}');
+        debugPrint('[ClaudeAPI] 응답: ${response.body}');
+        throw Exception('목차 인식 API 호출 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[ClaudeAPI] 목차 인식 예외: $e');
       rethrow;
     }
   }

@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
 import 'book_volume.dart';
 import 'page_status.dart';
+import 'toc_entry.dart';
 
 /// 촬영 기록 모델
 class CaptureRecord {
@@ -55,7 +56,9 @@ class LocalBook extends Equatable {
   final List<BookVolume> volumes;
   final String? coverImagePath;
   final List<int> registeredPages; // 정답지 등록된 페이지들 (파란색)
+  final Map<int, String> answerContents; // 페이지별 정답 내용 (인식된 텍스트)
   final List<CaptureRecord> captureRecords; // 문제 촬영 기록
+  final List<TocEntry> tableOfContents; // 목차 항목들
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -67,7 +70,9 @@ class LocalBook extends Equatable {
     List<BookVolume>? volumes,
     this.coverImagePath,
     List<int>? registeredPages,
+    Map<int, String>? answerContents,
     List<CaptureRecord>? captureRecords,
+    List<TocEntry>? tableOfContents,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -75,7 +80,9 @@ class LocalBook extends Equatable {
             ? volumes
             : [BookVolume(index: 0, name: '본책')],
         registeredPages = registeredPages ?? [],
+        answerContents = answerContents ?? {},
         captureRecords = captureRecords ?? [],
+        tableOfContents = tableOfContents ?? [],
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
@@ -88,7 +95,9 @@ class LocalBook extends Equatable {
       'volumes': volumes.map((v) => v.toJson()).toList(),
       'coverImagePath': coverImagePath,
       'registeredPages': registeredPages,
+      'answerContents': answerContents.map((k, v) => MapEntry(k.toString(), v)),
       'captureRecords': captureRecords.map((r) => r.toJson()).toList(),
+      'tableOfContents': tableOfContents.map((t) => t.toJson()).toList(),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -103,8 +112,18 @@ class LocalBook extends Equatable {
         ?.map((r) => CaptureRecord.fromJson(r as Map<String, dynamic>))
         .toList();
 
+    final tocList = (json['tableOfContents'] as List<dynamic>?)
+        ?.map((t) => TocEntry.fromJson(t as Map<String, dynamic>))
+        .toList();
+
     final title = json['title'] as String;
     safePrint('[LocalBook] $title volumes 로드: ${volumesList?.length ?? 0}개, 촬영기록: ${captureList?.length ?? 0}건');
+
+    // answerContents 파싱 (key가 String으로 저장됨)
+    final answerContentsRaw = json['answerContents'] as Map<String, dynamic>?;
+    final answerContents = answerContentsRaw?.map(
+      (k, v) => MapEntry(int.parse(k), v as String),
+    ) ?? {};
 
     return LocalBook(
       id: json['id'] as String,
@@ -117,7 +136,9 @@ class LocalBook extends Equatable {
               ?.map((e) => e as int)
               .toList() ??
           [],
+      answerContents: answerContents,
       captureRecords: captureList ?? [],
+      tableOfContents: tocList ?? [],
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -131,7 +152,9 @@ class LocalBook extends Equatable {
     List<BookVolume>? volumes,
     String? coverImagePath,
     List<int>? registeredPages,
+    Map<int, String>? answerContents,
     List<CaptureRecord>? captureRecords,
+    List<TocEntry>? tableOfContents,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -143,7 +166,9 @@ class LocalBook extends Equatable {
       volumes: volumes ?? this.volumes,
       coverImagePath: coverImagePath ?? this.coverImagePath,
       registeredPages: registeredPages ?? this.registeredPages,
+      answerContents: answerContents ?? this.answerContents,
       captureRecords: captureRecords ?? this.captureRecords,
+      tableOfContents: tableOfContents ?? this.tableOfContents,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -180,20 +205,10 @@ class LocalBook extends Equatable {
 
   // ========== 페이지 상태 계산 ==========
 
-  /// 특정 페이지의 상태 조회
+  /// 특정 페이지의 상태 조회 (촬영 여부만)
   PageStatus getPageStatus(String volumeName, int page) {
     final isCaptured = capturedPagesByVolume[volumeName]?.contains(page) ?? false;
-    final hasAnswer = registeredPages.contains(page);
-
-    if (isCaptured && hasAnswer) {
-      return PageStatus.complete;
-    } else if (isCaptured) {
-      return PageStatus.problemRegistered;
-    } else if (hasAnswer) {
-      return PageStatus.answerOnly;
-    } else {
-      return PageStatus.notRegistered;
-    }
+    return isCaptured ? PageStatus.captured : PageStatus.notRegistered;
   }
 
   /// Volume의 모든 페이지 상태 맵
@@ -212,58 +227,15 @@ class LocalBook extends Equatable {
 
   // ========== 진행률 계산 ==========
 
-  /// DB 완성도 (0.0 ~ 1.0)
-  double get dbCompleteness {
-    if (totalPages == 0) return 0.0;
-
-    int score = 0;
-    final maxScore = totalPages * 2;
-
-    for (final volume in volumes) {
-      final pageCount = volume.effectiveTotalPages;
-      final start = volume.effectiveStartPage;
-      for (int page = start; page < start + pageCount; page++) {
-        final status = getPageStatus(volume.name, page);
-        switch (status) {
-          case PageStatus.complete:
-            score += 2;
-            break;
-          case PageStatus.problemRegistered:
-          case PageStatus.answerOnly:
-            score += 1;
-            break;
-          default:
-            break;
-        }
-      }
-    }
-
-    return score / maxScore;
-  }
-
-  /// 간단 진행률 (0.0 ~ 1.0)
+  /// 촬영 진행률 (0.0 ~ 1.0)
   double get progress {
     if (totalPages == 0) return 0.0;
-
-    int registeredCount = 0;
-    for (final volume in volumes) {
-      final pageCount = volume.effectiveTotalPages;
-      final start = volume.effectiveStartPage;
-      for (int page = start; page < start + pageCount; page++) {
-        final status = getPageStatus(volume.name, page);
-        if (status != PageStatus.notRegistered) {
-          registeredCount++;
-        }
-      }
-    }
-
-    return registeredCount / totalPages;
+    return totalCapturedPages / totalPages;
   }
 
   /// 진행률 요약 문자열
   String get progressSummary {
     final captured = totalCapturedPages;
-    final answers = totalAnswerPages;
     final total = totalPages;
     
     if (total == 0) {
@@ -271,13 +243,13 @@ class LocalBook extends Equatable {
     }
     
     final percent = (progress * 100).toStringAsFixed(0);
-    return '$percent% (촬영 $captured, 정답 $answers / $total페이지)';
+    return '촬영 $percent% ($captured / $total페이지)';
   }
 
   @override
   List<Object?> get props => [
         id, title, publisher, subject, volumes,
-        coverImagePath, registeredPages, captureRecords,
-        createdAt, updatedAt,
+        coverImagePath, registeredPages, answerContents, captureRecords,
+        tableOfContents, createdAt, updatedAt,
       ];
 }

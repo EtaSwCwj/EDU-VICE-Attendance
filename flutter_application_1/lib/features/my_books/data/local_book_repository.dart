@@ -172,6 +172,38 @@ class LocalBookRepository {
     }
   }
 
+  /// 정답 내용과 함께 페이지 등록
+  Future<LocalBook> updatePagesWithAnswers(
+    String bookId,
+    List<int> pages,
+    Map<int, String> answerContents,
+  ) async {
+    try {
+      safePrint('[LocalBookRepo] 정답 내용 포함 페이지 등록: $bookId, 페이지: ${pages.length}개, 정답: ${answerContents.length}개');
+      final book = await getBook(bookId);
+      if (book == null) {
+        throw Exception('책을 찾을 수 없습니다: $bookId');
+      }
+
+      // 기존 데이터와 병합
+      final allPages = {...book.registeredPages, ...pages}.toList()..sort();
+      final allAnswers = {...book.answerContents, ...answerContents};
+
+      final updatedBook = book.copyWith(
+        registeredPages: allPages,
+        answerContents: allAnswers,
+        updatedAt: DateTime.now(),
+      );
+
+      await saveBook(updatedBook);
+      safePrint('[LocalBookRepo] 정답 내용 포함 저장 완료: 총 ${allPages.length}페이지, 정답 ${allAnswers.length}개');
+      return updatedBook;
+    } catch (e) {
+      safePrint('[LocalBookRepo] 정답 내용 저장 실패: $e');
+      throw Exception('정답 내용 저장 실패: $e');
+    }
+  }
+
   /// 촬영 기록 전체 삭제
   Future<LocalBook> clearCaptureRecords(String bookId) async {
     try {

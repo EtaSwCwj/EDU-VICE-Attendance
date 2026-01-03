@@ -87,8 +87,8 @@ class _ProblemCameraPageState extends State<ProblemCameraPage> {
       return;
     }
 
-    final imageFile = result['image'] as File?;
-    if (imageFile == null) {
+    final tempImageFile = result['image'] as File?;
+    if (tempImageFile == null) {
       safePrint('[ProblemCamera] 이미지 없음');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('이미지를 받지 못했습니다')),
@@ -103,12 +103,32 @@ class _ProblemCameraPageState extends State<ProblemCameraPage> {
     List<Problem> splitProblems = [];
 
     try {
-      // 1. 각 페이지에 대해 문제 분할 실행
+      // ★ 임시 파일을 영구 저장소로 즉시 복사 (임시 파일 삭제 대비)
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final capturesDir = Directory('${documentsDir.path}/captures/${widget.bookId}/pages');
+      if (!await capturesDir.exists()) {
+        await capturesDir.create(recursive: true);
+        safePrint('[ProblemCamera] captures 폴더 생성: ${capturesDir.path}');
+      }
+      
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      savedImagePath = '${capturesDir.path}/capture_$timestamp.jpg';
+      
+      // 임시 파일 존재 확인
+      if (!await tempImageFile.exists()) {
+        safePrint('[ProblemCamera] ❌ 임시 파일 없음: ${tempImageFile.path}');
+        throw Exception('임시 이미지 파일이 삭제됨');
+      }
+      
+      final imageFile = await tempImageFile.copy(savedImagePath);
+      safePrint('[ProblemCamera] ✅ 이미지 영구 저장: $savedImagePath');
+
+      // 1. 각 페이지에 대해 문제 분할 실행 (영구 저장된 파일 사용)
       for (final page in pages) {
         safePrint('[ProblemCamera] 페이지 $page 문제 분할 시작...');
         
         final problems = await _problemSplitService.splitProblems(
-          imageFile: imageFile,
+          imageFile: imageFile,  // 복사된 파일 사용
           bookId: widget.bookId,
           page: page,
           volumeName: volume.name,
@@ -122,18 +142,9 @@ class _ProblemCameraPageState extends State<ProblemCameraPage> {
         }
       }
 
-      // 2. 원본 이미지도 pages 폴더에 저장 (이미 splitProblems에서 저장됨)
-      final documentsDir = await getApplicationDocumentsDirectory();
-      final pagesDir = Directory('${documentsDir.path}/captures/${widget.bookId}/pages');
-      if (await pagesDir.exists()) {
-        final files = await pagesDir.list().toList();
-        if (files.isNotEmpty) {
-          savedImagePath = files.last.path;
-        }
-      }
-
-    } catch (e) {
+    } catch (e, stackTrace) {
       safePrint('[ProblemCamera] 문제 분할/저장 실패: $e');
+      safePrint('[ProblemCamera] 스택트레이스: $stackTrace');
     }
 
     // 3. CaptureRecord 생성 및 저장

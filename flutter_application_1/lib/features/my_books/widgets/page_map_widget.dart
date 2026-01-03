@@ -114,10 +114,8 @@ class _PageMapWidgetState extends State<PageMapWidget> with SingleTickerProvider
       spacing: 12,
       runSpacing: 4,
       children: [
-        _buildLegendItem(PageStatus.notRegistered, '미등록'),
-        _buildLegendItem(PageStatus.answerOnly, '정답만'),
-        _buildLegendItem(PageStatus.problemRegistered, '문제등록'),
-        _buildLegendItem(PageStatus.complete, '완료'),
+        _buildLegendItem(PageStatus.notRegistered, '미촬영'),
+        _buildLegendItem(PageStatus.captured, '촬영완료'),
       ],
     );
   }

@@ -28,6 +28,7 @@ import '../features/my_books/pages/book_detail_page.dart';
 import '../features/my_books/pages/answer_camera_page.dart';
 import '../features/my_books/pages/problem_camera_page.dart';
 import '../features/my_books/pages/book_edit_page.dart';
+import '../features/my_books/pages/toc_camera_page.dart';
 
 /// 역할 가드 & 홈쉘 분리 라우터
 class AppRouter {
@@ -237,6 +238,14 @@ class AppRouter {
           builder: (context, state) {
             final bookId = state.pathParameters['bookId'] ?? '';
             return ProblemCameraPage(bookId: bookId);
+          },
+        ),
+        // 목차 촬영 페이지
+        GoRoute(
+          path: '/toc-camera/:bookId',
+          builder: (context, state) {
+            final bookId = state.pathParameters['bookId'] ?? '';
+            return TocCameraPage(bookId: bookId);
           },
         ),
 

@@ -2,9 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import '../data/local_book_repository.dart';
+import '../data/problem_repository.dart';
 import '../models/local_book.dart';
 import '../models/book_volume.dart';
+import '../models/problem.dart';
+import '../models/toc_entry.dart';
 import '../widgets/page_map_widget.dart';
 import 'image_viewer_page.dart';
 
@@ -20,10 +24,13 @@ class BookDetailPage extends StatefulWidget {
 
 class _BookDetailPageState extends State<BookDetailPage> {
   final _repository = LocalBookRepository();
+  final _problemRepository = ProblemRepository();
   LocalBook? _book;
+  List<Problem> _problems = [];
   bool _isLoading = true;
   bool _showRegisteredPages = false;
   bool _showCaptureRecords = true;
+  bool _showTableOfContents = false;
 
   @override
   void initState() {
@@ -36,11 +43,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
     try {
       final book = await _repository.getBook(widget.bookId);
       if (book != null) {
+        // 분할된 문제도 로드
+        final problems = await _problemRepository.getProblemsForBook(widget.bookId);
         setState(() {
           _book = book;
+          _problems = problems;
           _isLoading = false;
         });
-        safePrint('[BookDetail] 책 로드 성공: ${book.title}, 촬영기록: ${book.captureRecords.length}건');
+        safePrint('[BookDetail] 책 로드 성공: ${book.title}, 촬영기록: ${book.captureRecords.length}건, 분할문제: ${problems.length}개');
       } else {
         setState(() => _isLoading = false);
         if (mounted) {
@@ -52,6 +62,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
       safePrint('[BookDetail] ERROR: $e');
       setState(() => _isLoading = false);
     }
+  }
+
+  /// 특정 페이지의 분할된 문제들
+  List<Problem> _getProblemsForPage(int page) {
+    return _problems.where((p) => p.page == page).toList()
+      ..sort((a, b) => a.problemNumber.compareTo(b.problemNumber));
   }
 
   bool _hasUnsetVolumes() {
@@ -109,6 +125,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
                       _buildPageMapSection(),
                       const SizedBox(height: 16),
                       _buildRegisteredPagesSection(),
+                      const SizedBox(height: 16),
+                      _buildTableOfContentsSection(),
                       const SizedBox(height: 16),
                       _buildCaptureRecordsSection(),
                       const SizedBox(height: 24),
@@ -222,6 +240,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('페이지 맵', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text('문제 촬영 여부를 표시합니다', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
@@ -236,6 +256,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   Widget _buildRegisteredPagesSection() {
     final book = _book!;
     final pages = List<int>.from(book.registeredPages)..sort();
+    final answerContents = book.answerContents;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -250,7 +271,17 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 children: [
                   Icon(_showRegisteredPages ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, size: 20),
                   const SizedBox(width: 4),
+                  const Icon(Icons.fact_check, size: 16, color: Colors.teal),
+                  const SizedBox(width: 4),
                   Text('등록된 정답지 페이지 (${pages.length}개)', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  if (answerContents.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(10)),
+                      child: Text('${answerContents.length}개 내용 있음', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -259,24 +290,232 @@ class _BookDetailPageState extends State<BookDetailPage> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: Colors.teal.withOpacity(0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.teal.withOpacity(0.3))),
               child: pages.isEmpty
-                  ? Text('등록된 페이지가 없습니다', style: TextStyle(color: Colors.grey[600]))
-                  : Wrap(
-                      spacing: 8, runSpacing: 8,
-                      children: pages.map((page) {
-                        final isOverflow = page > book.totalPages;
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isOverflow ? Colors.red[100] : Colors.teal[100],
-                            borderRadius: BorderRadius.circular(4),
-                            border: isOverflow ? Border.all(color: Colors.red) : null,
-                          ),
-                          child: Text('p.$page', style: TextStyle(fontSize: 12, color: isOverflow ? Colors.red[800] : Colors.teal[800], fontWeight: FontWeight.w500)),
-                        );
-                      }).toList(),
+                  ? Column(
+                      children: [
+                        Icon(Icons.description_outlined, size: 32, color: Colors.grey[400]),
+                        const SizedBox(height: 8),
+                        Text('등록된 정답지가 없습니다', style: TextStyle(color: Colors.grey[500])),
+                        const SizedBox(height: 4),
+                        Text('"정답지 등록" 버튼으로 정답지를 촬영하세요', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('탭하여 정답 내용 확인', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8, runSpacing: 8,
+                          children: pages.map((page) {
+                            final hasContent = answerContents.containsKey(page);
+                            return GestureDetector(
+                              onTap: () => _showAnswerContentDialog(page, answerContents[page]),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: hasContent ? Colors.teal[100] : Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: hasContent ? Colors.teal : Colors.grey[400]!),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('p.$page', style: TextStyle(fontSize: 12, color: hasContent ? Colors.teal[800] : Colors.grey[600], fontWeight: FontWeight.w500)),
+                                    if (hasContent) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(Icons.visibility, size: 12, color: Colors.teal[600]),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
                     ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTableOfContentsSection() {
+    final book = _book!;
+    final tocEntries = book.tableOfContents;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _showTableOfContents = !_showTableOfContents),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Icon(_showTableOfContents ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, size: 20),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.list_alt, size: 16, color: Colors.teal),
+                  const SizedBox(width: 4),
+                  Text('목차 (${tocEntries.length}개)', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+          if (_showTableOfContents)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.teal.withOpacity(0.3)),
+              ),
+              child: tocEntries.isEmpty
+                  ? Column(
+                      children: [
+                        Icon(Icons.toc, size: 32, color: Colors.grey[400]),
+                        const SizedBox(height: 8),
+                        Text('등록된 목차가 없습니다', style: TextStyle(color: Colors.grey[500])),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => _openTocCamera(),
+                              icon: const Icon(Icons.camera_alt, size: 16),
+                              label: const Text('목차 페이지 촬영'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.teal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ...tocEntries.map((entry) => InkWell(
+                          onTap: () => _editTocEntry(entry),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.grey[300]!),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    entry.unitName,
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                                Text(
+                                  entry.endPage != null
+                                      ? 'p.${entry.startPage} - p.${entry.endPage}'
+                                      : 'p.${entry.startPage}',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )).toList(),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => _openTocCamera(),
+                              icon: const Icon(Icons.camera_alt, size: 16),
+                              label: const Text('목차 페이지 촬영'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.teal,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: () => _resetTableOfContents(),
+                              icon: const Icon(Icons.delete_outline, size: 16),
+                              label: const Text('목차 초기화'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 정답 내용 확인 다이얼로그
+  void _showAnswerContentDialog(int page, String? content) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: Colors.teal, borderRadius: BorderRadius.circular(4)),
+              child: Text('Page $page', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+            const Spacer(),
+            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: MediaQuery.of(context).size.height * 0.5,
+          child: content != null && content.isNotEmpty
+              ? SingleChildScrollView(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: SelectableText(
+                      content,
+                      style: const TextStyle(fontSize: 13, height: 1.6, fontFamily: 'monospace'),
+                    ),
+                  ),
+                )
+              : Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.warning_amber, size: 48, color: Colors.orange[300]),
+                      const SizedBox(height: 16),
+                      Text('정답 내용이 없습니다', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                      const SizedBox(height: 8),
+                      Text('페이지 번호만 등록되었습니다', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+                    ],
+                  ),
+                ),
+        ),
+        actions: [
+          if (content != null && content.isNotEmpty)
+            TextButton.icon(
+              onPressed: () {
+                // 클립보드 복사
+                // Clipboard.setData(ClipboardData(text: content));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('복사 기능은 추후 추가 예정')));
+              },
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('복사'),
             ),
         ],
       ),
@@ -304,7 +543,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   const SizedBox(width: 4),
                   Text('문제 촬영 기록 (${records.length}건)', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   const Spacer(),
-                  Text('총 ${book.totalCapturedPages}페이지', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  if (_problems.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(10)),
+                      child: Text('${_problems.length}문제 분할됨', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
                 ],
               ),
             ),
@@ -326,56 +570,141 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     )
                   : Column(
                       children: [
-                        ...records.reversed.take(5).map((record) => Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.withOpacity(0.2))),
-                          child: Row(
-                            children: [
-                              if (record.imagePath != null && record.imagePath!.isNotEmpty)
-                                GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(context, MaterialPageRoute(builder: (context) => ImageViewerPage(imagePath: record.imagePath!)));
-                                  },
-                                  child: Container(
-                                    width: 60, height: 60,
-                                    margin: const EdgeInsets.only(right: 8),
-                                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.withOpacity(0.3))),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Image.file(File(record.imagePath!), fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[100], child: Icon(Icons.broken_image, color: Colors.grey[400], size: 24))),
-                                    ),
-                                  ),
-                                ),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(4)),
-                                          child: Text('${record.pages.join(", ")}p', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(child: Text(record.volumeName, style: TextStyle(fontSize: 12, color: Colors.grey[600]))),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(_formatDateTime(record.timestamp), style: TextStyle(fontSize: 11, color: Colors.grey[400])),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        )),
-                        if (records.length > 5)
-                          Padding(padding: const EdgeInsets.only(top: 4), child: Text('... 외 ${records.length - 5}건 더 있음', style: TextStyle(fontSize: 12, color: Colors.grey[500]))),
+                        ...records.reversed.take(10).map((record) => _buildCaptureRecordItem(record)),
+                        if (records.length > 10)
+                          Padding(padding: const EdgeInsets.only(top: 4), child: Text('... 외 ${records.length - 10}건 더 있음', style: TextStyle(fontSize: 12, color: Colors.grey[500]))),
                       ],
                     ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// 촬영 기록 아이템 (분할된 문제 표시 포함)
+  Widget _buildCaptureRecordItem(CaptureRecord record) {
+    // 이 촬영 기록에 해당하는 분할 문제들
+    final problemsForRecord = <Problem>[];
+    for (final page in record.pages) {
+      problemsForRecord.addAll(_getProblemsForPage(page));
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 헤더: 페이지 정보 + 원본 이미지
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                // 원본 이미지 썸네일
+                if (record.imagePath != null && record.imagePath!.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => ImageViewerPage(imagePath: record.imagePath!)));
+                    },
+                    child: Container(
+                      width: 50, height: 50,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.withOpacity(0.3))),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.file(File(record.imagePath!), fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[100], child: Icon(Icons.broken_image, color: Colors.grey[400], size: 20))),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(4)),
+                            child: Text('${record.pages.join(", ")}p', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(record.volumeName, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(_formatDateTime(record.timestamp), style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                          if (problemsForRecord.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.purple.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                              child: Text('${problemsForRecord.length}문제 분할', style: TextStyle(fontSize: 10, color: Colors.purple[700], fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // 분할된 문제들 (있으면)
+          if (problemsForRecord.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  Text('분할된 문제', style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: problemsForRecord.map((problem) => _buildProblemChip(problem)).toList(),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 분할된 문제 칩 (클릭하면 이미지 보기)
+  Widget _buildProblemChip(Problem problem) {
+    final hasImage = problem.imagePath.isNotEmpty && File(problem.imagePath).existsSync();
+    
+    return GestureDetector(
+      onTap: hasImage 
+          ? () => Navigator.push(context, MaterialPageRoute(builder: (context) => ImageViewerPage(imagePath: problem.imagePath)))
+          : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: hasImage ? Colors.purple[50] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: hasImage ? Colors.purple.withOpacity(0.3) : Colors.grey.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${problem.page}p-${problem.problemNumber}번', style: TextStyle(fontSize: 11, color: hasImage ? Colors.purple[700] : Colors.grey[600], fontWeight: FontWeight.w500)),
+            if (hasImage) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.image, size: 12, color: Colors.purple[400]),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -471,12 +800,27 @@ class _BookDetailPageState extends State<BookDetailPage> {
 
   Future<void> _clearCaptureRecords() async {
     try {
+      // 1. 촬영 기록 삭제
       await _repository.clearCaptureRecords(widget.bookId);
+      
+      // 2. 분할된 문제 DB 삭제
+      await _problemRepository.deleteProblemsForBook(widget.bookId);
+      safePrint('[BookDetail] 분할된 문제 DB 삭제 완료');
+      
+      // 3. 이미지 파일 삭제 (captures/{bookId}/ 폴더)
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final capturesDir = Directory('${documentsDir.path}/captures/${widget.bookId}');
+      if (await capturesDir.exists()) {
+        await capturesDir.delete(recursive: true);
+        safePrint('[BookDetail] 이미지 폴더 삭제 완료: ${capturesDir.path}');
+      }
+      
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('촬영 기록이 초기화되었습니다')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('촬영 기록, 문제, 이미지가 모두 초기화되었습니다')));
         _loadBook();
       }
     } catch (e) {
+      safePrint('[BookDetail] 초기화 실패: $e');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('초기화 실패: $e')));
     }
   }
@@ -527,6 +871,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
               const Divider(),
               _debugSection('페이지 통계', ['totalPages: ${book.totalPages}', 'capturedPages: ${book.totalCapturedPages}', 'answerPages: ${book.totalAnswerPages}', 'progress: ${(book.progress * 100).toStringAsFixed(1)}%']),
               const Divider(),
+              _debugSection('분할된 문제', ['${_problems.length}개']),
+              const Divider(),
               _debugSection('Volumes (${book.volumes.length}개)', book.volumes.map((v) => '[${v.index}] ${v.name}: ${v.pageRangeString} (${v.effectiveTotalPages}p)').toList()),
               const Divider(),
               _debugSection('촬영 기록', ['${book.captureRecords.length}건']),
@@ -564,6 +910,10 @@ class _BookDetailPageState extends State<BookDetailPage> {
             onPressed: () {
               safePrint('===== DB DUMP =====');
               safePrint(book.toJson().toString());
+              safePrint('===== PROBLEMS =====');
+              for (final p in _problems) {
+                safePrint('${p.page}p-${p.problemNumber}: ${p.imagePath}');
+              }
               safePrint('===== END =====');
               ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('로그 출력됨')));
             },
@@ -573,6 +923,53 @@ class _BookDetailPageState extends State<BookDetailPage> {
         ],
       ),
     );
+  }
+
+  /// 목차 촬영 페이지 열기
+  Future<void> _openTocCamera() async {
+    final result = await context.push<bool>('/toc-camera/${widget.bookId}');
+    if (result == true) {
+      _loadBook();
+    }
+  }
+
+  /// 목차 항목 편집 (추후 구현 가능)
+  void _editTocEntry(TocEntry entry) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('목차 편집 기능은 추후 지원 예정입니다')),
+    );
+  }
+
+  /// 목차 초기화
+  Future<void> _resetTableOfContents() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('목차 초기화'),
+        content: const Text('등록된 목차를 모두 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('초기화', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final updatedBook = _book!.copyWith(tableOfContents: []);
+      await _repository.updateBook(updatedBook);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('목차가 초기화되었습니다')),
+        );
+        _loadBook();
+      }
+    }
   }
 
   Widget _debugSection(String title, List<String> items) {

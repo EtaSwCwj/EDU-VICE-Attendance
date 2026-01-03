@@ -1,5 +1,3 @@
-import 'package:amplify_flutter/amplify_flutter.dart';
-
 /// 개별 문제 모델
 /// - 페이지에서 분할된 각 문제를 표현
 class Problem {

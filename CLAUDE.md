@@ -1,139 +1,217 @@
-# Claude Code 프로젝트 설정
+# EDU-VICE-Attendance
 
-## 언어 설정
-- 모든 대화는 한국어로 진행합니다
-- 고유 명령어나 기술 용어는 "한글(영어)" 형식으로 표기합니다 (예: 빌드(build), 커밋(commit))
-- 질문과 설명도 모두 한국어로 작성합니다
+## 시스템 개요
+- 학원 관리 앱 (Flutter + AWS Amplify)
+- 핵심 차별점: "교재 페이지+문제번호" 단위 학습 관리
+- 역할: 관리자 → 원장 → 선생 → 학생 → 서포터
+- GitHub: EtaSwCwj/EDU-VICE-Attendance (dev 브랜치)
 
-## 프로젝트 구조
-- Flutter 앱 (lib/features/)
-- AWS Amplify 백엔드 (amplify/)
-- Clean Architecture 패턴
+## 아키텍처
+```
+[Flutter App] ←→ [AWS Amplify]
+                    ├─ Cognito (인증)
+                    ├─ DynamoDB (GraphQL)
+                    └─ S3 (이미지)
 
-## 프로젝트 경로
-- Git Bash: /c/gitproject/EDU-VICE-Attendance/flutter_application_1
-- PowerShell: C:\gitproject\EDU-VICE-Attendance\flutter_application_1
-- flutter run 실행 시 Git Bash 경로 사용할 것
+[로컬 저장소: Sembast] ←→ [문제 분할: Claude Vision + ML Kit OCR]
+```
 
 ---
 
-## 📱 Flutter 앱 실행 방법
+## 📁 핵심 파일 맵
 
-### 디바이스 확인
+### 1. 앱 설정 (lib/app/)
+| 파일 | 설명 |
+|------|------|
+| app_router.dart | GoRouter 라우팅 설정 |
+| app_providers.dart | Riverpod Provider 설정 |
+| home_shell.dart | 역할별 홈 쉘 분기 |
+
+### 2. 내 교재 기능 (lib/features/my_books/)
+| 파일 | 설명 |
+|------|------|
+| **pages/** | |
+| my_books_page.dart | 교재 목록 |
+| book_detail_page.dart | 교재 상세 (페이지맵, 촬영기록, 분할문제) |
+| book_register_wizard.dart | 교재 등록 마법사 |
+| book_edit_page.dart | 교재 수정 (Volume 페이지 범위) |
+| problem_camera_page.dart | 문제 촬영 → 분할 파이프라인 |
+| answer_camera_page.dart | 정답지 촬영 |
+| image_viewer_page.dart | 이미지 뷰어 |
+| **data/** | |
+| local_book_repository.dart | 교재 CRUD (Sembast) |
+| problem_repository.dart | 분할된 문제 CRUD (Sembast) |
+| **services/** | |
+| problem_split_service.dart | ★ 문제 분할 (Claude Vision + OCR) |
+| **models/** | |
+| local_book.dart | LocalBook, CaptureRecord 모델 |
+| book_volume.dart | BookVolume (본문/워크북 구분) |
+| problem.dart | Problem 모델 |
+| **widgets/** | |
+| page_map_widget.dart | 페이지 맵 그리드 |
+| volume_selector.dart | Volume 선택 UI |
+
+### 3. 교재 분석 (lib/features/textbook/)
+| 파일 | 설명 |
+|------|------|
+| book_camera_page.dart | 문서 스캐너 (CunningDocumentScanner) |
+| ocr_test_page.dart | ★ OCR+Claude 테스트 (성공한 분할 로직 원본) |
+| grammar_effect_2_db.dart | 테스트용 정답 DB |
+
+### 4. 공유 서비스 (lib/shared/services/)
+| 파일 | 설명 |
+|------|------|
+| claude_api_service.dart | ★ Claude Vision API (섹션 분석, 페이지 감지) |
+| mlkit_ocr_service.dart | ML Kit OCR 래퍼 |
+| auth_state.dart | 인증 상태 관리 |
+| invitation_service.dart | 초대 처리 |
+
+### 5. 수업/과제 (lib/features/lessons/, homework/)
+| 파일 | 설명 |
+|------|------|
+| lessons/models.dart | Lesson 모델 |
+| lessons/lessons_provider.dart | 수업 상태 관리 |
+| homework/models.dart | Homework 모델 |
+
+### 6. 역할별 쉘 (lib/features/)
+| 파일 | 설명 |
+|------|------|
+| teacher/teacher_shell.dart | 선생 네비게이션 |
+| student/student_shell.dart | 학생 네비게이션 |
+| owner/owner_home_shell.dart | 원장 네비게이션 |
+
+### 7. 로컬 DB (lib/data/local/)
+| 파일 | 설명 |
+|------|------|
+| sembast_database.dart | Sembast 싱글톤 |
+
+### 8. AWS 모델 (lib/models/)
+| 파일 | 설명 |
+|------|------|
+| AppUser.dart | 사용자 |
+| Academy.dart | 학원 |
+| Student.dart | 학생 |
+| Teacher.dart | 선생 |
+| Assignment.dart | 과제 |
+| Lesson.dart | 수업 |
+
+---
+
+## 🔧 핵심 데이터 구조
+
+### LocalBook (Sembast)
+```dart
+class LocalBook {
+  String id, title, publisher, subject;
+  List<BookVolume> volumes;      // 본문, 워크북 등
+  List<int> registeredPages;     // 정답지 등록된 페이지
+  List<CaptureRecord> captureRecords;  // 촬영 기록
+}
+```
+
+### BookVolume
+```dart
+class BookVolume {
+  int index;           // 0=본문, 1=워크북...
+  String name;         // "본문", "워크북"
+  int? startPage, endPage;  // 페이지 범위
+}
+```
+
+### Problem (분할된 문제)
+```dart
+class Problem {
+  String id;           // {bookId}_p{page}_{section}_{number}
+  int page, problemNumber;
+  String volumeName, imagePath;
+  Map<String, int> boundingBox;
+}
+```
+
+### CaptureRecord
+```dart
+class CaptureRecord {
+  List<int> pages;
+  String volumeName;
+  DateTime timestamp;
+  String? imagePath;
+}
+```
+
+---
+
+## ⚡ 문제 분할 파이프라인
+
+```
+1. BookCameraPage (문서 스캔)
+   ↓ 임시파일
+2. ProblemCameraPage (Volume 선택 + 영구 저장)
+   ↓ 영구 저장된 이미지
+3. ProblemSplitService.splitProblems()
+   ├─ Claude Vision → 섹션 bounds(%) 감지
+   ├─ 섹션별 crop
+   ├─ ML Kit OCR → 문제 번호 실측 좌표(px)
+   ├─ 미감지 재검사 (평균 간격 보간)
+   └─ 각 문제별 crop + 저장
+   ↓
+4. ProblemRepository.saveProblems()
+```
+
+### Claude API 메서드
+```dart
+// 섹션 영역(%) 감지 - 핵심!
+analyzePageComplete(File) → {pageNumber, sectionBounds: {A: {xStart, xEnd, yStart, yEnd}}}
+
+// 회전 감지
+detectRotation(File) → 0/90/180/270
+
+// 페이지 번호만
+detectPageNumber(File) → int
+```
+
+---
+
+## 📂 저장 경로
+```
+{app_documents}/
+├─ captures/{bookId}/
+│   ├─ pages/capture_{timestamp}.jpg    # 원본 촬영
+│   └─ problems/p{page}_{section}_{num}.jpg  # 분할된 문제
+└─ edu_vice_attendance.db               # Sembast DB
+```
+
+---
+
+## 🎯 현재 Phase
+- **P1 (60%)**: 기본 기능 (수업, 과제, 교재 관리)
+- **P2 (예정)**: 초대 시스템, 서포터, 컨텍스트 전환
+- **P3 (예정)**: 교재 DB, 로컬 서버, AI 분석
+
+---
+
+## 🔧 개발 환경
 ```bash
-flutter devices
+# 안드로드 실행
+flutter run -d RFCY40MNBLL
+
+# Sembast DB 확인
+adb shell "run-as com.example.flutter_application_1 cat /data/data/com.example.flutter_application_1/app_flutter/edu_vice_attendance.db"
+
+# 로그 필터
+adb logcat | grep -E "\[ProblemSplit\]|\[OCR\]|\[BookDetail\]"
 ```
-
-### 앱 실행 (SM-A356N 스마트폰)
-```bash
-cd /c/gitproject/EDU-VICE-Attendance/flutter_application_1 && flutter run -d RFCY40MNBLL
-```
-
-### 실행 시 규칙
-1. 백그라운드 실행하지 말고 로그 실시간 출력
-2. 앱 실행 성공하면 바로 알려주기
-3. 주요 로그 추출해서 정리
-4. 사용자가 "중지"라고 할 때까지 로그 모니터링 계속
-
----
-
-## 📝 로그 규칙
-
-### 태그 형식
-`[페이지명]` 또는 `[서비스명]` 형식 사용
-- 예: [AuthState], [OwnerHome], [TeacherShell], [StudentShell], [LessonPage]
-
-### 주요 이벤트만 로그
-| 이벤트 | 형식 | 예시 |
-|--------|------|------|
-| 페이지 진입 | [페이지명] 진입 | [OwnerHome] 진입 |
-| 데이터 로드 | [페이지명] 데이터 로드: 성공/실패, 개수 | [LessonPage] 데이터 로드: 성공, 5개 |
-| 버튼 클릭 | [페이지명] 버튼 클릭: 버튼명 | [StudentList] 버튼 클릭: 학생추가 |
-| API 호출 | [Repository명] 결과: 성공/실패 | [TeacherAwsRepository] 결과: 성공 |
-| 에러 | [페이지명] ERROR: 에러내용 | [AuthState] ERROR: 사용자 조회 실패 |
-
-### 로그인 플로우 (AuthState)
-```
-[AuthState] Step 1: Cognito 인증
-[AuthState] Step 2: AppUser 조회
-[AuthState] Step 3: AcademyMember 조회
-[AuthState] Step 4: Academy 조회
-[AuthState] Summary: user=이름, role=역할, academy=학원명
-```
-
-### 로그 정리 원칙
-- 디버깅용 print문 제거
-- 중복 로그 제거
-- 너무 상세한 로그 제거
-- [ERROR], [WARNING] 로그는 항상 유지
-
----
-
-## ✅ 필수 규칙
-
-### 파일 수정 후
-- **항상 flutter analyze 실행**
-- 에러 0개 확인 후 다음 단계 진행
-- 에러 발생 시 바로 수정 시도
-
----
-
-## 📋 작업 완료 시 보고 형식
-
-모든 작업 완료 후 아래 형식으로 요약:
-
-```
-📋 작업 요약
-- 수정된 파일:
-- 생성된 파일:
-- 실행한 명령어:
-- 현재 상태: (에러 여부, 테스트 결과 등)
-- 다음 단계: (있으면)
-```
-
----
-
-## 🔧 AWS 관련
-
-### 환경
-- Region: ap-northeast-2
-- 테이블 suffix: -3ozlrdq2pvesbe2mcnxgs5e6nu-dev
-
-### 주요 테이블
-- AppUser-3ozlrdq2pvesbe2mcnxgs5e6nu-dev
-- Academy-3ozlrdq2pvesbe2mcnxgs5e6nu-dev
-- AcademyMember-3ozlrdq2pvesbe2mcnxgs5e6nu-dev
-- Teacher-3ozlrdq2pvesbe2mcnxgs5e6nu-dev
-- Student-3ozlrdq2pvesbe2mcnxgs5e6nu-dev
-
-### 테이블 확인 명령어
-```bash
-aws dynamodb scan --table-name [테이블명] --region ap-northeast-2
-```
-
----
-
-## 🚀 배포 명령어
-
-```bash
-amplify push --yes          # 스키마 배포
-amplify codegen models      # Dart 모델 생성
-```
-
----
-
-## 🔄 데이터 흐름 (로그인 시)
-
-1. Cognito 인증 → username 획득
-2. AppUser 테이블 → cognitoUsername으로 사용자 조회
-3. AcademyMember 테이블 → userId로 멤버십 조회 (role, academyId)
-4. Academy 테이블 → academyId로 학원 정보 조회
-5. Fallback: Cognito 그룹으로 역할 결정
 
 ---
 
 ## ⚠️ 주의사항
+1. **임시 파일 문제**: CunningDocumentScanner는 임시 파일 반환 → Navigator.pop 후 삭제될 수 있음 → 즉시 영구 저장 필수
+2. **Claude Vision 한계**: 픽셀 좌표 직접 요청 X → 섹션 bounds(%)만 받고 OCR로 실측
+3. **Java 버전**: Flutter 빌드에 Java 21 필요 (25는 Gradle 실패)
 
-1. flutter run은 인터랙티브 프로세스 - 완료 대기하지 말고 로그 스트리밍
-2. 에러 발생 시 바로 분석해서 알려주기
-3. amplify push는 --yes 플래그로 확인 프롬프트 스킵
+---
+
+## 📜 작업 규칙
+1. 질문 있으면 바로 물어보기
+2. 옵션만 나열하지 말고 방향 제시
+3. "이거 안 해도 되는 거 아냐?" 먼저 생각
+4. 코드 수정 전 현재 코드 먼저 확인

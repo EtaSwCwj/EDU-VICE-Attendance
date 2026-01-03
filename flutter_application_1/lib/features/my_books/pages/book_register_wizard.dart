@@ -5,13 +5,15 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../models/local_book.dart';
 import '../models/book_volume.dart';
+import '../models/toc_entry.dart';
 import '../data/local_book_repository.dart';
 
-/// 책 등록 위자드 (4단계)
+/// 책 등록 위자드 (5단계)
 /// - Step 1: 표지 촬영
 /// - Step 2: 정보 입력
 /// - Step 3: 유사 책 검색
-/// - Step 4: 완료
+/// - Step 4: 목차 촬영 (필수)
+/// - Step 5: 완료
 class BookRegisterWizard extends StatefulWidget {
   const BookRegisterWizard({super.key});
 
@@ -42,6 +44,12 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
   // Step 3: 검색 상태
   bool _isSearching = false;
 
+  // Step 4: 목차
+  List<TocEntry> _tocEntries = [];
+
+  // 등록된 책 ID (목차 촬영용)
+  String? _registeredBookId;
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -52,7 +60,7 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
   }
 
   void _nextStep() {
-    if (_currentStep < 3) {
+    if (_currentStep < 4) {
       safePrint('[Register] Step ${_currentStep + 1} → Step ${_currentStep + 2}');
       setState(() => _currentStep++);
       _pageController.animateToPage(
@@ -86,7 +94,7 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('책 등록 (${_currentStep + 1}/4)'),
+          title: Text('책 등록 (${_currentStep + 1}/5)'),
           backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         ),
         body: PageView(
@@ -97,6 +105,7 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
             _buildStep2(),
             _buildStep3(),
             _buildStep4(),
+            _buildStep5(),
           ],
         ),
       ),
@@ -417,9 +426,113 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
     );
   }
 
-  /// Step 4: 완료
+  /// Step 4: 목차 촬영 (필수)
   Widget _buildStep4() {
     safePrint('[Register] Step 4 진입');
+    debugPrint('[DEBUG] Step 4 - _registeredBookId: $_registeredBookId');
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          const Text(
+            'Step 4: 목차 촬영',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '교재의 목차를 촬영하여 단원 정보를 추가해주세요',
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 40),
+
+          // 목차 항목 리스트
+          Expanded(
+            child: _tocEntries.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.toc,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '아직 목차가 등록되지 않았습니다',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _tocEntries.length,
+                    itemBuilder: (context, index) {
+                      final entry = _tocEntries[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          title: Text(entry.unitName),
+                          subtitle: Text('p.${entry.startPage}'),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // 목차 촬영 버튼
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _openTocCamera,
+              icon: const Icon(Icons.camera_alt),
+              label: Text(_tocEntries.isEmpty ? '목차 촬영하기' : '추가 촬영'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // 버튼들
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _previousStep,
+                  child: const Text('이전'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _tocEntries.isNotEmpty ? _nextStep : null,
+                  child: const Text('다음'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  /// Step 5: 완료
+  Widget _buildStep5() {
+    safePrint('[Register] Step 5 진입');
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -630,10 +743,13 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
         subject: _selectedSubject,
         volumes: volumes,
         coverImagePath: _coverImage?.path,
+        tableOfContents: _tocEntries,
       );
 
       await _repository.saveBook(newBook);
+      _registeredBookId = newBook.id; // 저장된 책 ID 보관
       safePrint('[Register] 책 등록: ${newBook.title} - ${volumes.length}개 volume');
+      debugPrint('[DEBUG] _registeredBookId 설정됨: $_registeredBookId');
 
       setState(() => _isSearching = false);
       _nextStep();
@@ -645,6 +761,56 @@ class _BookRegisterWizardState extends State<BookRegisterWizard> {
           SnackBar(content: Text('책 등록 실패: $e')),
         );
       }
+    }
+  }
+
+  /// 목차 촬영 페이지 열기
+  Future<void> _openTocCamera() async {
+    debugPrint('[DEBUG] _openTocCamera 호출됨');
+    debugPrint('[DEBUG] _registeredBookId: $_registeredBookId');
+
+    if (_registeredBookId == null) {
+      safePrint('[Register] 책이 아직 등록되지 않음');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('책이 아직 등록되지 않았습니다')),
+      );
+      return;
+    }
+
+    debugPrint('[DEBUG] 라우팅 시도: /toc-camera/$_registeredBookId');
+
+    try {
+      final result = await context.push<bool>('/toc-camera/$_registeredBookId');
+      debugPrint('[DEBUG] 라우팅 결과: $result');
+
+      if (result == true && mounted) {
+        // 목차가 저장되었으면 다시 로드
+        _loadTocEntries();
+      }
+    } catch (e) {
+      debugPrint('[DEBUG] 라우팅 오류: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('목차 촬영 페이지 열기 실패: $e')),
+        );
+      }
+    }
+  }
+
+  /// 목차 항목 로드
+  Future<void> _loadTocEntries() async {
+    if (_registeredBookId == null) return;
+
+    try {
+      final book = await _repository.getBook(_registeredBookId!);
+      if (book != null && mounted) {
+        setState(() {
+          _tocEntries = List.from(book.tableOfContents);
+        });
+        safePrint('[Register] 목차 로드: ${_tocEntries.length}개 항목');
+      }
+    } catch (e) {
+      safePrint('[Register] 목차 로드 실패: $e');
     }
   }
 }

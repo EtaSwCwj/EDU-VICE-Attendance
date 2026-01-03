@@ -149,10 +149,41 @@ aws dynamodb delete-item --table-name AcademyMember-3ozlrdq2pvesbe2mcnxgs5e6nu-d
 
 ---
 
+## ⚠️ 컨텍스트 관리 (CLI 오버플로우 방지)
+
+> CLI에서 오래 작업하면 컨텍스트 초과로 세션 종료됨. 반드시 지키기!
+
+### 필수 규칙
+1. **스몰스텝 1~2개 완료할 때마다 /compact 실행**
+2. **파일 전체 읽기 금지** - 필요한 부분만 (view_range 사용)
+3. **로그는 필터링** - `grep`, `tail`, `head` 사용
+4. **에러 시 전체 출력 금지** - 핵심 메시지만
+
+### 예시
+```bash
+# 나쁜 예
+cat 파일전체.dart
+flutter analyze
+
+# 좋은 예  
+view 파일.dart [100, 150]  # 필요한 라인만
+flutter analyze 2>&1 | tail -10  # 마지막 10줄만
+grep "[ERROR]" 로그파일.log  # 에러만 필터
+```
+
+### /compact 타이밍
+- 스몰스텝 1~2개 완료 후
+- 긴 파일 수정 완료 후
+- 빌드/테스트 완료 후
+- 에러 수정 완료 후
+
+---
+
 ## 로그 저장
 
 각 스몰스텝 완료 시:
 - ai_bridge/logs/big_XXX_step_YY.log
+- **로그는 핵심만 짧게** (전체 저장 금지)
 
 ---
 
