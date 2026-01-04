@@ -47,9 +47,12 @@ class AnswerParserService {
       return [];
     }
 
-    // 4. Claude API로 텍스트 → JSON 구조화
+    // 4. Claude API로 텍스트 → JSON 구조화 (BIG_147: 이미지도 함께 전송)
     try {
-      final apiResults = await _claudeService.parseOcrTextToAnswers(fullText);
+      final apiResults = await _claudeService.parseOcrTextToAnswers(
+        fullText,
+        imageFile: imageFile,  // ★ BIG_147: 이미지 전달
+      );
 
       // 5. API 결과를 ParsedPage로 변환
       final pages = apiResults.map((result) {

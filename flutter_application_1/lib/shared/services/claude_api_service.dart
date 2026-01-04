@@ -869,8 +869,8 @@ text 필드: 해당 영역에서 실제로 보이는 문제 텍스트 일부 (�
   }
 
   /// ML Kit OCR로 추출한 텍스트를 정답 데이터로 파싱
-  /// BIG_136: 텍스트 전용 Claude AI 파싱 (이미지 없이)
-  /// 
+  /// BIG_147: OCR 텍스트 + 이미지 동시 전송 (레이아웃 이해)
+  ///
   /// 반환 형식 (answer_parser_service.dart가 기대하는 구조):
   /// [
   ///   {
@@ -879,9 +879,10 @@ text 필드: 해당 영역에서 실제로 보이는 문제 텍스트 일부 (�
   ///     'content': 'Unit 01...\nA)\n1. 답1\n...'
   ///   }
   /// ]
-  Future<List<Map<String, dynamic>>> parseOcrTextToAnswers(String ocrText) async {
+  Future<List<Map<String, dynamic>>> parseOcrTextToAnswers(String ocrText, {File? imageFile}) async {
     debugPrint('[Claude] ========== parseOcrTextToAnswers 시작 ==========');
     debugPrint('[Claude] OCR 텍스트 길이: ${ocrText.length}자');
+    debugPrint('[Claude] 이미지 포함: ${imageFile != null}');
 
     // ★ BIG_143: AI 입력 텍스트 상세 로그 (줄바꿈 치환)
     final inputForLog = ocrText.replaceAll('\n', '↵');
@@ -894,6 +895,66 @@ text 필드: 해당 영역에서 실제로 보이는 문제 텍스트 일부 (�
         throw Exception('API 키가 설정되지 않았습니다');
       }
 
+      // ★ BIG_147: 이미지가 있으면 이미지 + 텍스트 동시 전송
+      final List<Map<String, dynamic>> contentParts = [];
+
+      // 이미지 추가 (있으면)
+      if (imageFile != null) {
+        final imgBytes = await imageFile.readAsBytes();
+        final imgBase64 = base64Encode(imgBytes);
+        final ext = imageFile.path.split('.').last.toLowerCase();
+        final mediaType = switch (ext) {
+          'png' => 'image/png',
+          'jpg' || 'jpeg' => 'image/jpeg',
+          _ => 'image/jpeg',
+        };
+
+        contentParts.add({
+          'type': 'image',
+          'source': {
+            'type': 'base64',
+            'media_type': mediaType,
+            'data': imgBase64,
+          },
+        });
+      }
+
+      // 프롬프트 (이미지 + OCR 함께 분석 요청)
+      final prompt = '''
+이미지와 OCR 텍스트를 함께 분석하세요.
+
+★★★ 핵심 ★★★
+1. 이미지를 보고 실제 레이아웃(A/B/C/D 섹션 배치)을 파악
+2. OCR 텍스트는 순서가 뒤죽박죽일 수 있음
+3. 이미지 기준으로 올바른 순서 결정
+4. 모든 정답을 빠짐없이 추출!
+
+<ocr_text>
+$ocrText
+</ocr_text>
+
+JSON만 반환:
+{
+  "pages": [
+    {
+      "pageNumber": 9,
+      "unitName": "Unit 01",
+      "sections": {
+        "A": ["1번정답", "2번정답", "3번정답", "4번정답"],
+        "B": ["1번정답", "2번정답", "3번정답", "4번정답"],
+        "C": ["1번정답", "2번정답", "3번정답", "4번정답"],
+        "D": ["1번정답", "2번정답", "3번정답", "4번정답"]
+      }
+    }
+  ]
+}
+''';
+
+      contentParts.add({
+        'type': 'text',
+        'text': prompt,
+      });
+
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {
@@ -902,50 +963,12 @@ text 필드: 해당 영역에서 실제로 보이는 문제 텍스트 일부 (�
           'anthropic-version': '2023-06-01',
         },
         body: jsonEncode({
-          'model': _modelHaiku,  // 비용 절감
+          'model': imageFile != null ? _model : _modelHaiku,  // 이미지 있으면 Sonnet
           'max_tokens': 4096,
           'messages': [
             {
               'role': 'user',
-              'content': [
-                {
-                  'type': 'text',
-                  'text': '''
-다음은 교육용 학습 관리 시스템(LMS)에서 ML Kit OCR로 추출한 텍스트입니다.
-학생 학습 진도 추적을 위해 정답 데이터를 구조화해주세요.
-
-<ocr_text>
-$ocrText
-</ocr_text>
-
-요구사항:
-1. 페이지 번호 인식: "p. 09", "p.11", "p. 13" 형식 찾기
-2. 섹션 구분: A, B, C, D 등 대문자 알파벳
-3. 각 섹션의 정답만 추출 (문제번호 제외, 정답 텍스트만)
-
-JSON 형식:
-{
-  "pages": [
-    {
-      "pageNumber": 9,
-      "unitName": "Unit 01 문장을 이루는 요소",
-      "sections": {
-        "A": ["목적어", "동사", "수식어", "보어"],
-        "B": ["wrote", "My teacher", "great", "dinner"],
-        "C": ["주어, 동사, 보어", "주어, 동사, 목적어, 수식어"],
-        "D": ["Tom and I go to the same school.", "She was writing in a diary."]
-      }
-    }
-  ]
-}
-
-중요:
-- sections 값은 **정답 문자열 배열** (객체 아님!)
-- 같은 페이지 정보는 하나로 합치기
-- JSON만 반환, 설명 금지
-'''
-                }
-              ],
+              'content': contentParts,
             },
           ],
         }),

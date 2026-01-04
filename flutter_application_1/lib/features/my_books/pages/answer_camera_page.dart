@@ -170,9 +170,11 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
     }
   }
 
-  /// 갤러리에서 이미지 선택
+  /// 갤러리에서 이미지 선택 (PDF와 동일하게 열 분리 적용)
   Future<void> _pickFromGallery() async {
-    safePrint('[AnswerCamera] 갤러리 선택 시작');
+    safePrint('[갤러리] ========================================');
+    safePrint('[갤러리] 갤러리 선택 시작 (열 분리 적용)');
+    safePrint('[갤러리] ========================================');
 
     try {
       final picker = ImagePicker();
@@ -180,44 +182,109 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
 
       if (pickedFile != null && mounted) {
         final imageFile = File(pickedFile.path);
-        safePrint('[AnswerCamera] 갤러리 이미지 선택됨: ${imageFile.path}');
+        safePrint('[갤러리] 이미지 선택됨: ${imageFile.path}');
 
         setState(() {
           _isAnalyzing = true;
-          _analysisStatus = '정답지 분석 중...';
+          _analysisStatus = '이미지 열 분리 중...';
         });
 
         try {
-          final parsedPages = await _answerParser.extractAnswers(imageFile);
+          // 1. 이미지 열 분리 (PDF와 동일 로직)
+          final bookName = _book?.title?.replaceAll(RegExp(r'[^\w가-힣]'), '_') ?? 'gallery';
+          final columnImages = await PdfToImageService.splitImageByRatio(
+            imageFile,
+            bookName: bookName,
+          );
+          safePrint('[갤러리] 열 분리 완료: ${columnImages.length}개 열 이미지');
+
+          setState(() {
+            _totalChunks = columnImages.length;
+            _currentChunk = 0;
+          });
+
+          List<Map<String, dynamic>> allExtractedPages = [];
+
+          // 2. 각 열 이미지 OCR+AI 처리
+          for (int i = 0; i < columnImages.length; i++) {
+            _currentChunk = i + 1;
+            setState(() {
+              _analysisStatus = '열 ${i + 1}/${columnImages.length} OCR+AI 분석 중...';
+            });
+
+            safePrint('[갤러리] ====== 열 ${i + 1}/${columnImages.length} ======');
+
+            try {
+              final parsedPages = await _answerParser.extractAnswers(columnImages[i]);
+              safePrint('[갤러리] 열 ${i + 1}: ${parsedPages.length}개 페이지 인식');
+
+              for (final p in parsedPages) {
+                safePrint('[갤러리] 열 ${i + 1} → p.${p.pageNumber}');
+              }
+
+              final pageResults = parsedPages.map((p) => p.toMap()).toList();
+              allExtractedPages.addAll(pageResults);
+
+            } catch (e) {
+              safePrint('[갤러리] 열 ${i + 1} 처리 실패: $e');
+            }
+
+            // Rate limit 대기
+            if (i < columnImages.length - 1) {
+              await Future.delayed(const Duration(seconds: 1));
+            }
+          }
 
           setState(() => _isAnalyzing = false);
 
-          if (parsedPages.isNotEmpty) {
-            safePrint('[AnswerCamera] OCR+AI 파싱 완료: ${parsedPages.length}페이지');
+          // 3. 결과 처리
+          safePrint('[갤러리] 총 추출 결과: ${allExtractedPages.length}개 페이지');
 
-            final pageResults = parsedPages.map((p) => p.toMap()).toList();
-            final proceed = await _showExtractedTextDialog(pageResults);
+          if (allExtractedPages.isNotEmpty) {
+            // 페이지 번호 순 정렬
+            allExtractedPages.sort((a, b) {
+              final aPage = a['pageNumber'] as int? ?? 0;
+              final bPage = b['pageNumber'] as int? ?? 0;
+              return aPage.compareTo(bPage);
+            });
+
+            final proceed = await _showExtractedTextDialog(allExtractedPages);
 
             if (proceed == true) {
-              final pages = parsedPages.map((p) => p.pageNumber).where((p) => p > 0).toList();
+              final pages = <int>[];
               final answerContents = <int, String>{};
-              for (final p in parsedPages) {
-                if (p.pageNumber > 0) {
-                  answerContents[p.pageNumber] = p.rawContent;
+
+              for (final p in allExtractedPages) {
+                final pageNum = p['pageNumber'] as int?;
+                final content = p['content'] as String? ?? '';
+                if (pageNum != null && pageNum > 0) {
+                  pages.add(pageNum);
+                  if (content.isNotEmpty) {
+                    answerContents[pageNum] = content;
+                  }
                 }
               }
-              await _validateAndSavePagesWithAnswers(pages, answerContents);
+              pages.sort();
+
+              if (pages.isNotEmpty) {
+                await _validateAndSavePagesWithAnswers(pages, answerContents);
+              }
             }
           } else {
-            safePrint('[AnswerCamera] OCR+AI 파싱 결과 없음');
+            safePrint('[갤러리] OCR+AI 파싱 결과 없음');
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('정답지를 인식하지 못했습니다')),
               );
             }
           }
+
+          safePrint('[갤러리] ========================================');
+          safePrint('[갤러리] 처리 완료');
+          safePrint('[갤러리] ========================================');
+
         } catch (e) {
-          safePrint('[AnswerCamera] OCR+AI 파싱 실패: $e');
+          safePrint('[갤러리] 처리 실패: $e');
           setState(() => _isAnalyzing = false);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -227,7 +294,7 @@ class _AnswerCameraPageState extends State<AnswerCameraPage> {
         }
       }
     } catch (e) {
-      safePrint('[AnswerCamera] 갤러리 선택 실패: $e');
+      safePrint('[갤러리] 갤러리 선택 실패: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('이미지 선택 실패: $e')),

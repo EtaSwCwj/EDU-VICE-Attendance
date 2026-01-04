@@ -167,6 +167,54 @@ class PdfToImageService {
     return results;
   }
 
+  /// 단일 이미지 파일 열 분리 (갤러리용)
+  /// PDF가 아닌 일반 이미지에도 동일한 열 분리 로직 적용
+  static Future<List<File>> splitImageByRatio(File imageFile, {String? bookName}) async {
+    final name = bookName ?? 'gallery';
+    debugPrint('[ImageSplit] ========================================');
+    debugPrint('[ImageSplit] 이미지 열 분리 시작');
+    debugPrint('[ImageSplit] 파일: ${imageFile.path}');
+    debugPrint('[ImageSplit] ========================================');
+
+    // 외부 저장소 DCIM/flutter_1에 저장
+    final outputDir = Directory('/storage/emulated/0/DCIM/flutter_1');
+    if (!await outputDir.exists()) {
+      await outputDir.create(recursive: true);
+    }
+
+    // 원본 이미지를 JPG로 변환 (흰색 배경 보장)
+    final bytes = await imageFile.readAsBytes();
+    final originalImage = img.decodeImage(bytes);
+    
+    if (originalImage == null) {
+      debugPrint('[ImageSplit] 이미지 디코딩 실패');
+      return [imageFile];  // 실패시 원본 반환
+    }
+
+    // 흰색 배경 추가 후 JPG 저장
+    final withBackground = img.Image(width: originalImage.width, height: originalImage.height);
+    img.fill(withBackground, color: img.ColorRgb8(255, 255, 255));
+    img.compositeImage(withBackground, originalImage);
+    
+    final jpgPath = '${outputDir.path}/${name}_original.jpg';
+    final jpgFile = File(jpgPath);
+    await jpgFile.writeAsBytes(img.encodeJpg(withBackground, quality: 95));
+    debugPrint('[ImageSplit] JPG 변환 완료: $jpgPath');
+
+    // 비율 기반 재귀 분리
+    final splitImages = await _splitByRatioRecursive(
+      jpgFile,
+      '${outputDir.path}/${name}',
+      0,
+    );
+
+    debugPrint('[ImageSplit] ========================================');
+    debugPrint('[ImageSplit] 분리 완료: ${splitImages.length}개 열 이미지');
+    debugPrint('[ImageSplit] ========================================');
+
+    return splitImages;
+  }
+
   /// 임시 이미지 파일들 정리
   static Future<void> cleanupImages(List<File> images) async {
     for (final image in images) {
